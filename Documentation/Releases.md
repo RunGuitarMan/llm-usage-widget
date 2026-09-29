@@ -4,7 +4,7 @@ Every pull request to `main` runs the **Tests** job on an Apple Silicon macOS 26
 
 `main` requires a pull request, a successful **Tests** check for the current base, and resolved review conversations. These rules also apply to administrators. Direct pushes, force pushes and branch deletion are blocked. No second-person approval is required, so the owner can merge their own PR after CI passes. Squash merging keeps one main commit per PR.
 
-After each merge, the same workflow checks the resulting `main` commit and publishes a release only if **Tests** passes. The first release is **v1.0**, followed by **v1.0.1**, **v1.0.2**, etc. Documentation-only PRs also produce a release. No manual tags, version commits, personal access tokens or external release service are needed; the publishing job uses GitHub's built-in token with `contents: write`. PR jobs have read-only access, including those from forks.
+After each merge, the same workflow checks the resulting `main` commit and publishes a release only if **Tests** passes. The first release was **v1.0**. The current release line starts at **v1.1**, followed by **v1.1.1**, **v1.1.2**, etc. Documentation-only PRs also produce a release. No manual tags, version commits, personal access tokens or external release service are needed; the publishing job uses GitHub's built-in token with `contents: write`. PR jobs have read-only access, including those from forks.
 
 Each release contains an ad-hoc signed `LLM Usage.app` with its embedded widget in an Apple Silicon ZIP, a SHA-256 checksum, and generated change notes. The app and widget receive the release version and build number during packaging. These builds are not Developer ID signed or notarized; see the installation instructions in the README.
 

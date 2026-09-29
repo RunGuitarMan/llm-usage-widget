@@ -2,7 +2,6 @@ import AppKit
 import Combine
 import SwiftUI
 
-/// AppKit supplies a single native popover surface, including its arrow and corners.
 /// This controller outlives the dashboard window so the status item remains usable.
 @MainActor
 final class MenuBarController: NSObject, NSPopoverDelegate {
@@ -21,7 +20,8 @@ final class MenuBarController: NSObject, NSPopoverDelegate {
         statusItem.autosaveName = "LLMUsageStatusItem"
         if let button = statusItem.button {
             button.target = self
-            button.action = #selector(togglePopover)
+            button.action = #selector(handleStatusItemClick)
+            button.sendAction(on: [.leftMouseUp, .rightMouseUp])
             button.setAccessibilityLabel("LLM Usage")
         }
 
@@ -54,14 +54,47 @@ final class MenuBarController: NSObject, NSPopoverDelegate {
         if popover.isShown { popover.positioningRect = button.bounds }
     }
 
-    @objc private func togglePopover() {
-        if popover.isShown {
+    @objc private func handleStatusItemClick() {
+        let event = NSApp.currentEvent
+        if event?.type == .rightMouseUp || event?.modifierFlags.contains(.control) == true {
+            showContextMenu()
+        } else if popover.isShown {
             popover.performClose(nil)
         } else {
             showPopover()
         }
     }
 
+    private func showContextMenu() {
+        guard let button = statusItem.button else { return }
+        popover.performClose(nil)
+
+        // Rebuild on demand so a language change is reflected immediately.
+        let menu = NSMenu()
+        let overview = menu.addItem(withTitle: L10n.text("Открыть обзор"),
+                                    action: #selector(openOverview), keyEquivalent: "o")
+        overview.target = self
+        let usage = menu.addItem(withTitle: L10n.text("Показать статистику в строке меню"),
+                                 action: #selector(showPopover), keyEquivalent: "")
+        usage.target = self
+        let settings = menu.addItem(withTitle: L10n.text("Настройки…"),
+                                    action: #selector(openSettings), keyEquivalent: ",")
+        settings.target = self
+        menu.addItem(.separator())
+        let quit = menu.addItem(withTitle: L10n.text("Завершить LLM Usage"),
+                                action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        quit.target = NSApp
+
+        // Attach only while tracking; a persistent menu would consume left clicks too.
+        statusItem.menu = menu
+        defer { statusItem.menu = nil }
+        button.performClick(nil)
+    }
+
+    @objc private func openOverview() { open(.overview) }
+    @objc private func openSettings() { open(.settings) }
+
+    @objc
     func showPopover() {
         guard !popover.isShown, let button = statusItem.button else { return }
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
