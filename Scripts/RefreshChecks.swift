@@ -10,7 +10,8 @@ private func requireRefresh(_ condition: @autoclosure () -> Bool, _ message: Str
     func advance(_ seconds: TimeInterval) { date.addTimeInterval(seconds) }
 }
 
-private actor RefreshFixtureService: CCUsageServing {
+// Shared by checks that need to hold a CLI request until an explicit signal.
+actor RefreshFixtureService: CCUsageServing {
     var cost = 1.0
     var failure: UsageError?
     var todayRequests = 0

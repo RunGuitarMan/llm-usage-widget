@@ -1,5 +1,8 @@
 # LLM Usage
 
+[![CI](https://github.com/RunGuitarMan/llm-usage-widget/actions/workflows/ci.yml/badge.svg)](https://github.com/RunGuitarMan/llm-usage-widget/actions/workflows/ci.yml)
+[![Latest release](https://img.shields.io/github/v/release/RunGuitarMan/llm-usage-widget)](https://github.com/RunGuitarMan/llm-usage-widget/releases/latest)
+
 A native macOS 26 app that shows token usage and estimated costs from local AI coding agents, including Claude Code, Codex and Gemini CLI. Available sources depend on your installed `ccusage` CLI.
 
 ## What it does
@@ -16,6 +19,8 @@ The app runs `ccusage session --json` to read supported local usage logs. It cal
 Usage and transcripts are processed locally. `ccusage` can fetch model prices online, so costs are estimates, not invoices. Browser chats and activity without supported local logs are not included. The Swift app has no third-party package dependencies.
 
 ## Install a ready-made app
+
+Download the ZIP from the [latest GitHub release](https://github.com/RunGuitarMan/llm-usage-widget/releases/latest) and extract it.
 
 If you received `LLM Usage.app`, you do not need to build it. You need **macOS 26+**; the tested build is for **Apple Silicon (M-series)**. Intel builds have not been tested.
 
@@ -69,6 +74,8 @@ LLM_USAGE_APP_GROUP = group.com.yourname.LLMUsage
 Use bundle identifiers available to your team. Xcode builds share data through that App Group; the default local development build grants the widget read-only access to its snapshot files.
 
 ## Working on the repository
+
+Changes go through pull requests to protected `main`. Each PR runs the **Tests** check; after merge and successful checks, GitHub Actions automatically publishes the next release starting at **v1.0**. See [CI and releases](Documentation/Releases.md) for versioning, artifacts and retry instructions.
 
 - `LLMUsage/`: app screens, shared models, data services, widget, resources and tests.
 - `Scripts/`: build, install, validation and asset-generation tools.
