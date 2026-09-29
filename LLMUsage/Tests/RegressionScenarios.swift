@@ -115,6 +115,22 @@ private final class RegressionSearchGate: @unchecked Sendable {
 /// Shared by XCTest and the CLT harness, so regression coverage does not diverge.
 enum RegressionScenarios {
     @MainActor static func run(check: (String, () async throws -> Void) async -> Void) async {
+        await check("Amounts: exclusions and missing prices retain the dollar sign without inequality symbols") {
+            let language = L10n.preference
+            defer { L10n.preference = language }
+            for locale in [InterfaceLanguage.english, .russian] {
+                L10n.preference = locale
+                for amount in [0.0, 4.5, 75.95, 123.45, 1_234, 1_234_567] {
+                    let normal = TokenUsage(cost: amount)
+                    let partial = TokenUsage(cost: amount, costIsIncomplete: true)
+                    for formatted in [UsageFormat.cost(partial), UsageFormat.menuBarCost(partial)] {
+                        try requireRegression(formatted.hasPrefix("$") && !formatted.contains("≥"), "Currency vanished or an inequality symbol was added")
+                    }
+                    try requireRegression(UsageFormat.cost(normal) == UsageFormat.cost(partial)
+                        && UsageFormat.menuBarCost(normal) == UsageFormat.menuBarCost(partial), "Missing-price status changed amount styling")
+                }
+            }
+        }
         await check("Model exclusions: provider defaults, exact overrides and reversible mixed sessions") {
             var policy = ModelExclusionPolicy()
             for model in ["GLM-5", "glm4.7", "zai/custom", "z-ai/glm-4.5", "openrouter/z-ai/glm-5", "z.ai:model"] {
@@ -138,14 +154,14 @@ enum RegressionScenarios {
             let roundTrip = try JSONDecoder().decode(UsageSnapshot.self, from: JSONEncoder().encode(adjusted))
             try requireRegression(roundTrip.applyingExclusions(policy).totals.cost == 6, "Saved raw costs cannot be reprojected")
         }
-        await check("Model exclusions: unknown prices and incomplete mixed breakdowns remain honest") {
+        await check("Model exclusions: unknown prices and incomplete mixed breakdowns preserve ordinary totals") {
             let policy = ModelExclusionPolicy()
             let unpriced = UsageSession(id: "z", models: ["glm-5"], usage: .init(input: 12, costIsIncomplete: true))
             try requireRegression(unpriced.applyingExclusions(policy).usage.costIsIncomplete != true, "Excluded unknown price makes paid totals incomplete")
             let mixed = UsageSession(id: "m", models: ["glm-5", "paid"], usage: .init(input: 12, cost: 9),
                 modelBreakdowns: [.init(id: "glm-5", usage: .init(input: 2, cost: 1))])
             let result = mixed.applyingExclusions(policy)
-            try requireRegression(result.usage.cost == 0 && result.usage.costIsIncomplete == true && result.usage.total == 0, "Unallocatable mixed cost was guessed or tokens lost")
+            try requireRegression(result.usage.cost == 0 && result.usage.costIsIncomplete != true && result.usage.total == 0, "An excluded mixed allocation changed amount styling or remained in totals")
             var included = policy
             included.overrides["glm-5"] = true
             try requireRegression(result.applyingExclusions(included) == mixed, "Incomplete session did not round-trip")
@@ -212,6 +228,9 @@ enum RegressionScenarios {
             let stored = await repository.read(.today)
             try requireRegression(stored?.applyingExclusions(status?.modelExclusionPolicy ?? .init()).totals.cost == 9, "Widget and app amounts disagree")
             store.setModelIncluded(false, model: "future-model")
+            let coldStore = UsageStore(service: service, repository: repository, defaults: defaults, now: { clock.now }, reloadWidget: {})
+            try requireRegression(coldStore.snapshot == nil && coldStore.excludedModels.contains("future-model"),
+                                  "The excluded-model list is unavailable before a report loads")
             clock.now = clock.now.addingTimeInterval(86400)
             await service.configure(cost: 1, at: clock.now)
             await service.setSessions([.init(id: "future", models: ["future-model"],

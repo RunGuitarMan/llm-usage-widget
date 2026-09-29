@@ -188,12 +188,12 @@ final class UsageCoreTests: XCTestCase {
         XCTAssertEqual(snapshot.filtered(source: "codex").sessions.count, 1)
         XCTAssertTrue(snapshot.sourceSummaries.contains { $0.id == "future-agent" })
     }
-    func testMissingPricesAreNotDisplayedAsFree() throws {
+    func testMissingPricesKeepCurrencyFormattingAndDiagnosticFlag() throws {
         let language = L10n.preference; L10n.preference = .english
         defer { L10n.preference = language }
         let snapshot = try CCUsageDecoder.decode(fixture("unified-sessions"), day: UsageDay(date: now))
-        XCTAssertEqual(UsageFormat.cost(snapshot.totals), "≥ $4.50")
-        XCTAssertEqual(UsageFormat.cost(snapshot.sessions[3].usage), "—")
+        XCTAssertEqual(UsageFormat.cost(snapshot.totals), "$4.50")
+        XCTAssertEqual(UsageFormat.cost(snapshot.sessions[3].usage), "$0.00")
         let data = Data(#"{"session":[{"agent":"codex","period":"a","inputTokens":10}]}"#.utf8)
         XCTAssertEqual(try CCUsageDecoder.decode(data, day: UsageDay(date: now)).totals.costIsIncomplete, true)
     }

@@ -25,6 +25,25 @@ struct WindowChecks {
             if !value { throw NSError(domain: "WindowChecks", code: 1, userInfo: [NSLocalizedDescriptionKey: message]) }
         }
         func settle() { RunLoop.main.run(until: Date().addingTimeInterval(0.15)) }
+        func checkBounds(_ view: NSView, host: NSView) throws -> Int {
+            guard !view.isHiddenOrHasHiddenAncestor else { return 0 }
+            var checked = 0
+            if view is NSSplitView || view is NSScrollView || view is NSSearchField {
+                let rect = view.convert(view.bounds, to: host)
+                try require(rect.minX >= -1 && rect.maxX <= host.bounds.width + 1,
+                            "\(type(of: view)) escapes window: \(rect), window width \(host.bounds.width)")
+                checked += 1
+            }
+            for child in view.subviews { checked += try checkBounds(child, host: host) }
+            return checked
+        }
+        func resizeAndCheck(_ window: NSWindow, host: NSView, width: CGFloat) throws {
+            window.setContentSize(NSSize(width: width, height: 620))
+            settle()
+            host.layoutSubtreeIfNeeded()
+            settle()
+            try require(try checkBounds(host, host: host) >= 3, "Layout check did not reach the native columns")
+        }
 
         for language in [InterfaceLanguage.english, .russian] {
             print("Checking window language: \(language.rawValue)")
@@ -33,22 +52,34 @@ struct WindowChecks {
             let window = NSWindow(contentRect: NSRect(x: -8000, y: -8000, width: 860, height: 560),
                                   styleMask: [.titled, .resizable], backing: .buffered, defer: false)
             window.contentView = host
+            window.orderFront(nil)
             host.layoutSubtreeIfNeeded()
             settle()
             let normal = window.contentMinSize.width
             try require(normal >= 860 && normal < 1160, "Dashboard cannot use its normal minimum width")
+            for tab in [DashboardTab.overview, .sessions, .models, .settings] {
+                store.tab = tab
+                for width: CGFloat in [1080, 860, 1000, 860] {
+                    try resizeAndCheck(window, host: host, width: width)
+                }
+            }
+            store.tab = .sessions
             store.selectedSessionID = store.snapshot!.sessions[0].id
             settle()
             host.layoutSubtreeIfNeeded()
             let inspected = window.contentMinSize.width
             try require(inspected >= 1160 && inspected > normal, "Inspector did not reserve room for sidebar and content")
+            try resizeAndCheck(window, host: host, width: 1160)
             store.selectedSessionID = nil
             RunLoop.main.run(until: Date().addingTimeInterval(0.5))
             window.setContentSize(NSSize(width: 860, height: 560))
             host.layoutSubtreeIfNeeded()
             settle()
             try require(window.contentMinSize.width == normal, "Closing inspector did not release the minimum width")
+            try resizeAndCheck(window, host: host, width: 860)
             print("PASS minimum width: \(normal) → \(inspected) → \(window.contentMinSize.width)")
+            print("PASS Native split views, scroll views and search remain inside resized window on every tab")
+            window.orderOut(nil)
             window.contentView = nil
         }
         print("PASS Dashboard minimum width reserves sidebar, content and inspector in both languages")

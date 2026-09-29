@@ -95,7 +95,9 @@ struct DashboardView: View {
                 .navigationSplitViewColumnWidth(min: 180, ideal: 200, max: 250)
         } detail: {
             detail
-                .frame(minWidth: 520)
+                // Constrain the native column. A content frame minimum can make
+                // Tahoe's split view wider than its window and clip both edges.
+                .navigationSplitViewColumnWidth(min: 520, ideal: 700)
                 .navigationTitle(store.tab.title)
                 .toolbar { dashboardToolbar }
                 .inspector(isPresented: Binding(

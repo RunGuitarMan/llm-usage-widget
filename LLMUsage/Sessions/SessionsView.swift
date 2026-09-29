@@ -239,10 +239,6 @@ struct SessionDetailView: View {
                         Label(L10n.text("Стоимость неполная: часть данных недоступна."), systemImage: "info.circle")
                             .font(.caption).foregroundStyle(.secondary)
                     }
-                    if session.usage.reportedAmounts != nil {
-                        Label(L10n.text("Показаны итоги с учётом исключений моделей."), systemImage: "line.3.horizontal.decrease.circle")
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
                     Divider()
                     TokenUsageDetails(usage: session.usage)
                     Divider()

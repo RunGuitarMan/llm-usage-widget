@@ -166,9 +166,9 @@ struct ModelUsageComponent: Codable, Equatable, Sendable {
     func usage(applying policy: ModelExclusionPolicy) -> TokenUsage {
         let excluded = models.filter { !policy.includes($0) }.count
         if excluded == 0 { return reportedUsage }
-        // A mixed session without a complete breakdown cannot be divided honestly.
-        // Its unallocatable usage is omitted and the result is marked as a lower bound.
-        return .init(costIsIncomplete: excluded < models.count)
+        // Without a complete breakdown, exclude this allocation as a whole.
+        // An intentional exclusion is not a missing-price error.
+        return .zero
     }
 }
 
