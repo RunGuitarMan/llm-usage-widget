@@ -9,7 +9,7 @@ actor TestUsageService: CCUsageServing {
     var failure: UsageError?
     var requested: [UsageDay] = []
     func fail(_ error: UsageError?) { failure = error }
-    func fetch(day: UsageDay, customPath: String) async throws -> UsageSnapshot {
+    func fetch(day: UsageDay, customPath: String, mode: UsageUpdateMode) async throws -> UsageSnapshot {
         requested.append(day)
         if let failure { throw failure }
         var data = SampleData.snapshot()

@@ -147,7 +147,7 @@ struct CLIDiagnostics: Sendable {
 }
 
 protocol CCUsageServing: Sendable {
-    func fetch(day: UsageDay, customPath: String) async throws -> UsageSnapshot
+    func fetch(day: UsageDay, customPath: String, mode: UsageUpdateMode) async throws -> UsageSnapshot
     func diagnose(customPath: String, forceDetect: Bool) async throws -> CLIDiagnostics
 }
 
@@ -155,16 +155,30 @@ struct CCUsageService: CCUsageServing {
     let resolver = CCUsageExecutableResolver()
     let runner = ProcessRunner()
 
-    static func arguments(for day: UsageDay) -> [String] {
+    static func arguments(for day: UsageDay, report: CCUsageDecoder.Report) -> [String] {
         // Explicitly override offline defaults in the user's ccusage config.
         // ccusage owns HTTP revalidation and falls back to embedded prices on fetch failure.
-        ["session", "--json", "--all", "--since", day.key, "--until", day.key,
-         "--timezone", day.timezone, "--mode", "calculate", "--order", "desc", "--no-offline"]
+        let command = report == .claude ? ["claude", "session", "--json"] : ["session", "--json", "--all"]
+        return command + ["--since", day.key, "--until", day.key,
+                          "--timezone", day.timezone, "--mode", "calculate", "--order", "desc", "--no-offline"]
     }
-    func fetch(day: UsageDay, customPath: String) async throws -> UsageSnapshot {
+    func fetch(day: UsageDay, customPath: String, mode: UsageUpdateMode = .claudeOnly) async throws -> UsageSnapshot {
         let executable = try await resolver.resolve(customPath: customPath)
-        let result = try await runner.run(executable: executable, arguments: Self.arguments(for: day))
-        return try CCUsageDecoder.decode(result.stdout, day: day, requireUnified: true)
+        async let claude = fetchReport(.claude, day: day, executable: executable)
+        guard mode == .allAgents else { return try await claude }
+
+        async let unified = fetchReport(.unified, day: day, executable: executable)
+        let (focused, combined) = try await (claude, unified)
+        // ccusage 20.0.24/26 filters whole Claude sessions by lastActivity in the
+        // unified report. The focused command filters entries before summing.
+        // Always replace Claude, including when its focused report is empty.
+        let sessions = combined.sessions.filter { $0.sourceID != "claude" } + focused.sessions
+        guard sessions.count <= 100_000 else { throw UsageError.outputTooLarge }
+        return .init(generatedAt: Date(), day: day, sessions: sessions)
+    }
+    private func fetchReport(_ report: CCUsageDecoder.Report, day: UsageDay, executable: URL) async throws -> UsageSnapshot {
+        let result = try await runner.run(executable: executable, arguments: Self.arguments(for: day, report: report))
+        return try CCUsageDecoder.decode(result.stdout, day: day, report: report)
     }
     func diagnose(customPath: String, forceDetect: Bool = false) async throws -> CLIDiagnostics {
         let executable = try await resolver.resolve(customPath: customPath, force: forceDetect)

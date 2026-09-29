@@ -14,7 +14,9 @@ A native macOS 26 app that shows token usage and estimated costs from local AI c
 
 ## How it works
 
-The app runs `ccusage session --json` to read supported local usage logs. It calculates totals and saves small JSON snapshots that the WidgetKit extension reads. The app runs in the menu bar without a Dock icon, including while its dashboard is open. Keep the app running for fresh widget data; closing its window leaves it running in the menu bar. Click the amount to open or close the usage popover, which includes buttons for the dashboard and Settings. Right-click (or Control-click) the amount for a menu with **Quit LLM Usage**.
+The default **Claude only** update mode runs `ccusage claude session --json` once per fetched day. To include other sources, choose **Settings → Data refresh → Update mode → All agents**. This mode runs the unified `ccusage session --json --all` report and the focused Claude report in parallel, then replaces every unified Claude row with the focused result. The focused command correctly limits Claude usage to the selected day; the unified Claude session report in ccusage 20.0.24/20.0.26 can omit the final day or include usage from earlier days in the same session. Both commands must succeed before new all-agent data is saved.
+
+The selected mode is saved and applies to the dashboard, history, menu bar and widgets. Switching modes clears incompatible cached data and refreshes it; caches created before this correction are also reloaded. The app calculates totals and saves small JSON snapshots that the WidgetKit extension reads. It runs in the menu bar without a Dock icon, including while its dashboard is open. Keep the app running for fresh widget data; closing its window leaves it running in the menu bar. Click the amount to open or close the usage popover, which includes buttons for the dashboard and Settings. Right-click (or Control-click) the amount for a menu with **Quit LLM Usage**.
 
 Usage and transcripts are processed locally. `ccusage` can fetch model prices online, so costs are estimates, not invoices. Browser chats and activity without supported local logs are not included. The Swift app has no third-party package dependencies.
 
@@ -75,7 +77,7 @@ Use bundle identifiers available to your team. Xcode builds share data through t
 
 ## Working on the repository
 
-Changes go through pull requests to protected `main`. Each PR runs the **Tests** check; after merge and successful checks, GitHub Actions automatically publishes the next release starting at **v1.0**. See [CI and releases](Documentation/Releases.md) for versioning, artifacts and retry instructions.
+Changes go through pull requests to protected `main`. Each PR runs the **Tests** check; after merge and successful checks, GitHub Actions automatically publishes the next release in the **v1.1** line (**v1.1.1**, **v1.1.2**, etc.). See [CI and releases](Documentation/Releases.md) for versioning, artifacts and retry instructions.
 
 - `LLMUsage/`: app screens, shared models, data services, widget, resources and tests.
 - `Scripts/`: build, install, validation and asset-generation tools.

@@ -21,7 +21,7 @@ private actor FixtureService: CCUsageServing {
     var delay: TimeInterval = 0
     func fail(_ error: UsageError?) { failure = error }
     func setDelay(_ seconds: TimeInterval) { delay = seconds }
-    func fetch(day: UsageDay, customPath: String) async throws -> UsageSnapshot {
+    func fetch(day: UsageDay, customPath: String, mode: UsageUpdateMode) async throws -> UsageSnapshot {
         if delay > 0 { try await Task.sleep(for: .seconds(delay)) }
         if let failure { throw failure }
         var data = SampleData.snapshot()
@@ -113,7 +113,7 @@ struct PortableChecks {
             try expect(day.end.timeIntervalSince(day.date) == 23 * 3600 && day.adding(days: -1).key == "20260307", "DST")
         }
         await check("CLI arguments explicitly enable online pricing") {
-            try expect(CCUsageService.arguments(for: UsageDay(date: now)) == ["session", "--json", "--all", "--since", "20260928", "--until", "20260928", "--timezone", "UTC", "--mode", "calculate", "--order", "desc", "--no-offline"], "Arguments")
+            try expect(CCUsageService.arguments(for: UsageDay(date: now), report: .unified) == ["session", "--json", "--all", "--since", "20260928", "--until", "20260928", "--timezone", "UTC", "--mode", "calculate", "--order", "desc", "--no-offline"], "Arguments")
         }
         await check("Atomic snapshot files and separate day slots") {
             let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -247,7 +247,7 @@ struct PortableChecks {
         }
         await check("Unified report preserves source identities and nested metadata") {
             let data = try Data(contentsOf: fixtures.appendingPathComponent("unified-sessions.json"))
-            let snapshot = try CCUsageDecoder.decode(data, day: UsageDay(date: now), requireUnified: true)
+            let snapshot = try CCUsageDecoder.decode(data, day: UsageDay(date: now), report: .unified)
             try expect(snapshot.sessions.count == 4 && Set(snapshot.sessions.map(\.id)).count == 4, "Cross-agent ID collision")
             try expect(snapshot.sessions[0].rawID == snapshot.sessions[1].rawID, "Fixture must exercise duplicate raw IDs")
             try expect(snapshot.sessions[0].projectPath == "/example/project" && snapshot.sessions[1].lastActivity != nil, "Lost nested metadata")
@@ -279,10 +279,10 @@ struct PortableChecks {
                          #"{"session":[{"agent":"codex","period":"a","inputTokens":10,"totalTokens":9}]}"#,
                          #"{"session":[{"agent":"codex","period":"a","totalTokens":-1}]}"#,
                          #"{"sessions":[]}"#] {
-                do { _ = try CCUsageDecoder.decode(Data(json.utf8), day: UsageDay(date: now), requireUnified: true); throw CheckFailure(description: "Accepted invalid unified response") }
+                do { _ = try CCUsageDecoder.decode(Data(json.utf8), day: UsageDay(date: now), report: .unified); throw CheckFailure(description: "Accepted invalid unified response") }
                 catch is UsageError { }
             }
-            let empty = try CCUsageDecoder.decode(Data(#"{"session":[]}"#.utf8), day: UsageDay(date: now), requireUnified: true)
+            let empty = try CCUsageDecoder.decode(Data(#"{"session":[]}"#.utf8), day: UsageDay(date: now), report: .unified)
             try expect(empty.sessions.isEmpty, "Empty unified report rejected")
         }
         await check("Opaque session IDs round-trip through links; old links remain supported") {
@@ -370,16 +370,18 @@ struct PortableChecks {
                 let version = try await service.diagnose(customPath: "", forceDetect: true)
                 let snapshot = try await service.fetch(day: UsageDay(), customPath: "")
                 try expect(!version.version.isEmpty && snapshot.day.isToday(), "Real CLI integration")
+                let allAgents = try await service.fetch(day: UsageDay(), customPath: "", mode: .allAgents)
+                try expect(allAgents.day.isToday(), "All-agent live integration")
                 // Compare normalized totals with the same real JSON response, not a later refresh.
-                let output = try await ProcessRunner().run(executable: URL(fileURLWithPath: version.path), arguments: CCUsageService.arguments(for: UsageDay()))
-                let normalized = try CCUsageDecoder.decode(output.stdout, day: UsageDay(), requireUnified: true)
+                let output = try await ProcessRunner().run(executable: URL(fileURLWithPath: version.path), arguments: CCUsageService.arguments(for: UsageDay(), report: .claude))
+                let normalized = try CCUsageDecoder.decode(output.stdout, day: UsageDay(), report: .claude)
                 let json = try JSONSerialization.jsonObject(with: output.stdout) as? [String: Any]
                 let totals = json?["totals"] as? [String: Any]
                 let reportedTokens = (totals?["totalTokens"] as? NSNumber)?.int64Value
                 let reportedCost = (totals?["totalCost"] as? NSNumber)?.doubleValue
                 try expect(reportedTokens == normalized.totals.total, "Normalized live tokens disagree with CLI")
                 if let reportedCost { try expect(abs(reportedCost - normalized.totals.cost) < 0.000001, "Normalized live cost disagrees with CLI") }
-                print("  \(version.version); \(snapshot.sessions.count) sessions; totals match unified JSON")
+                print("  \(version.version); Claude: \(snapshot.sessions.count) sessions, all agents: \(allAgents.sessions.count); focused totals match JSON")
             }
         }
         print("\n\(passed) portable checks passed; \(failures.count) failed.")

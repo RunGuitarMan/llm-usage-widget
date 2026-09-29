@@ -31,6 +31,16 @@ struct UsageSettingsView: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section(L10n.text("Обновление данных")) {
+                Picker(L10n.text("Способ обновления"), selection: $store.updateMode) {
+                    ForEach(UsageUpdateMode.allCases) { mode in Text(mode.title).tag(mode) }
+                }
+                .pickerStyle(.menu)
+                .disabled(store.isDemo)
+                .onChange(of: store.updateMode) { _, _ in Task { await store.selectPeriod() } }
+                Text(store.updateMode == .claudeOnly
+                     ? L10n.text("Статистика только Claude Code.")
+                     : L10n.text("Claude Code, Codex и другие локальные агенты. Обновление может занимать больше времени."))
+                    .font(.caption).foregroundStyle(.secondary)
                 Picker(L10n.text("Быстрый режим"), selection: Binding(
                     get: { store.refreshIntervals.fastSeconds },
                     set: { store.setRefreshIntervals(fastSeconds: $0) })) {
@@ -100,9 +110,11 @@ struct UsageSettingsView: View {
             }
             Section {
                 DisclosureGroup(L10n.text("Подключение ccusage"), isExpanded: $showCLI) {
-                    LabeledContent(L10n.text("Источники"), value: L10n.text("Все поддерживаемые ccusage"))
-                    Text(L10n.text("Claude Code, Codex, Gemini CLI, OpenCode, Copilot и другие локальные агенты. Новые источники подключаются по мере обновления ccusage. Веб-чаты без локальных логов не учитываются."))
-                        .font(.caption).foregroundStyle(.secondary)
+                    LabeledContent(L10n.text("Источники"), value: store.updateMode.title)
+                    if store.updateMode == .allAgents {
+                        Text(L10n.text("Claude Code, Codex, Gemini CLI, OpenCode, Copilot и другие локальные агенты. Новые источники подключаются по мере обновления ccusage. Веб-чаты без локальных логов не учитываются."))
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
                     TextField(L10n.text("Путь к ccusage"), text: $store.customPath, prompt: Text(L10n.text("Автоматическое определение")))
                         .font(.system(.body, design: .monospaced))
                         .onSubmit { Task { await store.applyCLISettings() } }

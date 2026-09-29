@@ -1,14 +1,25 @@
 import Foundation
 
 enum CCUsageDecoder {
-    static func decode(_ data: Data, day: UsageDay, now: Date = Date(), requireUnified: Bool = false) throws -> UsageSnapshot {
+    enum Report: Sendable { case claude, unified }
+
+    static func decode(_ data: Data, day: UsageDay, now: Date = Date(), report: Report? = nil) throws -> UsageSnapshot {
         do {
             let payload = try JSONDecoder().decode(Payload.self, from: data)
-            if requireUnified && !payload.unified {
+            if report == .unified && !payload.unified {
                 throw UsageError.malformedJSON("Нужен общий отчёт ccusage session с полями session, agent и period. Обновите ccusage до версии с поддержкой всех источников (проверено с 20.0.26).")
             }
+            if report == .claude && payload.unified {
+                throw UsageError.malformedJSON("Expected ccusage claude session report with a sessions array")
+            }
             guard payload.sessions.count <= 100_000 else { throw UsageError.outputTooLarge }
-            let sessions = try payload.sessions.map { try $0.normalized(timezone: day.timezone, unified: payload.unified) }
+            var sessions = try payload.sessions.map { try $0.normalized(timezone: day.timezone, unified: payload.unified) }
+            if report == .claude {
+                // Keep identities stable across collection modes and distinct from other agents.
+                for index in sessions.indices {
+                    sessions[index].id = UsageSource.sessionID(agent: "claude", rawID: sessions[index].rawID)
+                }
+            }
             guard Set(sessions.map(\.id)).count == sessions.count else {
                 throw UsageError.malformedJSON("Duplicate source/session identity in ccusage response")
             }

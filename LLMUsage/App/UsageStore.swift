@@ -30,6 +30,16 @@ final class UsageStore: ObservableObject {
     @Published var period: DataPeriod = .today
     @Published var customDate = Date()
     @Published var sourceFilter = ""
+    @Published var updateMode: UsageUpdateMode {
+        didSet {
+            defaults.set(updateMode.rawValue, forKey: "updateMode")
+            if oldValue != updateMode {
+                sourceFilter = ""
+                selectedSessionID = nil
+                configurationChanged()
+            }
+        }
+    }
     @Published var customPath: String { didSet { defaults.set(customPath, forKey: "customPath"); if oldValue != customPath { configurationChanged() } } }
     @Published var timezone: String { didSet { defaults.set(timezone, forKey: "timezone"); if oldValue != timezone { configurationChanged() } } }
     @Published private(set) var refreshIntervals: RefreshIntervals
@@ -49,7 +59,7 @@ final class UsageStore: ObservableObject {
     @Published var budgetEnabled: Bool { didSet { defaults.set(budgetEnabled, forKey: "budgetEnabled"); preferencesChanged() } }
     @Published private(set) var budgetAmount: Double
     var dailyBudget: Double? { budgetEnabled ? DailyBudget.validAmount(budgetAmount) : nil }
-    var dataContext: UsageDataContext { .init(timezone: timezone, customPath: customPath) }
+    var dataContext: UsageDataContext { .init(timezone: timezone, customPath: customPath, updateMode: updateMode) }
 
     let isDemo: Bool
     private let service: any CCUsageServing
@@ -81,6 +91,7 @@ final class UsageStore: ObservableObject {
         refreshIntervals = intervals
         schedule = RefreshSchedule(intervals: intervals)
         isDemo = demo
+        updateMode = demo ? .allAgents : UsageUpdateMode(rawValue: defaults.string(forKey: "updateMode") ?? "") ?? .claudeOnly
         interfaceLanguage = InterfaceLanguage(rawValue: defaults.string(forKey: "interfaceLanguage") ?? "") ?? .system
         customPath = defaults.string(forKey: "customPath") ?? ""
         let savedZone = defaults.string(forKey: "timezone") ?? "UTC"
@@ -288,7 +299,7 @@ final class UsageStore: ObservableObject {
         schedule.prepare(day: today, at: now())
         refreshMode = schedule.mode
         do {
-            var data = try await service.fetch(day: today, customPath: context.customPath)
+            var data = try await service.fetch(day: today, customPath: context.customPath, mode: context.updateMode ?? .claudeOnly)
             try Task.checkCancellation()
             guard revision == generation else { return }
             // A query spanning midnight must not seed today's schedule with
@@ -320,7 +331,7 @@ final class UsageStore: ObservableObject {
                 if requested == today { snapshot = data; break }
                 var historical = cache[requested.cacheKey]
                 if reason == .manual || historical?.canReuse(for: requested, now: now(), liveInterval: refreshInterval) != true {
-                    historical = try await service.fetch(day: requested, customPath: context.customPath)
+                    historical = try await service.fetch(day: requested, customPath: context.customPath, mode: context.updateMode ?? .claudeOnly)
                 }
                 try Task.checkCancellation()
                 guard revision == generation, var historical else { return }
@@ -376,7 +387,7 @@ final class UsageStore: ObservableObject {
                 // Another successful dated query may have filled the gap meanwhile.
                 if self.history?.missingCompletedDays(ending: today, now: self.now()).contains(day) == false { continue }
                 do {
-                    var data = try await self.service.fetch(day: day, customPath: context.customPath)
+                    var data = try await self.service.fetch(day: day, customPath: context.customPath, mode: context.updateMode ?? .claudeOnly)
                     try Task.checkCancellation()
                     guard revision == self.generation else { return }
                     data.dataContext = context

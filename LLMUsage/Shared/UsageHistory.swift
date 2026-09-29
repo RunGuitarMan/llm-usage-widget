@@ -1,9 +1,18 @@
 import Foundation
 
+enum UsageUpdateMode: String, Codable, CaseIterable, Identifiable, Sendable {
+    case claudeOnly, allAgents
+    var id: String { rawValue }
+    var title: String { self == .claudeOnly ? L10n.text("Только Claude") : L10n.text("Все агенты") }
+}
+
 /// Source and timezone travel with each file so independently replaced files cannot mix configurations.
 struct UsageDataContext: Codable, Equatable, Sendable {
     var timezone: String
     var customPath: String
+    // Missing in old caches, whose unified Claude totals may be incorrect.
+    // Synthesized decoding keeps that absence as nil, distinct from either new mode.
+    var updateMode: UsageUpdateMode? = .claudeOnly
 }
 
 struct DailyUsageTotal: Codable, Equatable, Identifiable, Sendable {

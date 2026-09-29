@@ -15,7 +15,7 @@ private actor HistoryFixtureService: CCUsageServing {
         self.todayDelay = todayDelay
         self.failedDays = failedDays
     }
-    func fetch(day: UsageDay, customPath: String) async throws -> UsageSnapshot {
+    func fetch(day: UsageDay, customPath: String, mode: UsageUpdateMode) async throws -> UsageSnapshot {
         requests.append((day, customPath))
         // Deliberately return after cancellation: the store must guard late completions itself.
         try? await Task.sleep(for: day.isToday() ? todayDelay : historicalDelay)

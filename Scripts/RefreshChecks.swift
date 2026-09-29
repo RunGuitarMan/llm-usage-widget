@@ -31,7 +31,7 @@ actor RefreshFixtureService: CCUsageServing {
         await withCheckedContinuation { waiting = $0 }
     }
     func finishHeldRequest() { release?.resume(); release = nil }
-    func fetch(day: UsageDay, customPath: String) async throws -> UsageSnapshot {
+    func fetch(day: UsageDay, customPath: String, mode: UsageUpdateMode) async throws -> UsageSnapshot {
         if day == today {
             todayRequests += 1
             if holdNext {
