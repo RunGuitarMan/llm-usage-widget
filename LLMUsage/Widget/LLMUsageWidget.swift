@@ -47,6 +47,7 @@ struct UsageTimelineProvider: TimelineProvider {
         do {
             let directory = SharedConfiguration.container
             let status = try SnapshotFiles.status(directory: directory)
+            let policy = status?.modelExclusionPolicy ?? ModelExclusionPolicy()
             L10n.preference = status?.interfaceLanguage ?? .system
             let stored = try SnapshotFiles.read(.today, directory: directory)
             let snapshot = status?.dataContext == nil || stored?.dataContext == status?.dataContext ? stored : nil
@@ -55,9 +56,9 @@ struct UsageTimelineProvider: TimelineProvider {
             let savedHistory = try? SnapshotFiles.history(directory: directory)
             let history = savedHistory?.context == status?.dataContext ? savedHistory : nil
             Self.logger.notice("Snapshot read: present=\(snapshot != nil), sessions=\(snapshot?.sessions.count ?? 0), generatedAt=\(snapshot?.generatedAt.timeIntervalSince1970 ?? 0), localFiles=\(SharedConfiguration.usesLocalWidgetStorage), historyDays=\(history?.days.count ?? 0), language=\(L10n.preference.rawValue, privacy: .public), resolvedLanguage=\(L10n.language.rawValue, privacy: .public)")
-            return .init(date: Date(), snapshot: snapshot,
-                         previous: previous,
-                         status: status, history: history)
+            return .init(date: Date(), snapshot: snapshot?.applyingExclusions(policy),
+                         previous: previous?.applyingExclusions(policy),
+                         status: status, history: history?.applyingExclusions(policy))
         } catch {
             Self.logger.error("Widget snapshot read failed: \(String(describing: error))")
             return .init(date: Date(), snapshot: nil, previous: nil, status: presentationStatus(), storageUnavailable: true)

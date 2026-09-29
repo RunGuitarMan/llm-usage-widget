@@ -58,6 +58,7 @@ final class UsageStore: ObservableObject {
     @Published var menuContent: MenuContentMode { didSet { defaults.set(menuContent.rawValue, forKey: "menuContent") } }
     @Published var budgetEnabled: Bool { didSet { defaults.set(budgetEnabled, forKey: "budgetEnabled"); preferencesChanged() } }
     @Published private(set) var budgetAmount: Double
+    @Published private(set) var modelExclusionPolicy: ModelExclusionPolicy
     var dailyBudget: Double? { budgetEnabled ? DailyBudget.validAmount(budgetAmount) : nil }
     var dataContext: UsageDataContext { .init(timezone: timezone, customPath: customPath, updateMode: updateMode) }
 
@@ -100,12 +101,14 @@ final class UsageStore: ObservableObject {
         menuContent = MenuContentMode(rawValue: defaults.string(forKey: "menuContent") ?? "") ?? .summary
         budgetEnabled = defaults.bool(forKey: "budgetEnabled")
         budgetAmount = DailyBudget.validAmount(defaults.object(forKey: "budgetAmount") as? Double) ?? 25
+        modelExclusionPolicy = .init(overrides: defaults.dictionary(forKey: "modelInclusionOverrides") as? [String: Bool] ?? [:])
         L10n.preference = interfaceLanguage
         if demo {
             var data = SampleData.multiSourceSnapshot()
             data.dataContext = dataContext
             data.day = UsageDay(date: data.generatedAt, timezone: timezone)
-            history = SampleData.history(now: data.generatedAt, context: dataContext)
+            data = data.applyingExclusions(modelExclusionPolicy)
+            history = SampleData.history(now: data.generatedAt, context: dataContext).applyingExclusions(modelExclusionPolicy)
             history?.record(data, today: data.day)
             snapshot = data
             todaySnapshot = data
@@ -130,6 +133,32 @@ final class UsageStore: ObservableObject {
     }
     var displaySnapshot: UsageSnapshot? { snapshot?.filtered(source: sourceFilter) }
     var selectedModels: [String] { Array(Set(displaySnapshot?.sessions.flatMap(\.models) ?? [])).sorted() }
+
+    var knownModels: [String] {
+        var names = Array(modelExclusionPolicy.overrides.keys)
+        for data in cache.values {
+            for session in data.sessions { names += session.models + session.modelBreakdowns.map(\.id) }
+        }
+        for day in history?.days ?? [] { names += day.usageComponents?.flatMap(\.models) ?? [] }
+        return Array(Set(names.map(ModelExclusionPolicy.key).filter { !$0.isEmpty })).sorted()
+    }
+
+    func setModelIncluded(_ included: Bool, model: String) {
+        let key = ModelExclusionPolicy.key(model)
+        guard !key.isEmpty, modelExclusionPolicy.overrides[key] != included else { return }
+        var policy = modelExclusionPolicy
+        policy.overrides[key] = included
+        modelExclusionPolicy = policy
+        defaults.set(policy.overrides, forKey: "modelInclusionOverrides")
+        cache = cache.mapValues { $0.applyingExclusions(policy) }
+        snapshot = snapshot?.applyingExclusions(policy)
+        todaySnapshot = todaySnapshot?.applyingExclusions(policy)
+        previousSnapshot = previousSnapshot?.applyingExclusions(policy)
+        history = history?.applyingExclusions(policy)
+        // Widget readers apply the latest policy to raw values retained in every file.
+        // This also avoids racing a preference change with an in-flight CLI write.
+        preferencesChanged()
+    }
 
     func start() {
         guard !started, !isDemo else { return }
@@ -202,13 +231,14 @@ final class UsageStore: ObservableObject {
         do {
             let savedHistory = try await repository.readHistory()
             guard context == dataContext else { return }
-            if savedHistory?.context == context { history = savedHistory }
+            if savedHistory?.context == context { history = savedHistory?.applyingExclusions(modelExclusionPolicy) }
         } catch { if context == dataContext { storageError = Self.presentable(error) } }
         for slot in [SnapshotSlot.today, .yesterday] {
             do {
-                let data = try await repository.read(slot)
+                let saved = try await repository.read(slot)
                 guard context == dataContext else { return }
-                guard let data, data.dataContext == context else { continue }
+                guard let raw = saved, raw.dataContext == context else { continue }
+                let data = raw.applyingExclusions(modelExclusionPolicy)
                 cache[data.day.cacheKey] = data
                 if slot == .today {
                     todaySnapshot = data
@@ -256,7 +286,8 @@ final class UsageStore: ObservableObject {
     private func publishStatus() async {
         let status = RefreshStatus(attemptedAt: lastAttempt ?? now(), message: todayFailure?.errorDescription,
                                    refreshMinutes: refreshIntervals.slowMinutes, dailyBudget: dailyBudget, dataContext: dataContext,
-                                   interfaceLanguage: interfaceLanguage, refreshIntervalSeconds: refreshInterval)
+                                   interfaceLanguage: interfaceLanguage, refreshIntervalSeconds: refreshInterval,
+                                   modelExclusionPolicy: modelExclusionPolicy)
         do { try await repository.writeStatus(status) }
         catch { storageError = Self.presentable(error) }
         reloadWidget()
@@ -310,6 +341,7 @@ final class UsageStore: ObservableObject {
             }
             schedule.succeeded(cost: data.totals.cost, reason: reason, at: now())
             refreshMode = schedule.mode
+            data = data.applyingExclusions(modelExclusionPolicy)
             data.dataContext = context
             todaySnapshot = data
             cache[today.cacheKey] = data
@@ -328,19 +360,20 @@ final class UsageStore: ObservableObject {
             // Historical dashboard selection has priority over background history.
             repeat {
                 let requested = selectedDay
-                if requested == today { snapshot = data; break }
+                if requested == today { snapshot = todaySnapshot; break }
                 var historical = cache[requested.cacheKey]
                 if reason == .manual || historical?.canReuse(for: requested, now: now(), liveInterval: refreshInterval) != true {
                     historical = try await service.fetch(day: requested, customPath: context.customPath, mode: context.updateMode ?? .claudeOnly)
                 }
                 try Task.checkCancellation()
                 guard revision == generation, var historical else { return }
+                historical = historical.applyingExclusions(modelExclusionPolicy)
                 historical.dataContext = context
                 cache[requested.cacheKey] = historical
                 recordHistory(historical)
                 await persistHistory(revision: revision)
                 guard revision == generation else { return }
-                if requested == selectedDay { snapshot = historical; break }
+                if requested == selectedDay { snapshot = historical.applyingExclusions(modelExclusionPolicy); break }
             } while !Task.isCancelled
             state = .loaded
         } catch is CancellationError {
@@ -390,6 +423,7 @@ final class UsageStore: ObservableObject {
                     var data = try await self.service.fetch(day: day, customPath: context.customPath, mode: context.updateMode ?? .claudeOnly)
                     try Task.checkCancellation()
                     guard revision == self.generation else { return }
+                    data = data.applyingExclusions(self.modelExclusionPolicy)
                     data.dataContext = context
                     self.recordHistory(data)
                     self.cache[day.cacheKey] = data

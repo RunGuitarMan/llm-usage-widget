@@ -7,13 +7,20 @@ import SwiftUI
 final class MenuBarController: NSObject, NSPopoverDelegate {
     private let store: UsageStore
     private let openRoute: (UsageRoute) -> Void
-    private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-    private let popover = NSPopover()
+    private let statusItem: NSStatusItem
+    private let popover: NSPopover
     private var subscriptions = Set<AnyCancellable>()
     private var keyMonitor: Any?
 
-    init(store: UsageStore, openRoute: @escaping (UsageRoute) -> Void) {
+    convenience init(store: UsageStore, openRoute: @escaping (UsageRoute) -> Void) {
+        self.init(store: store, statusItem: NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength),
+                  popover: NSPopover(), openRoute: openRoute)
+    }
+
+    init(store: UsageStore, statusItem: NSStatusItem, popover: NSPopover, openRoute: @escaping (UsageRoute) -> Void) {
         self.store = store
+        self.statusItem = statusItem
+        self.popover = popover
         self.openRoute = openRoute
         super.init()
 
@@ -37,9 +44,9 @@ final class MenuBarController: NSObject, NSPopoverDelegate {
         popover.contentViewController = host
         popover.contentSize = host.view.fittingSize
 
-        store.$todaySnapshot.combineLatest(store.$compactMenuBar, store.$interfaceLanguage, store.$state)
+        store.$todaySnapshot.combineLatest(store.$compactMenuBar, store.$interfaceLanguage)
             .receive(on: RunLoop.main)
-            .sink { [weak self] snapshot, compact, _, _ in
+            .sink { [weak self] snapshot, compact, _ in
                 self?.updateLabel(snapshot: snapshot, compact: compact)
             }
             .store(in: &subscriptions)
@@ -47,11 +54,15 @@ final class MenuBarController: NSObject, NSPopoverDelegate {
     }
 
     private func updateLabel(snapshot: UsageSnapshot?, compact: Bool) {
+        // Keep the status item's geometry stable while it anchors an open popover.
+        // In a fullscreen Space, forcing positioningRect or resizing the button
+        // during refresh can make AppKit reposition the popover at the screen edge.
+        // The popover's observed content still updates immediately.
+        guard !popover.isShown else { return }
         guard let button = statusItem.button else { return }
         button.image = MenuBarBadge.image(usage: snapshot?.totals, compact: compact, day: snapshot?.day)
         button.toolTip = MenuBarBadge.accessibilityLabel(snapshot?.totals, day: snapshot?.day)
         button.setAccessibilityLabel(MenuBarBadge.accessibilityLabel(snapshot?.totals, day: snapshot?.day))
-        if popover.isShown { popover.positioningRect = button.bounds }
     }
 
     @objc private func handleStatusItemClick() {
@@ -110,6 +121,7 @@ final class MenuBarController: NSObject, NSPopoverDelegate {
 
     func popoverDidClose(_ notification: Notification) {
         statusItem.button?.highlight(false)
+        updateLabel(snapshot: store.todaySnapshot, compact: store.compactMenuBar)
         removeKeyMonitor()
     }
 

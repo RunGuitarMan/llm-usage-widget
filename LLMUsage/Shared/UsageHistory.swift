@@ -20,6 +20,8 @@ struct DailyUsageTotal: Codable, Equatable, Identifiable, Sendable {
     var usage: TokenUsage
     var sessionCount: Int
     var capturedAt: Date
+    var usageComponents: [ModelUsageComponent]? = nil
+    var reportedUsage: TokenUsage? = nil
     var id: String { day.cacheKey }
     // A snapshot collected before midnight is never promoted to a complete day at rollover.
     var isPartialDay: Bool { capturedAt < day.end }
@@ -29,6 +31,26 @@ struct DailyUsageTotal: Codable, Equatable, Identifiable, Sendable {
         usage = snapshot.totals
         sessionCount = snapshot.sessions.count
         capturedAt = snapshot.generatedAt
+        reportedUsage = snapshot.sessions.reduce(.zero) { $0 + $1.usage.reported }
+        // Keep model allocations, not session IDs, paths or transcripts, in history.
+        var grouped: [[String]: TokenUsage] = [:]
+        for component in snapshot.sessions.flatMap(\.usageComponents) {
+            let models = Array(Set(component.models.map(ModelExclusionPolicy.key))).sorted()
+            grouped[models, default: .zero] = grouped[models, default: .zero] + component.reportedUsage
+        }
+        usageComponents = grouped.keys.sorted { $0.lexicographicallyPrecedes($1) }
+            .map { .init(models: $0, usage: grouped[$0]!) }
+    }
+
+    func applyingExclusions(_ policy: ModelExclusionPolicy) -> Self? {
+        // Old totals have no model attribution. Rebuild them instead of displaying
+        // potentially excluded costs as if they had already been recalculated.
+        guard let usageComponents else { return nil }
+        var result = self
+        let total = usageComponents.reduce(TokenUsage.zero) { $0 + $1.usage(applying: policy) }
+        let hasExclusions = usageComponents.contains { $0.models.contains { !policy.includes($0) } }
+        result.usage = hasExclusions ? total : (reportedUsage ?? total)
+        return result
     }
 }
 
@@ -43,6 +65,12 @@ struct UsageHistory: Codable, Equatable, Sendable {
     var schemaVersion = 1
     var context: UsageDataContext
     var days: [DailyUsageTotal] = []
+
+    func applyingExclusions(_ policy: ModelExclusionPolicy) -> Self {
+        var result = self
+        result.days = days.compactMap { $0.applyingExclusions(policy) }
+        return result
+    }
 
     mutating func record(_ snapshot: UsageSnapshot, today: UsageDay) {
         guard snapshot.day.timezone == context.timezone, snapshot.dataContext == context,

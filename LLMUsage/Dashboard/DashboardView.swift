@@ -95,6 +95,7 @@ struct DashboardView: View {
                 .navigationSplitViewColumnWidth(min: 180, ideal: 200, max: 250)
         } detail: {
             detail
+                .frame(minWidth: 520)
                 .navigationTitle(store.tab.title)
                 .toolbar { dashboardToolbar }
                 .inspector(isPresented: Binding(
@@ -108,7 +109,9 @@ struct DashboardView: View {
                 }
         }
         .navigationSplitViewStyle(.balanced)
-        .frame(minWidth: 860, minHeight: 560)
+        // Reserve space for all three columns, including the user's widest sidebar
+        // and inspector. The scene's contentMinSize expands the window on selection.
+        .frame(minWidth: store.selectedSessionID != nil && store.tab != .settings ? 1160 : 860, minHeight: 560)
         .onChange(of: store.tab) { _, tab in if tab == .settings { store.selectedSessionID = nil } }
         .onChange(of: store.sourceFilter) { _, _ in
             if let session = store.selectedSession, !store.sourceFilter.isEmpty,
@@ -188,7 +191,7 @@ struct DashboardView: View {
                     switch store.tab {
                     case .overview: overview(snapshot)
                     case .sessions: SessionsView(store: store)
-                    case .models: ModelsView(snapshot: snapshot)
+                    case .models: ModelsView(store: store, snapshot: snapshot)
                     case .settings: EmptyView()
                     }
                 } else { initialState }
@@ -252,7 +255,7 @@ struct DashboardView: View {
             VStack(alignment: .leading, spacing: 24) {
                 spendSummary(snapshot)
                 if snapshot.totals.costIsIncomplete == true {
-                    Label(L10n.text("Часть тарифов недоступна. Показана известная стоимость; все токены учтены."), systemImage: "info.circle")
+                    Label(L10n.text("Часть данных для расчёта недоступна. Показаны только учтённые токены и известная стоимость."), systemImage: "info.circle")
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 if showTokenDetails {

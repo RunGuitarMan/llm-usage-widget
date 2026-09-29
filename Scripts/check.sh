@@ -18,3 +18,4 @@ build/portable-checks "$@"
   LLMUsage/App/AppMenuLocalization.swift Scripts/MenuLocalizationChecks.swift -o build/menu-localization-checks
 build/menu-localization-checks
 bash Scripts/check-ui.sh
+bash Scripts/check-windows.sh
