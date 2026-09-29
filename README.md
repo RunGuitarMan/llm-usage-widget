@@ -14,7 +14,7 @@ A native macOS 26 app that shows token usage and estimated costs from local AI c
 
 ## How it works
 
-The app runs `ccusage session --json` to read supported local usage logs. It calculates totals and saves small JSON snapshots that the WidgetKit extension reads. Keep the app running for fresh widget data; closing its window leaves it running in the menu bar.
+The app runs `ccusage session --json` to read supported local usage logs. It calculates totals and saves small JSON snapshots that the WidgetKit extension reads. The app runs in the menu bar without a Dock icon, including while its dashboard is open. Keep the app running for fresh widget data; closing its window leaves it running in the menu bar. Click the amount to open or close the usage popover, which includes buttons for the dashboard and Settings. Right-click (or Control-click) the amount for a menu with **Quit LLM Usage**.
 
 Usage and transcripts are processed locally. `ccusage` can fetch model prices online, so costs are estimates, not invoices. Browser chats and activity without supported local logs are not included. The Swift app has no third-party package dependencies.
 
