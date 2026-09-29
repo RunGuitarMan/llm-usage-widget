@@ -5,6 +5,7 @@ struct ModelsView: View {
     var snapshot: UsageSnapshot
     @State private var expanded: Set<String> = []
     @State private var showExplanation = false
+    @State private var showExclusions = false
     private var models: [ModelSummary] {
         snapshot.modelSummaries.sorted { $0.usage.cost == $1.usage.cost ? $0.id < $1.id : $0.usage.cost > $1.usage.cost }
     }
@@ -19,6 +20,16 @@ struct ModelsView: View {
                         Text(L10n.text("Модели: \(models.count) · По убыванию стоимости")).font(.system(size: 11)).foregroundStyle(.secondary)
                     }
                     Spacer()
+                    Button(L10n.text("Исключённые модели: \(store.excludedModels.count)")) { showExclusions.toggle() }
+                        .font(.system(size: 11)).foregroundStyle(.secondary).buttonStyle(.borderless)
+                        .popover(isPresented: $showExclusions) {
+                            ScrollView {
+                                VStack(alignment: .leading, spacing: 14) {
+                                    Text(L10n.text("Исключённые модели")).font(.headline)
+                                    ModelExclusionControls(store: store)
+                                }.padding(18)
+                            }.frame(width: 400, height: 360)
+                        }
                     Button { showExplanation.toggle() } label: { Image(systemName: "info.circle") }
                         .buttonStyle(.glass).buttonBorderShape(.circle).controlSize(.large).help(L10n.text("Как учитываются модели"))
                         .popover(isPresented: $showExplanation) {
@@ -26,7 +37,6 @@ struct ModelsView: View {
                                 .font(.callout).padding(18).frame(width: 300)
                         }
                 }
-                modelSettings
                 if models.isEmpty { EmptyUsageView() }
                 else {
                     DashboardSection {
@@ -59,14 +69,6 @@ struct ModelsView: View {
         }
     }
 
-    private var modelSettings: some View {
-        DashboardSection {
-            VStack(alignment: .leading, spacing: 14) {
-                Text(L10n.text("Исключённые модели")).font(.headline)
-                ModelExclusionControls(store: store)
-            }.padding(18)
-        }
-    }
 }
 
 /// Shared with Settings, where exclusions remain accessible before a report loads.

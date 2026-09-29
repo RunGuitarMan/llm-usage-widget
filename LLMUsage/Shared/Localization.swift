@@ -102,6 +102,7 @@ enum L10n {
     static let catalog: [String: (ru: String, en: String)] = [
         "LLM Usage {0} · Данные на этом Mac": ("LLM Usage {0} · Данные на этом Mac", "LLM Usage {0} · Data on this Mac"),
         "Исключённые модели": ("Исключённые модели", "Excluded models"),
+        "Исключённые модели: {0}": ("Исключённые модели: {0}", "Excluded models: {0}"),
         "Исключённые модели не входят в суммы денег и токенов за все дни. Записи сессий сохраняются. Z.ai / GLM исключены по умолчанию.": ("Исключённые модели не входят в суммы денег и токенов за все дни. Записи сессий сохраняются. Z.ai / GLM исключены по умолчанию.", "Excluded models do not contribute to cost or token totals for any date. Session records are kept. Z.ai / GLM are excluded by default."),
         "Среди загруженных моделей нет исключённых.": ("Среди загруженных моделей нет исключённых.", "None of the loaded models are excluded."),
         "Учитывать": ("Учитывать", "Include"),
