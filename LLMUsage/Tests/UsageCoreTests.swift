@@ -97,7 +97,7 @@ final class UsageCoreTests: XCTestCase {
         XCTAssertEqual(day.adding(days: -1).key, "20260307")
     }
     func testArgumentsUseJSONUTCAndOnlinePricingWithoutShell() {
-        let args = CCUsageService.arguments(for: UsageDay(date: now))
+        let args = CCUsageService.arguments(for: UsageDay(date: now), report: .unified)
         XCTAssertEqual(args, ["session", "--json", "--all", "--since", "20260928", "--until", "20260928", "--timezone", "UTC", "--mode", "calculate", "--order", "desc", "--no-offline"])
     }
     func testSnapshotEncodeDecode() throws {
@@ -172,7 +172,7 @@ final class UsageCoreTests: XCTestCase {
         XCTAssertEqual(String(decoding: result.stdout, as: UTF8.self), "ok")
     }
     func testUnifiedReportIdentitiesMetadataAndTotals() throws {
-        let snapshot = try CCUsageDecoder.decode(fixture("unified-sessions"), day: UsageDay(date: now), requireUnified: true)
+        let snapshot = try CCUsageDecoder.decode(fixture("unified-sessions"), day: UsageDay(date: now), report: .unified)
         XCTAssertEqual(snapshot.sessions.count, 4)
         XCTAssertEqual(Set(snapshot.sessions.map(\.id)).count, 4)
         XCTAssertEqual(snapshot.sessions[0].rawID, snapshot.sessions[1].rawID)
@@ -202,9 +202,9 @@ final class UsageCoreTests: XCTestCase {
                      #"{"session":[{"agent":"codex","period":"a"},{"agent":"codex","period":"a"}]}"#,
                      #"{"session":[{"agent":"codex","period":"a","inputTokens":10,"totalTokens":9}]}"#,
                      #"{"sessions":[]}"#] {
-            XCTAssertThrowsError(try CCUsageDecoder.decode(Data(json.utf8), day: UsageDay(date: now), requireUnified: true))
+            XCTAssertThrowsError(try CCUsageDecoder.decode(Data(json.utf8), day: UsageDay(date: now), report: .unified))
         }
-        XCTAssertTrue(try CCUsageDecoder.decode(Data(#"{"session":[]}"#.utf8), day: UsageDay(date: now), requireUnified: true).sessions.isEmpty)
+        XCTAssertTrue(try CCUsageDecoder.decode(Data(#"{"session":[]}"#.utf8), day: UsageDay(date: now), report: .unified).sessions.isEmpty)
     }
     func testNamespacedDeepLinksHandleOpaqueIDsAndLegacyScheme() {
         let id = UsageSource.sessionID(agent: "codex", rawID: "path/with spaces/тест#?%")

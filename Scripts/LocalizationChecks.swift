@@ -67,6 +67,7 @@ struct LocalizationChecks {
             try requireLocale(DataPeriod.today.rawValue == "Сегодня" && DataPeriod.today.title == "Today", "Period identity changed")
             try requireLocale(SessionSort.cost.rawValue == "По стоимости" && SessionSort.cost.title == "By cost", "Sort identity changed")
             try requireLocale(MenuContentMode.trend.rawValue == "trend" && MenuContentMode.trend.title == "7-day trend", "Menu identity changed")
+            try requireLocale(UsageUpdateMode.claudeOnly.title == "Claude only" && UsageUpdateMode.allAgents.title == "All agents", "Update mode labels did not translate")
         }
         await check("Locale: widget preference round-trip and legacy status compatibility") {
             let decoder = JSONDecoder()

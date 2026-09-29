@@ -19,17 +19,74 @@ private actor RegressionService: CCUsageServing {
     var timestamp = ISO8601DateFormatter().date(from: "2026-09-29T12:00:00Z")!
     var fails = false
     var requests: [UsageDay] = []
+    var modes: [UsageUpdateMode] = []
+    private var holdNext = false
+    private var release: CheckedContinuation<Void, Never>?
+    private var waiting: CheckedContinuation<Void, Never>?
+    func holdNextRequest() { holdNext = true }
+    func waitUntilHeld() async {
+        if release != nil { return }
+        await withCheckedContinuation { waiting = $0 }
+    }
+    func finishHeldRequest() { release?.resume(); release = nil }
     func configure(cost: Double, at date: Date, fails: Bool = false) {
         self.cost = cost; timestamp = date; self.fails = fails
     }
-    func fetch(day: UsageDay, customPath: String) async throws -> UsageSnapshot {
+    func fetch(day: UsageDay, customPath: String, mode: UsageUpdateMode) async throws -> UsageSnapshot {
         requests.append(day)
+        modes.append(mode)
+        if holdNext {
+            holdNext = false
+            await withCheckedContinuation { continuation in
+                release = continuation
+                waiting?.resume(); waiting = nil
+            }
+        }
         if fails { throw UsageError.timedOut }
         return .init(generatedAt: timestamp, day: day,
-                     sessions: [.init(id: "s-" + day.key, models: ["test"], usage: .init(cost: cost))])
+                     sessions: [.init(id: "s-" + day.key, models: ["test"], usage: .init(cost: mode == .allAgents ? cost + 10 : cost))])
     }
     func count(_ day: UsageDay) -> Int { requests.filter { $0 == day }.count }
     func diagnose(customPath: String, forceDetect: Bool) -> CLIDiagnostics { .init(path: "fixture", version: "1") }
+}
+
+/// Exercises the actual resolver/process/decoder pipeline without accessing user logs.
+private struct RegressionCLI {
+    let directory: URL
+    var executable: String { directory.appendingPathComponent("ccusage").path }
+    static let claude = #"{"sessions":[{"sessionId":"shared","modelsUsed":["opus"],"inputTokens":20,"outputTokens":2,"totalTokens":22,"totalCost":2,"lastActivity":"2026-09-28T12:00:00Z","projectPath":"/fixture/project","modelBreakdowns":[{"modelName":"opus","inputTokens":20,"outputTokens":2,"cost":2}]}],"totals":{"totalCost":999}}"#
+    static let unified = #"{"session":[{"agent":"claude","period":"shared","inputTokens":100,"totalCost":10},{"agent":"claude","period":"outside-day","inputTokens":200,"totalCost":20},{"agent":"codex","period":"shared","modelsUsed":["gpt"],"inputTokens":30,"totalCost":3},{"agent":"future-agent","period":"future","inputTokens":5}],"totals":{"totalCost":999}}"#
+
+    init() throws {
+        directory = FileManager.default.temporaryDirectory.appendingPathComponent("LLM Usage CLI \(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let script = """
+        #!/bin/sh
+        fixture_dir="${0%/*}"
+        printf '%s\\n' "$*" >> "$fixture_dir/requests"
+        case "$1" in
+          claude) report=claude ;;
+          session) report=unified ;;
+          *) exit 9 ;;
+        esac
+        if [ -f "$fixture_dir/fail-$report" ]; then
+          printf '%s\\n' "fixture $report failed" >&2
+          exit 7
+        fi
+        /bin/cat "$fixture_dir/$report.json"
+        """
+        try script.write(toFile: executable, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: executable)
+        try write(Self.claude, name: "claude.json")
+        try write(Self.unified, name: "unified.json")
+    }
+    func write(_ text: String, name: String) throws {
+        try text.write(to: directory.appendingPathComponent(name), atomically: true, encoding: .utf8)
+    }
+    func requests() throws -> [String] {
+        try String(contentsOf: directory.appendingPathComponent("requests"), encoding: .utf8).split(separator: "\n").map(String.init)
+    }
+    func remove() { try? FileManager.default.removeItem(at: directory) }
 }
 
 private actor RegressionRepository: SnapshotPersisting {
@@ -56,6 +113,132 @@ private final class RegressionSearchGate: @unchecked Sendable {
 /// Shared by XCTest and the CLT harness, so regression coverage does not diverge.
 enum RegressionScenarios {
     @MainActor static func run(check: (String, () async throws -> Void) async -> Void) async {
+        await check("Update mode: Claude only runs one dated command with stable session IDs") {
+            let cli = try RegressionCLI()
+            defer { cli.remove() }
+            let day = UsageDay(date: ISO8601DateFormatter().date(from: "2026-09-28T18:00:00Z")!)
+            let snapshot = try await CCUsageService().fetch(day: day, customPath: cli.executable)
+            let requests = try cli.requests()
+            try requireRegression(requests == ["claude session --json --since 20260928 --until 20260928 --timezone UTC --mode calculate --order desc --no-offline"], "Default mode ran another command or widened the day")
+            try requireRegression(snapshot.sessions.count == 1 && snapshot.totals.total == 22 && snapshot.totals.cost == 2, "Claude report totals were lost")
+            let session = snapshot.sessions[0]
+            try requireRegression(session.id == UsageSource.sessionID(agent: "claude", rawID: "shared") && session.rawID == "shared", "Claude identity is not source-qualified")
+            try requireRegression(session.projectPath == "/fixture/project" && session.lastActivity != nil && session.modelBreakdowns.first?.usage.cost == 2, "Claude metadata or model breakdown lost")
+        }
+        await check("Update mode: all agents replaces whole-session Claude totals and preserves other sources") {
+            let cli = try RegressionCLI()
+            defer { cli.remove() }
+            let day = UsageDay(date: ISO8601DateFormatter().date(from: "2026-09-28T18:00:00Z")!, timezone: "Europe/Moscow")
+            let service = CCUsageService()
+            let snapshot = try await service.fetch(day: day, customPath: cli.executable, mode: .allAgents)
+            let requests = try cli.requests()
+            try requireRegression(requests.count == 2 && Set(requests.map { $0.components(separatedBy: " --json")[0] }) == ["claude session", "session"], "All-agent mode did not issue exactly both reports")
+            try requireRegression(requests.allSatisfy { $0.contains("--since 20260928 --until 20260928 --timezone Europe/Moscow") }, "Report bounds or timezone diverged")
+            try requireRegression(snapshot.sessions.count == 3 && snapshot.totals.total == 57 && snapshot.totals.cost == 5, "Claude was appended or lifetime totals were retained")
+            try requireRegression(Set(snapshot.sessions.map(\.id)).count == 3 && snapshot.sessions.filter { $0.sourceID == "claude" }.count == 1, "Cross-agent IDs collided")
+            try requireRegression(snapshot.sessions.contains { $0.sourceID == "future-agent" } && snapshot.totals.costIsIncomplete == true, "Other agents or incomplete pricing lost")
+            let focused = try await service.fetch(day: day, customPath: cli.executable, mode: .claudeOnly)
+            try requireRegression(snapshot.sessions.first { $0.sourceID == "claude" } == focused.sessions.first, "Switching modes changed Claude identity or metadata")
+        }
+        await check("Update mode: empty unified report recovers Claude and empty Claude removes stale rows") {
+            let cli = try RegressionCLI()
+            defer { cli.remove() }
+            let service = CCUsageService(), day = UsageDay()
+            try cli.write(#"{"session":[]}"#, name: "unified.json")
+            let recovered = try await service.fetch(day: day, customPath: cli.executable, mode: .allAgents)
+            try requireRegression(recovered.sessions.count == 1 && recovered.totals.total == 22, "The reported empty-unified regression was not recovered")
+            try cli.write(RegressionCLI.unified, name: "unified.json")
+            try cli.write(#"{"sessions":[]}"#, name: "claude.json")
+            let emptyClaude = try await service.fetch(day: day, customPath: cli.executable, mode: .allAgents)
+            try requireRegression(emptyClaude.sessions.count == 2 && emptyClaude.sessions.allSatisfy { $0.sourceID != "claude" } && emptyClaude.totals.total == 35, "An empty focused day retained unified Claude lifetime usage")
+        }
+        await check("Update mode: either failed or malformed report rejects partial all-agent results") {
+            let cli = try RegressionCLI()
+            defer { cli.remove() }
+            for report in ["claude", "unified"] {
+                try cli.write("fail", name: "fail-" + report)
+                do {
+                    _ = try await CCUsageService().fetch(day: UsageDay(), customPath: cli.executable, mode: .allAgents)
+                    throw RegressionFailure(description: "A failed \(report) report was accepted as a partial success")
+                } catch UsageError.processFailed(7, _) { }
+                try FileManager.default.removeItem(at: cli.directory.appendingPathComponent("fail-" + report))
+                // A valid JSON document in the wrong report format must also fail.
+                try cli.write(report == "claude" ? #"{"session":[]}"# : #"{"sessions":[]}"#, name: report + ".json")
+                do {
+                    _ = try await CCUsageService().fetch(day: UsageDay(), customPath: cli.executable, mode: .allAgents)
+                    throw RegressionFailure(description: "The wrong \(report) schema was accepted")
+                } catch UsageError.malformedJSON { }
+                try cli.write(report == "claude" ? RegressionCLI.claude : RegressionCLI.unified, name: report + ".json")
+            }
+        }
+        await check("Update mode: defaults, persisted preference, history and widget contexts remain isolated") {
+            let suite = "LLMUsage.UpdateMode.\(UUID().uuidString)"
+            let defaults = UserDefaults(suiteName: suite)!
+            defer { defaults.removePersistentDomain(forName: suite) }
+            let service = RegressionService(), repository = RegressionRepository(), clock = RegressionClock()
+            let store = UsageStore(service: service, repository: repository, defaults: defaults, now: { clock.now }, reloadWidget: {})
+            try requireRegression(store.updateMode == .claudeOnly, "New installs must default to Claude only")
+            await store.refresh(); await store.waitForHistoryBackfill()
+            store.updateMode = .allAgents
+            try requireRegression(store.snapshot == nil && store.history == nil && store.todaySnapshot == nil, "Mode switch left old data visible")
+            await store.selectPeriod(); await store.waitForHistoryBackfill()
+            let allRequests = await service.modes
+            try requireRegression(allRequests == Array(repeating: .claudeOnly, count: 7) + Array(repeating: .allAgents, count: 7), "Selected mode was not used for today and history")
+            let history = await repository.readHistory(), status = await repository.readStatus()
+            try requireRegression(history?.context.updateMode == .allAgents && status?.dataContext?.updateMode == .allAgents && store.todaySnapshot?.totals.cost == 11, "Widget/history context did not follow mode")
+            let restarted = UsageStore(service: service, repository: repository, defaults: defaults, now: { clock.now }, reloadWidget: {})
+            try requireRegression(restarted.updateMode == .allAgents, "Mode preference was not persisted")
+            store.sourceFilter = "codex"; store.selectedSessionID = "old-selection"
+            store.updateMode = .claudeOnly
+            try requireRegression(store.sourceFilter.isEmpty && store.selectedSessionID == nil && store.previousSnapshot == nil, "Old source filter or selection survived mode change")
+            await store.selectPeriod(); await store.waitForHistoryBackfill()
+            try requireRegression(store.todaySnapshot?.totals.cost == 1 && store.history?.days.allSatisfy { $0.usage.cost == 1 } == true, "All-agent amounts leaked into Claude history")
+        }
+        await check("Update mode: legacy cache and cache from another mode are not restored") {
+            let legacy = try JSONDecoder().decode(UsageDataContext.self, from: Data(#"{"timezone":"UTC","customPath":""}"#.utf8))
+            try requireRegression(legacy.updateMode == nil && legacy != UsageDataContext(timezone: "UTC", customPath: ""), "Legacy unified cache was reinterpreted as corrected Claude data")
+            for mode in UsageUpdateMode.allCases {
+                let context = UsageDataContext(timezone: "UTC", customPath: "", updateMode: mode)
+                let decoded = try JSONDecoder().decode(UsageDataContext.self, from: JSONEncoder().encode(context))
+                try requireRegression(decoded == context, "Mode was lost during cache round-trip")
+            }
+            for context in [legacy, UsageDataContext(timezone: "UTC", customPath: "", updateMode: .allAgents)] {
+                let suite = "LLMUsage.ModeCache.\(UUID().uuidString)"
+                let defaults = UserDefaults(suiteName: suite)!
+                defer { defaults.removePersistentDomain(forName: suite) }
+                let clock = RegressionClock(), service = RegressionService(), repository = RegressionRepository()
+                var old = UsageSnapshot(generatedAt: clock.now, day: UsageDay(date: clock.now), sessions: [])
+                old.dataContext = context
+                await repository.write(old, to: .today)
+                await repository.writeHistory(UsageHistory(context: context, days: [DailyUsageTotal(snapshot: old)]))
+                await service.configure(cost: 1, at: clock.now, fails: true)
+                let store = UsageStore(service: service, repository: repository, defaults: defaults, now: { clock.now }, reloadWidget: {})
+                await store.refresh()
+                try requireRegression(store.snapshot == nil && store.history == nil && store.state == .error, "An incompatible saved cache masked a failed new-mode fetch")
+            }
+        }
+        await check("Update mode: switching during refresh discards the late old-mode result") {
+            let suite = "LLMUsage.ModeInFlight.\(UUID().uuidString)"
+            let defaults = UserDefaults(suiteName: suite)!
+            defer { defaults.removePersistentDomain(forName: suite) }
+            let clock = RegressionClock(), service = RegressionService(), repository = RegressionRepository()
+            let store = UsageStore(service: service, repository: repository, defaults: defaults, now: { clock.now }, reloadWidget: {})
+            store.updateMode = .allAgents
+            await service.holdNextRequest()
+            let refresh = Task { await store.refresh() }
+            await service.waitUntilHeld()
+            store.updateMode = .claudeOnly
+            await service.finishHeldRequest()
+            await refresh.value
+            let deadline = ContinuousClock.now.advanced(by: .seconds(5))
+            while store.todaySnapshot == nil || store.isRefreshing {
+                guard ContinuousClock.now < deadline else { throw RegressionFailure(description: "New mode was not fetched after the old request finished") }
+                try await Task.sleep(for: .milliseconds(10))
+            }
+            await store.waitForHistoryBackfill()
+            let saved = await repository.read(.today)
+            try requireRegression(store.todaySnapshot?.totals.cost == 1 && saved?.dataContext?.updateMode == .claudeOnly && saved?.totals.cost == 1, "Late all-agent result overwrote Claude-only data")
+        }
         await check("Regression: parallel tool records and exports grow linearly") {
             for count in [1, 20, 80] {
                 var decoder = TranscriptDecoder(source: "claude")
