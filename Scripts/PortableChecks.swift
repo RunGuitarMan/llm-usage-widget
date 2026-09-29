@@ -7,6 +7,15 @@ private func expect(_ condition: @autoclosure () -> Bool, _ message: String) thr
     if !condition() { throw CheckFailure(description: message) }
 }
 
+// Await an observable condition rather than assuming a shared CI runner's speed.
+@MainActor func waitForCheck(_ message: String, until condition: () async -> Bool) async throws {
+    let deadline = ContinuousClock.now.advanced(by: .seconds(5))
+    while !(await condition()) {
+        guard ContinuousClock.now < deadline else { throw CheckFailure(description: message) }
+        try await Task.sleep(for: .milliseconds(10))
+    }
+}
+
 private actor FixtureService: CCUsageServing {
     var failure: UsageError?
     var delay: TimeInterval = 0
@@ -320,7 +329,7 @@ struct PortableChecks {
             let suite = "local.LLMUsage.LocaleCheck.\(UUID().uuidString)"
             let defaults = UserDefaults(suiteName: suite)!
             defer { defaults.removePersistentDomain(forName: suite) }
-            let service = FixtureService()
+            let service = RefreshFixtureService(today: UsageDay())
             let repository = MemoryRepository()
             var reloads = 0
             let store = UsageStore(service: service, repository: repository, defaults: defaults, reloadWidget: { reloads += 1 })
@@ -329,17 +338,26 @@ struct PortableChecks {
             await store.waitForHistoryBackfill()
             let history = store.history
             let snapshot = store.todaySnapshot
-            await service.fail(.timedOut)
-            await service.setDelay(0.2)
+            await service.configure(failure: .timedOut, holdNext: true)
             let request = Task { await store.refresh() }
-            try await Task.sleep(for: .milliseconds(30))
+            defer {
+                request.cancel()
+                Task { await service.finishHeldRequest() }
+            }
+            await service.waitUntilHeld()
             store.interfaceLanguage = .english
-            try await Task.sleep(for: .milliseconds(50))
+            try await waitForCheck("Widget language was not published while CLI was held") {
+                await repository.readStatus()?.interfaceLanguage == .english
+            }
             let during = await repository.readStatus()
             try expect(during?.interfaceLanguage == .english && store.isRefreshing, "Widget language waits for CLI")
+            await service.finishHeldRequest()
             await request.value
             store.interfaceLanguage = .russian
-            try await Task.sleep(for: .milliseconds(50))
+            try await waitForCheck("Stored failure was not relocalized") {
+                let status = await repository.readStatus()
+                return status?.interfaceLanguage == .russian && status?.message == "ccusage не ответил вовремя" && reloads >= 3
+            }
             let after = await repository.readStatus()
             try expect(after?.interfaceLanguage == .russian && after?.message == "ccusage не ответил вовремя", "Stored failure did not relocalize")
             try expect(store.history == history && store.todaySnapshot == snapshot && reloads >= 3, "Language cleared data or failed to request widget refresh")

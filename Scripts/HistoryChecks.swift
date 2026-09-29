@@ -192,18 +192,25 @@ enum HistoryChecks {
             let suite = "LLMUsage.HistoryChecks.\(UUID().uuidString)"
             let defaults = UserDefaults(suiteName: suite)!
             defer { defaults.removePersistentDomain(forName: suite) }
-            let service = HistoryFixtureService()
-            await service.configure(todayDelay: .milliseconds(120), failedDays: [UsageDay().cacheKey])
+            let service = RefreshFixtureService(today: UsageDay())
+            await service.configure(failure: .timedOut, holdNext: true)
             let repository = HistoryMemoryRepository()
             let store = UsageStore(service: service, repository: repository, defaults: defaults, reloadWidget: {})
             let task = Task { await store.refresh() }
-            try await Task.sleep(for: .milliseconds(15))
+            defer {
+                task.cancel()
+                Task { await service.finishHeldRequest() }
+            }
+            await service.waitUntilHeld()
             try requireHistory(store.setBudgetAmount(17.5) && !store.setBudgetAmount(.infinity), "Budget validation")
             store.budgetEnabled = true
             store.menuContent = .trend
-            try await Task.sleep(for: .milliseconds(15))
+            try await waitForCheck("Budget was not published while CLI was held") {
+                await repository.readStatus()?.dailyBudget == 17.5
+            }
             let during = await repository.readStatus()
             try requireHistory(during?.dailyBudget == 17.5 && store.isRefreshing, "Budget waits for CLI")
+            await service.finishHeldRequest()
             await task.value
             let after = await repository.readStatus()
             try requireHistory(after?.dailyBudget == 17.5 && after?.message != nil, "Failed fetch erased budget")
