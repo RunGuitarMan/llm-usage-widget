@@ -1,0 +1,265 @@
+import Foundation
+
+struct TokenUsage: Codable, Equatable, Sendable {
+    var input: Int64 = 0
+    var output: Int64 = 0
+    var cacheCreate: Int64 = 0
+    var cacheRead: Int64 = 0
+    var cost: Double = 0
+    // Some sources include thought/tool tokens outside the four common buckets.
+    var additional: Int64? = nil
+    var costIsIncomplete: Bool? = nil
+
+    var total: Int64 { input + output + cacheCreate + cacheRead + (additional ?? 0) }
+    var categories: [TokenCategory] { TokenCategory.allCases.filter { $0 != .additional || (additional ?? 0) > 0 } }
+    static let zero = TokenUsage()
+
+    static func + (lhs: Self, rhs: Self) -> Self {
+        .init(input: lhs.input + rhs.input, output: lhs.output + rhs.output,
+              cacheCreate: lhs.cacheCreate + rhs.cacheCreate, cacheRead: lhs.cacheRead + rhs.cacheRead,
+              cost: lhs.cost + rhs.cost,
+              additional: (lhs.additional ?? 0) + (rhs.additional ?? 0),
+              costIsIncomplete: lhs.costIsIncomplete == true || rhs.costIsIncomplete == true)
+    }
+
+    func value(for category: TokenCategory) -> Int64 {
+        switch category {
+        case .input: return input
+        case .output: return output
+        case .cacheCreate: return cacheCreate
+        case .cacheRead: return cacheRead
+        case .additional: return additional ?? 0
+        }
+    }
+}
+
+enum TokenCategory: String, CaseIterable, Identifiable, Sendable {
+    case input, output, cacheCreate, cacheRead, additional
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .input: return "Input"
+        case .output: return "Output"
+        case .cacheCreate: return "Cache create"
+        case .cacheRead: return "Cache read"
+        case .additional: return "Other tokens"
+        }
+    }
+}
+
+struct ModelUsage: Codable, Equatable, Identifiable, Sendable {
+    var id: String
+    var usage: TokenUsage
+}
+
+struct UsageSession: Codable, Equatable, Identifiable, Sendable {
+    var id: String
+    var models: [String]
+    var usage: TokenUsage
+    var lastActivity: Date?
+    var activityHasTime: Bool = true
+    var projectPath: String?
+    var modelBreakdowns: [ModelUsage] = []
+    var agent: String? = nil
+    var originalID: String? = nil
+    var reasoningOutputTokens: Int64? = nil
+
+    var sourceID: String { agent ?? "claude" }
+    var sourceLabel: String { UsageSource.label(sourceID) }
+    var rawID: String { originalID ?? id }
+    var shortID: String {
+        let basename = (rawID as NSString).lastPathComponent
+        // Codex rollout paths end in a UUID; a date/"rollout-" prefix is not useful.
+        if basename.count >= 36, UUID(uuidString: String(basename.suffix(36))) != nil {
+            return UsageFormat.shortID(String(basename.suffix(36)))
+        }
+        return UsageFormat.shortID(basename.isEmpty ? rawID : basename)
+    }
+    var modelLabel: String { models.isEmpty ? L10n.text("Модель неизвестна") : models.joined(separator: ", ") }
+}
+
+enum UsageSource {
+    static func label(_ id: String) -> String {
+        ["claude": "Claude Code", "codex": "Codex", "opencode": "OpenCode", "amp": "Amp",
+         "droid": "Droid", "codebuff": "Codebuff", "hermes": "Hermes", "pi": "pi-agent",
+         "goose": "Goose", "kilo": "Kilo", "copilot": "GitHub Copilot", "gemini": "Gemini CLI",
+         "antigravity": "Antigravity", "kimi": "Kimi", "qwen": "Qwen", "openclaw": "OpenClaw",
+         "grok": "Grok Build", "zcode": "ZCode"][id] ?? id
+    }
+
+    static func sessionID(agent: String, rawID: String) -> String {
+        let encoded = Data(rawID.utf8).base64EncodedString()
+            .replacingOccurrences(of: "+", with: "-").replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "=", with: "")
+        return "\(agent):\(encoded)"
+    }
+}
+
+struct SourceSummary: Identifiable, Equatable, Sendable {
+    var id: String
+    var usage: TokenUsage
+    var sessionCount: Int
+    var label: String { UsageSource.label(id) }
+}
+
+struct UsageDay: Codable, Equatable, Hashable, Sendable {
+    var date: Date
+    var timezone: String
+
+    init(date: Date = Date(), timezone: String = "UTC") {
+        let zone = TimeZone(identifier: timezone) ?? TimeZone(secondsFromGMT: 0)!
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = zone
+        self.date = calendar.startOfDay(for: date)
+        self.timezone = TimeZone(identifier: timezone) == nil ? "UTC" : timezone
+    }
+
+    var key: String { UsageFormat.dayKey(date, timezone: timezone) }
+    var cacheKey: String { "\(key)|\(timezone)" }
+    var end: Date {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: timezone)!
+        return calendar.date(byAdding: .day, value: 1, to: date)!
+    }
+    func adding(days: Int) -> Self {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: timezone)!
+        return .init(date: calendar.date(byAdding: .day, value: days, to: date)!, timezone: timezone)
+    }
+    func isToday(now: Date = Date()) -> Bool { key == Self(date: now, timezone: timezone).key }
+    func label(now: Date = Date()) -> String {
+        let today = Self(date: now, timezone: timezone)
+        if key == today.key { return L10n.text("Сегодня, \(timezone)") }
+        if key == today.adding(days: -1).key { return L10n.text("Вчера, \(timezone)") }
+        return "\(UsageFormat.date(date, timezone: timezone)), \(timezone)"
+    }
+
+    func spendingTitle(now: Date = Date()) -> String {
+        let today = Self(date: now, timezone: timezone)
+        if self == today { return L10n.text("Расходы за сегодня") }
+        if self == today.adding(days: -1) { return L10n.text("Расходы за вчера") }
+        return UsageFormat.date(date, timezone: timezone)
+    }
+}
+
+struct UsageSnapshot: Codable, Equatable, Sendable {
+    var schemaVersion = 2
+    var dataContext: UsageDataContext? = nil
+    var generatedAt: Date
+    var day: UsageDay
+    var sessions: [UsageSession]
+    // Derived totals prevent a stale or inconsistent CLI totals object from contradicting rows.
+    var totals: TokenUsage { sessions.reduce(.zero) { $0 + $1.usage } }
+    var topModel: String { modelSummaries.first?.id ?? "—" }
+    var sortedSessions: [UsageSession] { SessionSort.tokens.sorted(sessions) }
+
+    func filtered(source: String) -> Self {
+        guard !source.isEmpty else { return self }
+        var result = self
+        result.sessions = sessions.filter { $0.sourceID == source }
+        return result
+    }
+
+    var sourceSummaries: [SourceSummary] {
+        Dictionary(grouping: sessions, by: \.sourceID).map { id, rows in
+            SourceSummary(id: id, usage: rows.reduce(.zero) { $0 + $1.usage }, sessionCount: rows.count)
+        }.sorted { $0.usage.cost == $1.usage.cost ? $0.id < $1.id : $0.usage.cost > $1.usage.cost }
+    }
+
+    func isStale(now: Date = Date(), interval: TimeInterval = 180) -> Bool {
+        now.timeIntervalSince(generatedAt) > max(interval * 2, 600) || !day.isToday(now: now)
+    }
+
+    func canReuse(for requestedDay: UsageDay, now: Date, liveInterval: TimeInterval) -> Bool {
+        guard day == requestedDay, generatedAt <= now else { return false }
+        if day.isToday(now: now) { return now.timeIntervalSince(generatedAt) < liveInterval }
+        return generatedAt >= day.end && now.timeIntervalSince(generatedAt) < UsageHistory.completedDayRefreshInterval
+    }
+
+    var modelSummaries: [ModelSummary] {
+        var totals: [String: TokenUsage] = [:]
+        var ids: [String: Set<String>] = [:]
+        for session in sessions {
+            // Never attribute all session tokens to EACH model of a mixed session.
+            // Incomplete breakdowns stay together, with an explicit composite label.
+            let breakdownTotal = session.modelBreakdowns.reduce(TokenUsage.zero) { $0 + $1.usage }
+            let complete = !session.modelBreakdowns.isEmpty && breakdownTotal.total == session.usage.total
+                && abs(breakdownTotal.cost - session.usage.cost) < 0.001
+            let parts = complete ? session.modelBreakdowns : [ModelUsage(id: session.modelLabel, usage: session.usage)]
+            for part in parts {
+                totals[part.id, default: .zero] = totals[part.id, default: .zero] + part.usage
+                ids[part.id, default: []].insert(session.id)
+            }
+        }
+        return totals.map { ModelSummary(id: $0.key, usage: $0.value, sessionCount: ids[$0.key]?.count ?? 0) }
+            .sorted { $0.usage.total == $1.usage.total ? $0.id < $1.id : $0.usage.total > $1.usage.total }
+    }
+}
+
+struct ModelSummary: Identifiable, Equatable, Sendable {
+    var title: String { id.isEmpty ? L10n.text("Модель неизвестна") : id }
+    var id: String
+    var usage: TokenUsage
+    var sessionCount: Int
+}
+
+enum SessionSort: String, CaseIterable, Identifiable, Sendable {
+    case tokens = "По токенам", cost = "По стоимости", activity = "По активности"
+    case output = "По Output", cacheRead = "По Cache read"
+    var id: String { rawValue }
+    var title: String { L10n.key(rawValue) }
+    func sorted(_ sessions: [UsageSession]) -> [UsageSession] {
+        sessions.sorted { a, b in
+            let left: Double, right: Double
+            switch self {
+            case .tokens: (left, right) = (Double(a.usage.total), Double(b.usage.total))
+            case .cost: (left, right) = (a.usage.cost, b.usage.cost)
+            case .activity: (left, right) = (a.lastActivity?.timeIntervalSince1970 ?? 0, b.lastActivity?.timeIntervalSince1970 ?? 0)
+            case .output: (left, right) = (Double(a.usage.output), Double(b.usage.output))
+            case .cacheRead: (left, right) = (Double(a.usage.cacheRead), Double(b.usage.cacheRead))
+            }
+            return left == right ? a.id < b.id : left > right
+        }
+    }
+}
+
+enum UsageError: Error, LocalizedError, Equatable, Sendable {
+    case missingExecutable
+    case invalidPath(String)
+    case processFailed(Int32, String)
+    case timedOut
+    case malformedJSON(String)
+    case sharedContainer(String)
+    case outputTooLarge
+
+    var errorDescription: String? {
+        switch self {
+        case .missingExecutable: return L10n.text("ccusage не найден")
+        case .invalidPath: return L10n.text("Проверьте путь к ccusage")
+        case .processFailed: return L10n.text("Не удалось получить статистику")
+        case .timedOut: return L10n.text("ccusage не ответил вовремя")
+        case .malformedJSON: return L10n.text("Не удалось прочитать ответ ccusage")
+        case .sharedContainer: return L10n.text("Общее хранилище виджета недоступно")
+        case .outputTooLarge: return L10n.text("Ответ ccusage слишком большой")
+        }
+    }
+    var recovery: String {
+        switch self {
+        case .missingExecutable, .invalidPath: return L10n.text("Установите ccusage или укажите путь к существующему executable.")
+        case .processFailed, .timedOut: return L10n.text("Проверьте ccusage в настройках и повторите обновление. Последние успешные данные сохранены.")
+        case .malformedJSON: return L10n.text("Проверьте версию ccusage. Подробности доступны в настройках.")
+        case .sharedContainer: return SharedConfiguration.usesLocalWidgetStorage
+            ? L10n.text("Переустановите приложение вместе с расширением и повторите обновление данных.")
+            : L10n.text("Проверьте Signing Team и одинаковый App Group у приложения и расширения.")
+        case .outputTooLarge: return L10n.text("Выберите другой день или проверьте executable в настройках.")
+        }
+    }
+    var details: String {
+        switch self {
+        case .invalidPath(let path): return path
+        case .processFailed(let code, let stderr): return L10n.text("Код выхода: \(code)\n\(stderr)")
+        case .malformedJSON(let message), .sharedContainer(let message): return L10n.key(message)
+        default: return errorDescription ?? ""
+        }
+    }
+}

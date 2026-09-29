@@ -1,0 +1,31 @@
+{
+  "session": [
+    {
+      "agent": "claude", "period": "shared-session-id", "modelsUsed": ["opus-5-5"],
+      "inputTokens": 10, "outputTokens": 20, "cacheCreationTokens": 30, "cacheReadTokens": 40,
+      "totalTokens": 100, "totalCost": 1.25,
+      "metadata": {"lastActivity": "2026-09-28T10:15:30.123Z", "projectPath": "/example/project"},
+      "modelBreakdowns": [{"modelName": "opus-5-5", "inputTokens": 10, "outputTokens": 20, "cacheCreationTokens": 30, "cacheReadTokens": 40, "cost": 1.25}]
+    },
+    {
+      "agent": "codex", "period": "shared-session-id", "modelsUsed": ["gpt-6-astra"],
+      "inputTokens": 100, "outputTokens": 200, "cacheReadTokens": 300,
+      "totalTokens": 600, "totalCost": 2.5,
+      "metadata": {"lastActivity": "2026-09-28T11:15:30Z", "reasoningOutputTokens": 150},
+      "modelBreakdowns": [{"modelName": "gpt-6-astra", "inputTokens": 100, "outputTokens": 200, "cacheReadTokens": 300, "cost": 2.5}]
+    },
+    {
+      "agent": "gemini", "period": "chats/session 1/#?%", "modelsUsed": ["gemini-3-pro-preview"],
+      "inputTokens": 10, "outputTokens": 20, "cacheReadTokens": 30,
+      "totalTokens": 110, "totalCost": 0.75,
+      "metadata": {"lastActivity": "2026-09-28T12:15:30Z", "reasoningTokens": 50},
+      "modelBreakdowns": [{"modelName": "gemini-3-pro-preview", "inputTokens": 10, "outputTokens": 20, "cacheReadTokens": 30, "cost": 0.75}]
+    },
+    {
+      "agent": "future-agent", "period": "new-session", "modelsUsed": ["new-model"],
+      "inputTokens": 25, "outputTokens": 25, "totalTokens": 50, "totalCost": 0,
+      "modelBreakdowns": [{"modelName": "new-model", "inputTokens": 25, "outputTokens": 25, "cost": 0, "missingPricing": true}]
+    }
+  ],
+  "totals": {"totalTokens": 860, "totalCost": 4.5, "unpricedModels": ["new-model"]}
+}

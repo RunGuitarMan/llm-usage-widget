@@ -1,0 +1,17 @@
+#!/bin/bash
+# Build a complete extension bundle. Distribution signing/provisioning uses Xcode.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+mkdir -p build/ModuleCache
+source Scripts/toolchain.sh
+WIDGET="$PWD/build/LLMUsageWidget.appex"
+python3 Scripts/package-bundle.py widget "$WIDGET"
+# Widget.main registers the widget; NSExtensionMain keeps the extension serving XPC.
+"$LLM_SWIFTC" -parse-as-library -application-extension -module-name LLMUsageWidget \
+  -target "$(uname -m)-apple-macosx26.0" -sdk "$SDK_PATH" \
+  -module-cache-path "$PWD/build/ModuleCache" \
+  -Xlinker -e -Xlinker _NSExtensionMain \
+  LLMUsage/Shared/*.swift LLMUsage/Widget/*.swift -o "$WIDGET/Contents/MacOS/LLMUsageWidget"
+codesign --force --sign "${LLM_CODESIGN_IDENTITY:--}" --entitlements build/widget-build.entitlements "$WIDGET"
+codesign --verify --strict "$WIDGET"
+printf 'Built extension: %s\n' "$WIDGET"
