@@ -20,6 +20,8 @@ private actor RegressionService: CCUsageServing {
     var fails = false
     var requests: [UsageDay] = []
     var modes: [UsageUpdateMode] = []
+    var fixtureSessions: [UsageSession]?
+    func setSessions(_ sessions: [UsageSession]) { fixtureSessions = sessions }
     private var holdNext = false
     private var release: CheckedContinuation<Void, Never>?
     private var waiting: CheckedContinuation<Void, Never>?
@@ -44,7 +46,7 @@ private actor RegressionService: CCUsageServing {
         }
         if fails { throw UsageError.timedOut }
         return .init(generatedAt: timestamp, day: day,
-                     sessions: [.init(id: "s-" + day.key, models: ["test"], usage: .init(cost: mode == .allAgents ? cost + 10 : cost))])
+                     sessions: fixtureSessions ?? [.init(id: "s-" + day.key, models: ["test"], usage: .init(cost: mode == .allAgents ? cost + 10 : cost))])
     }
     func count(_ day: UsageDay) -> Int { requests.filter { $0 == day }.count }
     func diagnose(customPath: String, forceDetect: Bool) -> CLIDiagnostics { .init(path: "fixture", version: "1") }
@@ -113,6 +115,112 @@ private final class RegressionSearchGate: @unchecked Sendable {
 /// Shared by XCTest and the CLT harness, so regression coverage does not diverge.
 enum RegressionScenarios {
     @MainActor static func run(check: (String, () async throws -> Void) async -> Void) async {
+        await check("Model exclusions: provider defaults, exact overrides and reversible mixed sessions") {
+            var policy = ModelExclusionPolicy()
+            for model in ["GLM-5", "glm4.7", "zai/custom", "z-ai/glm-4.5", "openrouter/z-ai/glm-5", "z.ai:model"] {
+                try requireRegression(!policy.includes(model), "Z.ai default missed: \(model)")
+            }
+            for model in ["gpt-6", "claude-opus", "my-glm-wrapper", "glmish", "other-zai-model"] {
+                try requireRegression(policy.includes(model), "Unrelated model excluded: \(model)")
+            }
+            let session = UsageSession(id: "mixed", models: ["GLM-5", "paid"], usage: .init(input: 30, cost: 9),
+                modelBreakdowns: [.init(id: "GLM-5", usage: .init(input: 10, cost: 6)),
+                                  .init(id: "paid", usage: .init(input: 20, cost: 3))])
+            let raw = UsageSnapshot(generatedAt: Date(), day: .init(), sessions: [session])
+            let adjusted = raw.applyingExclusions(policy)
+            try requireRegression(adjusted.totals.cost == 3 && adjusted.totals.total == 20 && adjusted.sessions.count == 1, "Excluded cost or tokens incorrect")
+            try requireRegression(adjusted.sourceSummaries.first?.usage.cost == 3 && adjusted.modelSummaries.reduce(0) { $0 + $1.usage.cost } == 3, "Screen totals disagree")
+            try requireRegression(adjusted.applyingExclusions(policy) == adjusted, "Repeated application subtracts cost again")
+            policy.overrides["glm-5"] = true
+            try requireRegression(adjusted.applyingExclusions(policy) == raw, "Re-inclusion failed to restore the original estimate")
+            policy.overrides["paid"] = false
+            try requireRegression(raw.applyingExclusions(policy).totals.cost == 6, "Explicit override did not win")
+            let roundTrip = try JSONDecoder().decode(UsageSnapshot.self, from: JSONEncoder().encode(adjusted))
+            try requireRegression(roundTrip.applyingExclusions(policy).totals.cost == 6, "Saved raw costs cannot be reprojected")
+        }
+        await check("Model exclusions: unknown prices and incomplete mixed breakdowns remain honest") {
+            let policy = ModelExclusionPolicy()
+            let unpriced = UsageSession(id: "z", models: ["glm-5"], usage: .init(input: 12, costIsIncomplete: true))
+            try requireRegression(unpriced.applyingExclusions(policy).usage.costIsIncomplete != true, "Excluded unknown price makes paid totals incomplete")
+            let mixed = UsageSession(id: "m", models: ["glm-5", "paid"], usage: .init(input: 12, cost: 9),
+                modelBreakdowns: [.init(id: "glm-5", usage: .init(input: 2, cost: 1))])
+            let result = mixed.applyingExclusions(policy)
+            try requireRegression(result.usage.cost == 0 && result.usage.costIsIncomplete == true && result.usage.total == 0, "Unallocatable mixed cost was guessed or tokens lost")
+            var included = policy
+            included.overrides["glm-5"] = true
+            try requireRegression(result.applyingExclusions(included) == mixed, "Incomplete session did not round-trip")
+            let unknown = UsageSession(id: "u", models: [], usage: .init(input: 10, cost: 2, costIsIncomplete: true))
+            try requireRegression(unknown.applyingExclusions(policy) == unknown, "Unknown-model session silently excluded")
+        }
+        await check("Model exclusions: history, old cache migration and widget policy round-trip") {
+            let day = UsageDay()
+            let context = UsageDataContext(timezone: day.timezone, customPath: "")
+            let raw = UsageSnapshot(dataContext: context, generatedAt: Date(), day: day,
+                sessions: [.init(id: "z", models: ["glm-5"], usage: .init(input: 10, cost: 6)),
+                           .init(id: "p", models: ["paid"], usage: .init(input: 20, cost: 3))])
+            var history = UsageHistory(context: context)
+            history.record(raw, today: day)
+            let projected = history.applyingExclusions(.init())
+            try requireRegression(projected.days.first?.usage.cost == 3 && projected.days.first?.usage.total == 20, "Historical cost differs from snapshot")
+            let policy = ModelExclusionPolicy(overrides: ["glm-5": true, "paid": false])
+            let restored = try JSONDecoder().decode(UsageHistory.self, from: JSONEncoder().encode(projected))
+            try requireRegression(restored.applyingExclusions(policy).days.first?.usage.cost == 6, "Historical raw costs were discarded")
+            var legacy = history
+            legacy.days[0].usageComponents = nil
+            try requireRegression(legacy.applyingExclusions(policy).days.isEmpty, "Unattributed legacy history shown as recalculated")
+            let status = RefreshStatus(attemptedAt: Date(), message: nil, refreshMinutes: 15, modelExclusionPolicy: policy)
+            let saved = try JSONDecoder().decode(RefreshStatus.self, from: JSONEncoder().encode(status))
+            try requireRegression(raw.applyingExclusions(saved.modelExclusionPolicy!).totals.cost == 6, "Widget did not receive current cost rules")
+            var rounding = raw
+            rounding.sessions = [.init(id: "rounding", models: ["paid"], usage: .init(input: 3, cost: 0.0051, costIsIncomplete: true),
+                modelBreakdowns: [.init(id: "paid", usage: .init(input: 3, cost: 0.0049))])]
+            let daily = DailyUsageTotal(snapshot: rounding).applyingExclusions(.init())
+            try requireRegression(daily?.usage == rounding.totals, "History changed unexcluded CLI rounding or incomplete-pricing status")
+        }
+        await check("Model exclusions: store recalculates all dates, persists and survives in-flight refresh") {
+            let suite = "CostExclusionRegression.\(UUID().uuidString)"
+            let defaults = UserDefaults(suiteName: suite)!
+            defer { defaults.removePersistentDomain(forName: suite) }
+            let clock = RegressionClock(), service = RegressionService(), repository = RegressionRepository()
+            await service.setSessions([.init(id: "z", models: ["glm-5"], usage: .init(input: 10, cost: 6)),
+                                       .init(id: "p", models: ["paid"], usage: .init(input: 20, cost: 3))])
+            let store = UsageStore(service: service, repository: repository, defaults: defaults, now: { clock.now }, reloadWidget: {})
+            await store.refresh()
+            await store.waitForHistoryBackfill()
+            try requireRegression(store.todaySnapshot?.totals.cost == 3 && store.history?.days.count == 7, "Default exclusion did not reach store/history")
+            store.period = .custom
+            store.customDate = clock.now.addingTimeInterval(-14 * 86400)
+            await store.selectPeriod()
+            store.setModelIncluded(false, model: " PAID ")
+            try requireRegression(store.snapshot?.totals.cost == 0 && store.todaySnapshot?.totals.cost == 0 && store.previousSnapshot?.totals.cost == 0, "A displayed date retained excluded costs")
+            try requireRegression(store.history?.days.allSatisfy { $0.usage.cost == 0 && $0.usage.total == 0 } == true, "Seven-day history was not recalculated")
+            store.setModelIncluded(true, model: "glm-5")
+            try requireRegression(store.snapshot?.totals.cost == 6, "Re-inclusion requires an unnecessary fetch")
+            await service.holdNextRequest()
+            let refresh = Task { await store.refresh() }
+            await service.waitUntilHeld()
+            store.setModelIncluded(true, model: "paid")
+            await service.finishHeldRequest()
+            await refresh.value
+            await store.waitForHistoryBackfill()
+            try requireRegression(store.snapshot?.totals.cost == 9 && store.todaySnapshot?.totals.cost == 9, "In-flight refresh overwrote the new policy")
+            await service.configure(cost: 1, at: clock.now, fails: true)
+            let reopened = UsageStore(service: service, repository: repository, defaults: defaults, now: { clock.now }, reloadWidget: {})
+            await reopened.refresh()
+            try requireRegression(reopened.todaySnapshot?.totals.cost == 9 && reopened.modelExclusionPolicy == store.modelExclusionPolicy, "Restart/offline restoration lost model choices")
+            let status = await repository.readStatus()
+            let stored = await repository.read(.today)
+            try requireRegression(stored?.applyingExclusions(status?.modelExclusionPolicy ?? .init()).totals.cost == 9, "Widget and app amounts disagree")
+            store.setModelIncluded(false, model: "future-model")
+            clock.now = clock.now.addingTimeInterval(86400)
+            await service.configure(cost: 1, at: clock.now)
+            await service.setSessions([.init(id: "future", models: ["future-model"],
+                usage: .init(input: 10, output: 20, cacheCreate: 30, cacheRead: 40, cost: 50, additional: 60))])
+            await store.refresh()
+            await store.waitForHistoryBackfill()
+            try requireRegression(store.todaySnapshot?.totals.total == 0 && store.todaySnapshot?.totals.cost == 0,
+                                  "A saved exclusion missed future activity or a token category")
+        }
         await check("Update mode: Claude only runs one dated command with stable session IDs") {
             let cli = try RegressionCLI()
             defer { cli.remove() }

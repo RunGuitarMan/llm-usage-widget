@@ -44,6 +44,7 @@ struct RefreshStatus: Codable, Equatable, Sendable {
     var dataContext: UsageDataContext? = nil
     var interfaceLanguage: InterfaceLanguage? = nil
     var refreshIntervalSeconds: TimeInterval? = nil
+    var modelExclusionPolicy: ModelExclusionPolicy? = nil
     // Optional presentation preferences can be added here without changing the snapshot schema.
 
     var refreshInterval: TimeInterval {

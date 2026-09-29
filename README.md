@@ -9,6 +9,7 @@ A native macOS 26 app that shows token usage and estimated costs from local AI c
 
 - Shows daily totals, a seven-day spending chart, and usage by model and session.
 - Filters by date, source and model; searches sessions and local chat transcripts.
+- Excludes models by exact name from token and cost totals for every date; Z.ai / GLM are excluded by default.
 - Shows today's spending in the menu bar and in Summary, Sessions and Trend desktop widgets.
 - Supports a daily budget marker, automatic background refresh, launch at login, and English/Russian text.
 
@@ -19,6 +20,10 @@ The default **Claude only** update mode runs `ccusage claude session --json` onc
 The selected mode is saved and applies to the dashboard, history, menu bar and widgets. Switching modes clears incompatible cached data and refreshes it; caches created before this correction are also reloaded. The app calculates totals and saves small JSON snapshots that the WidgetKit extension reads. It runs in the menu bar without a Dock icon, including while its dashboard is open. Keep the app running for fresh widget data; closing its window leaves it running in the menu bar. Click the amount to open or close the usage popover, which includes buttons for the dashboard and Settings. Right-click (or Control-click) the amount for a menu with **Quit LLM Usage**.
 
 Usage and transcripts are processed locally. `ccusage` can fetch model prices online, so costs are estimates, not invoices. Browser chats and activity without supported local logs are not included. The Swift app has no third-party package dependencies.
+
+In **Models → Model inclusion**, turn off a known model or enter its exact name to exclude its tokens and cost from the dashboard, history, menu bar and widgets, including future activity. Names are matched without case sensitivity. Session records and transcripts remain accessible, and turning a model back on restores its original values. Z.ai / GLM models are excluded by default and can be explicitly included. Mixed sessions use the CLI's complete model breakdown; when it is missing, a session containing both included and excluded models is omitted from totals and the amount is marked incomplete. Older weekly totals without model attribution are rebuilt from the CLI.
+
+Opening session details increases the dashboard's minimum width to keep the sidebar and content visible. While the menu popover is open, its content updates immediately and the status item's size stays fixed; the badge catches up when the popover closes.
 
 ## Install a ready-made app
 

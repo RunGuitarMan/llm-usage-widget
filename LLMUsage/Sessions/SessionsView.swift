@@ -236,7 +236,11 @@ struct SessionDetailView: View {
                         Text(L10n.text("\(UsageFormat.tokens(session.usage.total)) токенов")).font(.callout).foregroundStyle(.secondary)
                     }
                     if session.usage.costIsIncomplete == true {
-                        Label(L10n.text("Стоимость неполная: часть тарифов недоступна."), systemImage: "info.circle")
+                        Label(L10n.text("Стоимость неполная: часть данных недоступна."), systemImage: "info.circle")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                    if session.usage.reportedAmounts != nil {
+                        Label(L10n.text("Показаны итоги с учётом исключений моделей."), systemImage: "line.3.horizontal.decrease.circle")
                             .font(.caption).foregroundStyle(.secondary)
                     }
                     Divider()
@@ -247,7 +251,7 @@ struct SessionDetailView: View {
                             metadata("ID", value: session.rawID, monospaced: true)
                             metadata(L10n.text("Последняя активность"), value: UsageFormat.activity(session, timezone: store.timezone) + " · " + store.timezone)
                             if let path = session.projectPath, !path.isEmpty { metadata(L10n.text("Проект"), value: path) }
-                            if let reasoning = session.reasoningOutputTokens, reasoning > 0 {
+                            if let reasoning = session.reasoningOutputTokens, reasoning > 0, session.usage.reportedAmounts == nil {
                                 metadata("Reasoning", value: L10n.text("\(UsageFormat.exact(reasoning)) токенов — уже включены в Output."))
                             }
                             if (session.usage.additional ?? 0) > 0 {

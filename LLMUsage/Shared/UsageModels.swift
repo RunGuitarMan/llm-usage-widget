@@ -9,6 +9,21 @@ struct TokenUsage: Codable, Equatable, Sendable {
     // Some sources include thought/tool tokens outside the four common buckets.
     var additional: Int64? = nil
     var costIsIncomplete: Bool? = nil
+    // Preserve the CLI values so exclusions are reversible without a refetch.
+    var reportedAmounts: ReportedUsageAmounts? = nil
+
+    var reported: Self {
+        guard let raw = reportedAmounts else { return self }
+        return .init(input: raw.input, output: raw.output, cacheCreate: raw.cacheCreate,
+                     cacheRead: raw.cacheRead, cost: raw.cost, additional: raw.additional,
+                     costIsIncomplete: raw.costIsIncomplete)
+    }
+
+    func replacingUsage(with usage: Self) -> Self {
+        var result = usage
+        if result != reported { result.reportedAmounts = ReportedUsageAmounts(reported) }
+        return result
+    }
 
     var total: Int64 { input + output + cacheCreate + cacheRead + (additional ?? 0) }
     var categories: [TokenCategory] { TokenCategory.allCases.filter { $0 != .additional || (additional ?? 0) > 0 } }
@@ -30,6 +45,23 @@ struct TokenUsage: Codable, Equatable, Sendable {
         case .cacheRead: return cacheRead
         case .additional: return additional ?? 0
         }
+    }
+}
+
+struct ReportedUsageAmounts: Codable, Equatable, Sendable {
+    var input: Int64
+    var output: Int64
+    var cacheCreate: Int64
+    var cacheRead: Int64
+    var cost: Double
+    var additional: Int64?
+    var costIsIncomplete: Bool?
+
+    init(_ usage: TokenUsage) {
+        input = usage.input; output = usage.output
+        cacheCreate = usage.cacheCreate; cacheRead = usage.cacheRead
+        cost = usage.cost; additional = usage.additional
+        costIsIncomplete = usage.costIsIncomplete
     }
 }
 
@@ -76,6 +108,68 @@ struct UsageSession: Codable, Equatable, Identifiable, Sendable {
         return UsageFormat.shortID(basename.isEmpty ? rawID : basename)
     }
     var modelLabel: String { models.isEmpty ? L10n.text("Модель неизвестна") : models.joined(separator: ", ") }
+
+    var usageComponents: [ModelUsageComponent] {
+        let total = modelBreakdowns.reduce(TokenUsage.zero) { $0 + $1.usage.reported }
+        if !modelBreakdowns.isEmpty, total.total == usage.reported.total,
+           abs(total.cost - usage.reported.cost) < 0.001 {
+            return modelBreakdowns.map {
+                .init(models: $0.id.isEmpty ? models : [$0.id], usage: $0.usage.reported)
+            }
+        }
+        return [.init(models: Array(Set(models + modelBreakdowns.map(\.id))).filter { !$0.isEmpty }, usage: usage.reported)]
+    }
+
+    func applyingExclusions(_ policy: ModelExclusionPolicy) -> Self {
+        var result = self
+        result.usage = usage.reported
+        result.modelBreakdowns = modelBreakdowns.map { .init(id: $0.id, usage: $0.usage.reported) }
+        let components = usageComponents
+        guard components.flatMap(\.models).contains(where: { !policy.includes($0) }) else { return result }
+        result.usage = usage.replacingUsage(with: components.reduce(.zero) { $0 + $1.usage(applying: policy) })
+        result.modelBreakdowns = modelBreakdowns.map { part in
+            var adjusted = part
+            let component = ModelUsageComponent(models: part.id.isEmpty ? models : [part.id], usage: part.usage.reported)
+            adjusted.usage = part.usage.replacingUsage(with: component.usage(applying: policy))
+            return adjusted
+        }
+        return result
+    }
+}
+
+/// Exact, case-insensitive model-name overrides take precedence over provider defaults.
+struct ModelExclusionPolicy: Codable, Equatable, Sendable {
+    var overrides: [String: Bool] = [:] // true means include tokens and cost
+
+    static func key(_ model: String) -> String { model.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+
+    func includes(_ model: String) -> Bool {
+        let name = Self.key(model)
+        if let included = overrides[name] { return included }
+        let parts = name.split(whereSeparator: { $0 == "/" || $0 == ":" }).map(String.init)
+        if parts.contains(where: { ["zai", "z-ai", "z.ai", "zhipu", "zhipuai"].contains($0) }) { return false }
+        let modelName = parts.last ?? name
+        return modelName.range(of: #"^glm(?:$|[-_.]?[0-9])"#, options: .regularExpression) == nil
+    }
+}
+
+/// Raw model allocations also travel with historical daily totals.
+struct ModelUsageComponent: Codable, Equatable, Sendable {
+    var models: [String]
+    var reportedUsage: TokenUsage
+
+    init(models: [String], usage: TokenUsage) {
+        self.models = models
+        reportedUsage = usage.reported
+    }
+
+    func usage(applying policy: ModelExclusionPolicy) -> TokenUsage {
+        let excluded = models.filter { !policy.includes($0) }.count
+        if excluded == 0 { return reportedUsage }
+        // A mixed session without a complete breakdown cannot be divided honestly.
+        // Its unallocatable usage is omitted and the result is marked as a lower bound.
+        return .init(costIsIncomplete: excluded < models.count)
+    }
 }
 
 enum UsageSource {
@@ -152,6 +246,12 @@ struct UsageSnapshot: Codable, Equatable, Sendable {
     var totals: TokenUsage { sessions.reduce(.zero) { $0 + $1.usage } }
     var topModel: String { modelSummaries.first?.id ?? "—" }
     var sortedSessions: [UsageSession] { SessionSort.tokens.sorted(sessions) }
+
+    func applyingExclusions(_ policy: ModelExclusionPolicy) -> Self {
+        var result = self
+        result.sessions = sessions.map { $0.applyingExclusions(policy) }
+        return result
+    }
 
     func filtered(source: String) -> Self {
         guard !source.isEmpty else { return self }

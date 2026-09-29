@@ -1,9 +1,11 @@
 import SwiftUI
 
 struct ModelsView: View {
+    @ObservedObject var store: UsageStore
     var snapshot: UsageSnapshot
     @State private var expanded: Set<String> = []
     @State private var showExplanation = false
+    @State private var modelName = ""
     private var models: [ModelSummary] {
         snapshot.modelSummaries.sorted { $0.usage.cost == $1.usage.cost ? $0.id < $1.id : $0.usage.cost > $1.usage.cost }
     }
@@ -25,6 +27,7 @@ struct ModelsView: View {
                                 .font(.callout).padding(18).frame(width: 300)
                         }
                 }
+                modelSettings
                 if models.isEmpty { EmptyUsageView() }
                 else {
                     DashboardSection {
@@ -35,7 +38,7 @@ struct ModelsView: View {
                             })) {
                                 TokenUsageDetails(usage: model.usage).padding(.top, 18)
                                 if model.usage.costIsIncomplete == true {
-                                    Text(L10n.text("Часть тарифов недоступна")).font(.caption).foregroundStyle(.secondary).padding(.top, 8)
+                                    Text(L10n.text("Часть данных для расчёта недоступна")).font(.caption).foregroundStyle(.secondary).padding(.top, 8)
                                 }
                             } label: {
                                 HStack(spacing: 16) {
@@ -55,5 +58,36 @@ struct ModelsView: View {
                 }
             }.padding(30).frame(maxWidth: 1000).frame(maxWidth: .infinity)
         }
+    }
+
+    private var modelSettings: some View {
+        DashboardSection {
+            VStack(alignment: .leading, spacing: 14) {
+                Text(L10n.text("Учёт моделей")).font(.headline)
+                Text(L10n.text("Выключите модель, чтобы исключить её токены и стоимость из итогов за все дни. Записи сессий сохраняются. Z.ai / GLM исключены по умолчанию."))
+                    .font(.caption).foregroundStyle(.secondary)
+                ForEach(store.knownModels, id: \.self) { model in
+                    Toggle(isOn: Binding(get: { store.modelExclusionPolicy.includes(model) }, set: {
+                        store.setModelIncluded($0, model: model)
+                    })) {
+                        Text(model).font(.system(size: 12)).textSelection(.enabled)
+                    }.toggleStyle(.switch).controlSize(.small)
+                }
+                HStack {
+                    TextField(L10n.text("Точное имя модели"), text: $modelName)
+                        .textFieldStyle(.roundedBorder).onSubmit(excludeModel)
+                    Button(L10n.text("Исключить"), action: excludeModel)
+                        .disabled(ModelExclusionPolicy.key(modelName).isEmpty)
+                }
+                Text(L10n.text("Если данные смешанной сессии нельзя разделить по моделям, она не включается в итоги, а сумма помечается как неполная."))
+                    .font(.caption).foregroundStyle(.secondary)
+            }.padding(18)
+        }
+    }
+
+    private func excludeModel() {
+        guard !ModelExclusionPolicy.key(modelName).isEmpty else { return }
+        store.setModelIncluded(false, model: modelName)
+        modelName = ""
     }
 }
