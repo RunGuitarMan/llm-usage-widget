@@ -1,0 +1,85 @@
+name: Bug report
+description: Report a problem with LLM Usage.
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please search existing issues before submitting a new bug report, then fill out the fields below in English.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem description
+      description: Clearly describe the problem and which part of LLM Usage is affected.
+      placeholder: What is going wrong?
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Include any required settings, selected data source, or other conditions, and explain how often the problem occurs.
+      placeholder: |
+        Preconditions / settings:
+        1. Open ...
+        2. Select ...
+        3. Click ...
+        4. Observe the problem.
+
+        Frequency (every time / sometimes / once):
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: Describe what you expected to happen.
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: Describe what actually happened. Include the exact error message, if any.
+    validations:
+      required: true
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots
+      description: Drag and drop or paste a screenshot that shows the problem. If a screenshot is unavailable or would not help, explain why.
+      placeholder: Attach screenshots here, or explain why none are included.
+    validations:
+      required: true
+
+  - type: input
+    id: app-version
+    attributes:
+      label: LLM Usage version
+      description: Enter the app version or the commit hash if you built it from source.
+      placeholder: "Example: 1.0"
+    validations:
+      required: true
+
+  - type: input
+    id: macos-version
+    attributes:
+      label: macOS version
+      description: Find this in Apple menu > About This Mac.
+      placeholder: "Example: macOS 26.0"
+    validations:
+      required: true
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional context
+      description: Optionally include relevant logs, your ccusage version, the affected coding agent, or any workaround you have tried.
+    validations:
+      required: false
