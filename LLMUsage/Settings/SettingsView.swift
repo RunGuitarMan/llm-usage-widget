@@ -9,6 +9,7 @@ struct UsageSettingsView: View {
     @State private var showStorage = false
     @State private var budgetText = ""
     @State private var budgetError = false
+    private var appVersion: String { Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "dev" }
 
     var body: some View {
         Form {
@@ -29,6 +30,9 @@ struct UsageSettingsView: View {
                 if let loginMessage { Text(loginMessage).font(.caption).foregroundStyle(.secondary) }
                 Text(L10n.text("Приложение продолжает обновлять данные после закрытия окна. Управление доступно в строке меню."))
                     .font(.caption).foregroundStyle(.secondary)
+            }
+            Section(L10n.text("Исключённые модели")) {
+                ModelExclusionControls(store: store)
             }
             Section(L10n.text("Обновление данных")) {
                 Picker(L10n.text("Способ обновления"), selection: $store.updateMode) {
@@ -170,7 +174,7 @@ struct UsageSettingsView: View {
                 HStack {
                     UsageBrand(compact: true)
                     Spacer()
-                    Text(L10n.text("LLM Usage 1.1 · Данные на этом Mac")).font(.caption).foregroundStyle(.secondary)
+                    Text(L10n.text("LLM Usage \(appVersion) · Данные на этом Mac")).font(.caption).foregroundStyle(.secondary)
                 }
             }
         }

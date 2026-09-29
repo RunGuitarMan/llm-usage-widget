@@ -143,6 +143,8 @@ final class UsageStore: ObservableObject {
         return Array(Set(names.map(ModelExclusionPolicy.key).filter { !$0.isEmpty })).sorted()
     }
 
+    var excludedModels: [String] { knownModels.filter { !modelExclusionPolicy.includes($0) } }
+
     func setModelIncluded(_ included: Bool, model: String) {
         let key = ModelExclusionPolicy.key(model)
         guard !key.isEmpty, modelExclusionPolicy.overrides[key] != included else { return }

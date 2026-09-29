@@ -10,7 +10,7 @@ struct UsageBudgetMeter: View {
                 if !compact { Spacer(minLength: 3) }
                 if budget.isOver {
                     if compact {
-                        Text("+\(budget.usage.costIsIncomplete == true ? "≥ " : "")\(UsageFormat.cost(budget.difference))").foregroundStyle(.orange)
+                        Text("+\(UsageFormat.cost(budget.difference))").foregroundStyle(.orange)
                     } else { Image(systemName: "exclamationmark.circle.fill").foregroundStyle(.orange) }
                 }
             }.font(.system(size: compact ? 9 : 11)).foregroundStyle(.secondary)

@@ -120,7 +120,7 @@ struct DailyBudget: Equatable {
     var difference: Double { abs(limit - usage.cost) }
     var caption: String {
         let partial = usage.costIsIncomplete == true
-        if isOver { return L10n.text("Превышение \(partial ? "≥ " : "")\(UsageFormat.cost(difference))") }
+        if isOver { return L10n.text("Превышение \(UsageFormat.cost(difference))") }
         if partial { return L10n.text("Учтена часть стоимости") }
         return L10n.text("Осталось \(UsageFormat.cost(difference))")
     }

@@ -32,15 +32,13 @@ enum UsageFormat {
         String(format: "$%.2f", locale: L10n.locale, value == 0 ? 0 : value)
     }
     static func cost(_ usage: TokenUsage) -> String {
-        guard usage.costIsIncomplete == true else { return cost(usage.cost) }
-        return usage.cost > 0 ? "≥ " + cost(usage.cost) : "—"
+        cost(usage.cost)
     }
     /// At most six characters; the menu keeps the full cents-precision amount.
     static func menuBarCost(_ usage: TokenUsage?) -> String {
         guard let usage else { return "···" }
         guard usage.cost.isFinite, usage.cost >= 0 else { return "—" }
-        let prefix = usage.costIsIncomplete == true ? "≥" : "$"
-        if usage.costIsIncomplete == true && usage.cost == 0 { return "—" }
+        let prefix = "$"
         if usage.cost < 99.995 { return prefix + String(format: "%.2f", locale: L10n.locale, usage.cost) }
         if usage.cost < 999.95 { return prefix + trimmed(usage.cost, digits: 1) }
         for (unit, divisor): (String, Double) in [("K", 1_000), ("M", 1_000_000), ("B", 1_000_000_000)] {

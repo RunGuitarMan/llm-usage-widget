@@ -1,6 +1,7 @@
 Download the ZIP below and move **LLM Usage.app** to Applications.
 
-- **Model exclusions:** turn models off in Models to remove their tokens and cost from every date, including history, menu bar and widgets. Z.ai / GLM are excluded by default; any model can be included again.
+- Amounts always retain the dollar sign; model exclusions reduce totals without adding inequality symbols or warning styles.
+- **Model exclusions:** use **Excluded models** in Models or Settings to remove tokens and cost from every date, including history, menu bar and widgets. Z.ai / GLM are excluded by default; click **Include** next to any excluded model to restore it.
 - Session details reserve enough window width for the sidebar, and refreshing the menu popover keeps its anchor stable, including fullscreen Spaces.
 - **Claude only** is the default update mode. It uses the dedicated Claude report so daily sessions and costs remain correct when the combined ccusage report omits them.
 - Choose **Settings → Data refresh → Update mode → All agents** to include other local agents. Claude sessions are replaced with the dedicated report, and changing modes rebuilds the cache and history.

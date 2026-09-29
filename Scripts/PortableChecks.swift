@@ -265,11 +265,11 @@ struct PortableChecks {
             try expect(snapshot.totals.cost == 4.5 && snapshot.modelSummaries.reduce(0) { $0 + $1.usage.cost } == 4.5, "Cost mismatch")
             try expect(snapshot.sourceSummaries.contains { $0.id == "future-agent" && $0.label == "future-agent" }, "New agent discarded")
         }
-        await check("Missing model pricing and hidden costs are visibly incomplete") {
+        await check("Missing model pricing keeps currency formatting and diagnostic flags") {
             let language = L10n.preference; L10n.preference = .english
             defer { L10n.preference = language }
             let snapshot = try CCUsageDecoder.decode(Data(contentsOf: fixtures.appendingPathComponent("unified-sessions.json")), day: UsageDay(date: now))
-            try expect(UsageFormat.cost(snapshot.totals) == "≥ $4.50" && UsageFormat.cost(snapshot.sessions[3].usage) == "—", "Missing price displayed as free")
+            try expect(UsageFormat.cost(snapshot.totals) == "$4.50" && UsageFormat.cost(snapshot.sessions[3].usage) == "$0.00", "Currency formatting changed for missing pricing")
             let hidden = try CCUsageDecoder.decode(Data(#"{"session":[{"agent":"codex","period":"a","inputTokens":10}]}"#.utf8), day: UsageDay(date: now))
             try expect(hidden.totals.costIsIncomplete == true, "Hidden cost displayed as known")
         }

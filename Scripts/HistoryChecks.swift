@@ -88,7 +88,7 @@ enum HistoryChecks {
             let partial = DailyBudget(limit: 10, usage: TokenUsage(cost: 3, costIsIncomplete: true))!
             let partialOver = DailyBudget(limit: 10, usage: TokenUsage(cost: 12, costIsIncomplete: true))!
             try requireHistory(over.isOver && over.fraction == 1 && over.difference == 2, "Overrun clipped into remaining allowance")
-            try requireHistory(!partial.caption.contains("Осталось") && partialOver.caption.contains("≥"), "Incomplete costs promise remaining budget")
+            try requireHistory(!partial.caption.contains("Осталось") && !partialOver.caption.contains("≥") && partialOver.caption.contains(UsageFormat.cost(2)), "Budget diagnostics changed the currency format or promised remaining budget")
         }
         await check("History: atomic round-trip and invalid cache rejection") {
             let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

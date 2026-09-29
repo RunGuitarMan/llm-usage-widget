@@ -5,7 +5,6 @@ struct ModelsView: View {
     var snapshot: UsageSnapshot
     @State private var expanded: Set<String> = []
     @State private var showExplanation = false
-    @State private var modelName = ""
     private var models: [ModelSummary] {
         snapshot.modelSummaries.sorted { $0.usage.cost == $1.usage.cost ? $0.id < $1.id : $0.usage.cost > $1.usage.cost }
     }
@@ -63,25 +62,58 @@ struct ModelsView: View {
     private var modelSettings: some View {
         DashboardSection {
             VStack(alignment: .leading, spacing: 14) {
-                Text(L10n.text("Учёт моделей")).font(.headline)
-                Text(L10n.text("Выключите модель, чтобы исключить её токены и стоимость из итогов за все дни. Записи сессий сохраняются. Z.ai / GLM исключены по умолчанию."))
-                    .font(.caption).foregroundStyle(.secondary)
-                ForEach(store.knownModels, id: \.self) { model in
-                    Toggle(isOn: Binding(get: { store.modelExclusionPolicy.includes(model) }, set: {
-                        store.setModelIncluded($0, model: model)
-                    })) {
-                        Text(model).font(.system(size: 12)).textSelection(.enabled)
-                    }.toggleStyle(.switch).controlSize(.small)
-                }
-                HStack {
-                    TextField(L10n.text("Точное имя модели"), text: $modelName)
-                        .textFieldStyle(.roundedBorder).onSubmit(excludeModel)
-                    Button(L10n.text("Исключить"), action: excludeModel)
-                        .disabled(ModelExclusionPolicy.key(modelName).isEmpty)
-                }
-                Text(L10n.text("Если данные смешанной сессии нельзя разделить по моделям, она не включается в итоги, а сумма помечается как неполная."))
-                    .font(.caption).foregroundStyle(.secondary)
+                Text(L10n.text("Исключённые модели")).font(.headline)
+                ModelExclusionControls(store: store)
             }.padding(18)
+        }
+    }
+}
+
+/// Shared with Settings, where exclusions remain accessible before a report loads.
+struct ModelExclusionControls: View {
+    @ObservedObject var store: UsageStore
+    @State private var modelName = ""
+    @State private var showIncluded = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text(L10n.text("Исключённые модели не входят в суммы денег и токенов за все дни. Записи сессий сохраняются. Z.ai / GLM исключены по умолчанию."))
+                .font(.caption).foregroundStyle(.secondary)
+            if store.excludedModels.isEmpty {
+                Text(L10n.text("Среди загруженных моделей нет исключённых."))
+                    .font(.callout).foregroundStyle(.secondary)
+            }
+            ForEach(store.excludedModels, id: \.self) { model in
+                HStack {
+                    Text(model).textSelection(.enabled)
+                    Spacer(minLength: 12)
+                    Button(L10n.text("Учитывать")) { store.setModelIncluded(true, model: model) }
+                        .accessibilityLabel(L10n.text("Учитывать модель \(model)"))
+                }.font(.system(size: 12))
+            }
+            HStack {
+                TextField(L10n.text("Точное имя модели"), text: $modelName)
+                    .textFieldStyle(.roundedBorder).onSubmit(excludeModel)
+                Button(L10n.text("Исключить"), action: excludeModel)
+                    .disabled(ModelExclusionPolicy.key(modelName).isEmpty)
+            }
+            let included = store.knownModels.filter { store.modelExclusionPolicy.includes($0) }
+            if !included.isEmpty {
+                DisclosureGroup(L10n.text("Выбрать из учитываемых моделей"), isExpanded: $showIncluded) {
+                    VStack(spacing: 10) {
+                        ForEach(included, id: \.self) { model in
+                            HStack {
+                                Text(model)
+                                Spacer(minLength: 12)
+                                Button(L10n.text("Исключить")) { store.setModelIncluded(false, model: model) }
+                                    .accessibilityLabel(L10n.text("Исключить модель \(model)"))
+                            }
+                        }
+                    }.font(.system(size: 12)).padding(.top, 8)
+                }
+            }
+            Text(L10n.text("Если данные смешанной сессии нельзя разделить по моделям, она целиком исключается из итогов."))
+                .font(.caption).foregroundStyle(.secondary)
         }
     }
 
