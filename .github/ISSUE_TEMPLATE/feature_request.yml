@@ -1,0 +1,41 @@
+name: Feature request
+description: Suggest an idea, a new feature, or an improvement to LLM Usage.
+title: "[Feature]: "
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please search existing issues before submitting a new feature request, then fill out the fields below in English.
+
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Problem or motivation
+      description: Describe the task you want to accomplish or what is currently inconvenient in LLM Usage.
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: Describe your idea and how you would like it to work.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Optionally describe other solutions you have considered or any workaround you currently use.
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional context
+      description: Optionally add screenshots, mockups, links, or examples that help explain your idea.
+    validations:
+      required: false
