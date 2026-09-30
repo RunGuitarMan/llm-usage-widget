@@ -11,8 +11,8 @@ body:
   - type: textarea
     id: problem
     attributes:
-      label: Problem description
-      description: Clearly describe the problem and which part of LLM Usage is affected.
+      label: What happened?
+      description: Describe what went wrong and which part of LLM Usage is affected. Include the exact error message, if any.
       placeholder: What is going wrong?
     validations:
       required: true
@@ -21,7 +21,7 @@ body:
     id: reproduction
     attributes:
       label: Steps to reproduce
-      description: Include any required settings, selected data source, or other conditions, and explain how often the problem occurs.
+      description: Include any required settings, selected data source, or other conditions, and explain how often the problem occurs. If you cannot reproduce it, say so.
       placeholder: |
         Preconditions / settings:
         1. Open ...
@@ -41,23 +41,6 @@ body:
     validations:
       required: true
 
-  - type: textarea
-    id: actual
-    attributes:
-      label: Actual behavior
-      description: Describe what actually happened. Include the exact error message, if any.
-    validations:
-      required: true
-
-  - type: textarea
-    id: screenshots
-    attributes:
-      label: Screenshots
-      description: Drag and drop or paste a screenshot that shows the problem. If a screenshot is unavailable or would not help, explain why.
-      placeholder: Attach screenshots here, or explain why none are included.
-    validations:
-      required: true
-
   - type: input
     id: app-version
     attributes:
@@ -74,12 +57,20 @@ body:
       description: Find this in Apple menu > About This Mac.
       placeholder: "Example: macOS 26.0"
     validations:
-      required: true
+      required: false
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots or recordings
+      description: Optionally attach screenshots or a screen recording if they help show the problem.
+    validations:
+      required: false
 
   - type: textarea
     id: additional-context
     attributes:
       label: Additional context
-      description: Optionally include relevant logs, your ccusage version, the affected coding agent, or any workaround you have tried.
+      description: Optionally include relevant logs, the selected data source, your ccusage version, the affected coding agent, or any workaround you have tried.
     validations:
       required: false
