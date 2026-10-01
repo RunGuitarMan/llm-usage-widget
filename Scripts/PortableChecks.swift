@@ -323,6 +323,7 @@ struct PortableChecks {
         await RefreshChecks.run(check: check)
         L10n.preference = .russian // Existing transcript fixtures assert Russian helper labels.
         await TranscriptChecks.run(check: check)
+        await TranscriptUsageScenarios.run(check: check)
         await RegressionScenarios.run(check: check)
         await PricingScenarios.run(check: check)
         await LocalizationChecks.run(check: check)
@@ -364,6 +365,11 @@ struct PortableChecks {
             try expect(store.history == history && store.todaySnapshot == snapshot && reloads >= 3, "Language cleared data or failed to request widget refresh")
             let restarted = UsageStore(service: service, repository: repository, defaults: defaults, reloadWidget: {})
             try expect(restarted.interfaceLanguage == .russian, "Language preference not persisted")
+        }
+        if ProcessInfo.processInfo.arguments.contains("--chat-cli") {
+            await check("Chat usage: real CLI prices isolated Claude, Codex and Gemini requests offline") {
+                try await TranscriptUsageScenarios.liveCheck()
+            }
         }
         if ProcessInfo.processInfo.arguments.contains("--live-cli") {
             await check("Installed ccusage: cached tariffs price new offline usage after restart") {

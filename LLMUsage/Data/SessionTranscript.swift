@@ -7,6 +7,8 @@ enum TranscriptKind: String, Sendable { case user, assistant, tool, context }
 struct TranscriptRecord: Identifiable, Sendable {
     let id = UUID()
     let text: String
+    var sequence = 0
+    var origin: String? = nil
 }
 
 struct TranscriptEvent: Identifiable, Sendable {
@@ -22,6 +24,10 @@ struct TranscriptEvent: Identifiable, Sendable {
     var isError = false
     var hasResult = false
     var records: [TranscriptRecord] = []
+    var requestIDs: [String] = []
+    var isUsageOnly = false
+    var isToolResultOnly = false
+    var origin: String? { records.compactMap(\.origin).first }
     var raw: String { records.map(\.text).joined(separator: "\n\n") }
 
     init(id: String, kind: TranscriptKind, title: String, text: String = "", input: String = "",
@@ -65,8 +71,12 @@ struct SessionTranscript: Sendable {
     var files: [URL] = []
     var relatedFiles: [URL] = []
     var notices: [String] = []
+    var requests: [TranscriptRequest] = []
+    var usageSupported = false
+    var usageUncertain = false
+    var imported = false
 
-    var messageCount: Int { events.filter(\.isMessage).count }
+    var messageCount: Int { events.filter { $0.isMessage && !$0.isUsageOnly }.count }
     var toolCount: Int { events.filter { $0.kind == .tool }.count }
     var exportText: String {
         var exportedRecords = Set<UUID>()
@@ -124,12 +134,15 @@ struct TranscriptDecoder {
     private var codexFallbacks: [(String, TranscriptEvent)] = []
     private var codexMessages: [String: [Int]] = [:]
     private var serial = 0
+    private var recordSequence = 0
     var source: String
+    var origin: String?
 
     init(source: String) { self.source = source }
 
     mutating func append(_ record: [String: Any]) {
-        let raw = TranscriptRecord(text: TranscriptJSON.render(record))
+        recordSequence += 1
+        let raw = TranscriptRecord(text: TranscriptJSON.render(record), sequence: recordSequence, origin: origin)
         let type = record["type"] as? String ?? ""
         let timestamp = TranscriptJSON.date(record["timestamp"] ?? record["created_at"] ?? record["time_created"] ?? record["time"])
         if record["role"] != nil { decodeMessage(record, raw: raw, timestamp: timestamp); return }
@@ -364,6 +377,7 @@ struct TranscriptDecoder {
             event.callID = callID
             event.isError = failed
             event.hasResult = true
+            event.isToolResultOnly = true
             events.append(event)
         }
     }

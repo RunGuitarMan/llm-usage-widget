@@ -7,20 +7,28 @@ final class TranscriptReaderModel: ObservableObject {
     @Published var transcript: SessionTranscript?
     @Published var isLoading = false
     @Published var error: String?
+    @Published var pricingError: String?
     private var request = UUID()
 
     init(transcript: SessionTranscript? = nil) { self.transcript = transcript }
 
-    func load(_ session: UsageSession, file: URL? = nil) async {
+    func load(_ session: UsageSession, file: URL? = nil, customPath: String = "", pricingKey: String? = nil) async {
         let token = UUID()
         request = token
         isLoading = true
         error = nil
+        pricingError = nil
         defer { if request == token { isLoading = false } }
         do {
             let result = try await TranscriptService().load(session: session, file: file)
             guard request == token, !Task.isCancelled else { return }
             transcript = result
+            do {
+                let priced = try await TranscriptCostService().price(result, source: session.sourceID, customPath: customPath, pricingKey: pricingKey)
+                guard request == token, !Task.isCancelled else { return }
+                transcript = priced
+            } catch is CancellationError { }
+            catch { if request == token { pricingError = error.localizedDescription } }
         } catch is CancellationError { }
         catch { if request == token { self.error = error.localizedDescription } }
     }
@@ -37,6 +45,10 @@ struct SessionChatView: View {
     var session: UsageSession
     var timezone: String
     var isDemo = false
+    var day: UsageDay?
+    var policy: ModelExclusionPolicy
+    var customPath: String
+    var pricingKey: String?
     @StateObject private var reader: TranscriptReaderModel
     @StateObject private var results: SearchResults<TranscriptSearchRequest, TranscriptSearchResult>
     @Environment(\.dismiss) private var dismiss
@@ -48,20 +60,34 @@ struct SessionChatView: View {
     @State private var selectedFile: URL?
     @State private var showInfo = false
     @State private var expandedTools: Set<String> = []
+    @State private var scope: TranscriptScope = .session
+    @State private var view: TranscriptAnalysisTab = .chat
+    @State private var jumpID: String?
+    @State private var filter = TranscriptEventFilter.all
+    @State private var scrollTarget: String?
 
-    init(session: UsageSession, timezone: String, isDemo: Bool = false, preview: SessionTranscript? = nil) {
+    init(session: UsageSession, timezone: String, isDemo: Bool = false, preview: SessionTranscript? = nil,
+         day: UsageDay? = nil, policy: ModelExclusionPolicy = .init(), customPath: String = "", pricingKey: String? = nil,
+         initialTab: TranscriptAnalysisTab = .chat, initialFilter: TranscriptEventFilter = .all,
+         initiallyExpandedTools: Set<String> = []) {
         self.session = session
         self.timezone = timezone
         self.isDemo = isDemo
+        self.day = day; self.policy = policy; self.customPath = customPath; self.pricingKey = pricingKey
+        _scope = State(initialValue: day == nil ? .session : .day)
+        _view = State(initialValue: initialTab)
+        _filter = State(initialValue: initialFilter)
+        _expandedTools = State(initialValue: initiallyExpandedTools)
         let initial = preview ?? (isDemo ? TranscriptPreview.sample : nil)
         _reader = StateObject(wrappedValue: TranscriptReaderModel(transcript: initial))
         _results = StateObject(wrappedValue: SearchResults(
-            initial: (try? TranscriptSearchResult.evaluate(.init(transcript: initial))) ?? .init(),
+            initial: (try? TranscriptSearchResult.evaluate(.init(transcript: initial, day: day, policy: policy, filter: initialFilter))) ?? .init(),
             evaluate: { try TranscriptSearchResult.evaluate($0) }))
     }
 
     private var searchRequest: TranscriptSearchRequest {
-        .init(transcript: reader.transcript, query: search, showContext: showContext)
+        .init(transcript: reader.transcript, query: search, showContext: showContext, day: scope == .day ? day : nil,
+              policy: policy, filter: view == .chat ? filter : .all)
     }
     private var rows: [TranscriptRow] { results.value.rows }
 
@@ -69,7 +95,16 @@ struct SessionChatView: View {
         VStack(spacing: 0) {
             header
             Divider().opacity(0.6)
-            if reader.transcript != nil { timeline }
+            searchToolbar
+            Divider().opacity(0.4)
+            if let transcript = reader.transcript {
+                if view == .chat { timeline }
+                else if let analysis = results.value.analysis {
+                    TranscriptAnalysisView(tab: view, transcript: transcript, summary: analysis, query: search, policy: policy) { id in
+                        navigate(to: id)
+                    }
+                }
+            }
             else if reader.isLoading {
                 VStack(spacing: 14) {
                     ProgressView().controlSize(.small)
@@ -82,7 +117,9 @@ struct SessionChatView: View {
         .background(Color(nsColor: .windowBackgroundColor))
         .frame(minWidth: 680, idealWidth: 900, maxWidth: .infinity, minHeight: 520, idealHeight: 740, maxHeight: .infinity)
         .task(id: reload) {
-            if !isDemo && (reader.transcript == nil || reload > 0) { await reader.load(session, file: selectedFile) }
+            if !isDemo && (reader.transcript == nil || reload > 0) {
+                await reader.load(session, file: selectedFile, customPath: customPath, pricingKey: pricingKey)
+            }
         }
         .task(id: searchRequest) {
             await results.update(searchRequest, delay: search.isEmpty ? .zero : .milliseconds(120))
@@ -98,11 +135,11 @@ struct SessionChatView: View {
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .top, spacing: 16) {
                 VStack(alignment: .leading, spacing: 7) {
                     HStack(spacing: 10) {
-                        Text(L10n.text("История чата")).font(.system(size: 22, weight: .semibold)).tracking(-0.5)
+                        Text(L10n.text("История чата")).font(.system(size: 17, weight: .semibold))
                         SourceBadge(source: session.sourceID)
                     }
                     HStack(spacing: 6) {
@@ -113,6 +150,9 @@ struct SessionChatView: View {
                     }.font(.system(size: 12)).foregroundStyle(.secondary)
                 }
                 Spacer(minLength: 12)
+                Button { reload += 1 } label: { Image(systemName: "arrow.clockwise").frame(width: 24, height: 24) }
+                    .buttonStyle(.borderless).disabled(reader.isLoading || isDemo).keyboardShortcut("r")
+                    .help(L10n.text("Обновить")).accessibilityLabel(L10n.text("Обновить"))
                 Menu {
                     Toggle(L10n.text("Служебные события"), isOn: $showContext)
                     Button(L10n.text("Информация о сессии"), systemImage: "info.circle") { showInfo.toggle() }
@@ -143,19 +183,24 @@ struct SessionChatView: View {
                 } label: { Image(systemName: "ellipsis").frame(width: 20, height: 20) }
                     .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize().help(L10n.text("Действия с историей")).accessibilityLabel(L10n.text("Действия с историей"))
                 Button { dismiss() } label: { Image(systemName: "xmark").font(.system(size: 12, weight: .semibold)).frame(width: 20, height: 20) }
-                    .buttonStyle(.glass).buttonBorderShape(.circle).keyboardShortcut(.cancelAction)
+                    .buttonStyle(.borderless).keyboardShortcut(.cancelAction)
                     .help(L10n.text("Закрыть чат · Esc")).accessibilityLabel(L10n.text("Закрыть чат"))
             }
-            HStack(spacing: 14) {
-                SessionSearchField(text: $search, focusRequest: searchFocusRequest, placeholder: L10n.text("Найти в сообщениях и действиях"))
-                    .frame(maxWidth: 390).frame(height: 30)
-                Spacer(minLength: 0)
-                if !search.isEmpty {
-                    Text(L10n.text("Найдено: \(results.value.eventCount)"))
-                        .font(.system(size: 11)).foregroundStyle(.secondary)
-                } else if let transcript = reader.transcript {
-                    Text("\(L10n.count(transcript.messageCount, .messages)) · \(L10n.count(transcript.toolCount, .actions))")
-                        .font(.system(size: 11)).foregroundStyle(.secondary)
+            if let transcript = reader.transcript {
+                HStack(spacing: 12) {
+                    Picker(L10n.text("Раздел чата"), selection: $view) {
+                        ForEach(TranscriptAnalysisTab.allCases) { tab in Text(tab.title).tag(tab) }
+                    }.pickerStyle(.segmented).labelsHidden().frame(maxWidth: 340)
+                    Spacer(minLength: 8)
+                    if day != nil {
+                        Picker(L10n.text("Период"), selection: $scope) {
+                            ForEach(TranscriptScope.allCases) { scope in Text(scope.title).tag(scope) }
+                        }.pickerStyle(.segmented).labelsHidden().frame(width: 235)
+                    }
+                }
+                if let summary = results.value.analysis {
+                    TranscriptMetricsView(summary: summary, transcript: transcript, expected: scope == .day ? session.usage.reported : nil,
+                                          isLoading: reader.isLoading, error: reader.pricingError)
                 }
             }
             if showInfo {
@@ -163,18 +208,52 @@ struct SessionChatView: View {
                     Text(session.rawID).font(.system(size: 11, design: .monospaced))
                     Text(session.modelLabel)
                     if let path = session.projectPath { Text(path) }
-                    Text(L10n.text("Время событий: \(timezone). История за всю сессию."))
+                    Text(L10n.text("Часовой пояс: \(timezone)"))
                     if let file = reader.transcript?.files.first { Text(file.path) }
                 }.font(.system(size: 11)).foregroundStyle(.secondary).textSelection(.enabled)
             }
-        }.padding(.horizontal, 28).padding(.top, 24).padding(.bottom, 18)
+        }.padding(.horizontal, 24).padding(.top, 18).padding(.bottom, 14)
+    }
+
+    private var searchToolbar: some View {
+        HStack(spacing: 12) {
+            SessionSearchField(text: $search, focusRequest: searchFocusRequest, placeholder: L10n.text("Найти в сообщениях и действиях"))
+                .frame(maxWidth: .infinity).frame(height: 28)
+            if view == .chat {
+                if filter != .all { Text(filter.title).font(.system(size: 11)).foregroundStyle(.secondary) }
+                Menu {
+                    Picker(L10n.text("События"), selection: $filter) {
+                        ForEach(TranscriptEventFilter.allCases) { value in Text(value.title).tag(value) }
+                    }
+                    Divider()
+                    Toggle(L10n.text("Служебные события"), isOn: $showContext)
+                } label: {
+                    Image(systemName: filter == .all ? "line.3.horizontal.decrease" : "line.3.horizontal.decrease.circle.fill")
+                        .foregroundStyle(filter == .all ? Color.secondary : Color.accentColor).frame(width: 24, height: 24)
+                }.menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+                    .help(L10n.text("Фильтр событий")).accessibilityLabel(L10n.text("Фильтр событий"))
+                let tools = Set(rows.flatMap(\.events).filter { $0.kind == .tool }.map(\.id))
+                let expanded = !tools.isEmpty && tools.isSubset(of: expandedTools)
+                Button {
+                    if expanded { expandedTools.subtract(tools) } else { expandedTools.formUnion(tools) }
+                } label: { Image(systemName: expanded ? "chevron.up.chevron.down" : "chevron.down.2").frame(width: 24, height: 24) }
+                    .buttonStyle(.borderless).disabled(tools.isEmpty)
+                    .help(expanded ? L10n.text("Свернуть инструменты") : L10n.text("Развернуть инструменты"))
+                    .accessibilityLabel(expanded ? L10n.text("Свернуть инструменты") : L10n.text("Развернуть инструменты"))
+            }
+        }.padding(.horizontal, 24).padding(.vertical, 8)
+    }
+
+    private func navigate(to id: String) {
+        search = ""; filter = .all; view = .chat; jumpID = id
+        if reader.transcript?.events.first(where: { $0.id == id })?.kind == .tool { expandedTools.insert(id) }
     }
 
     private var timeline: some View {
         ScrollViewReader { proxy in
             ZStack(alignment: .bottomTrailing) {
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 24) {
+                    LazyVStack(alignment: .leading, spacing: 14) {
                         Color.clear.frame(height: 1).id("chat-start")
                         if let error = reader.error { notice(error) }
                         if let notices = reader.transcript?.notices, !notices.isEmpty {
@@ -184,19 +263,24 @@ struct SessionChatView: View {
                                 .font(.system(size: 12)).foregroundStyle(.secondary)
                         }
                         if rows.isEmpty {
-                            EmptyUsageView(title: search.isEmpty ? L10n.text("Нет сообщений для показа") : L10n.text("Совпадений нет"),
-                                message: search.isEmpty ? L10n.text("Откройте служебные события в меню, чтобы изучить доступные записи.") : L10n.text("Попробуйте другое слово или часть команды."),
-                                symbol: search.isEmpty ? "text.bubble" : "magnifyingglass")
+                            EmptyUsageView(title: !search.isEmpty ? L10n.text("Совпадений нет")
+                                : filter == .errors ? L10n.text("Ошибок не найдено")
+                                : filter == .tools ? L10n.text("Вызовов не найдено") : L10n.text("Нет сообщений для показа"),
+                                message: !search.isEmpty ? L10n.text("Попробуйте другое слово или часть команды.")
+                                : filter == .all ? L10n.text("Откройте служебные события в меню, чтобы изучить доступные записи.") : "",
+                                symbol: filter == .errors && search.isEmpty ? "checkmark.circle" : "magnifyingglass")
                         }
                         ForEach(rows) { row in
                             if row.isContext {
                                 contextGroup(row.events)
                             } else if let event = row.events.first {
-                                if event.kind == .tool { toolRow(event) }
-                                else { messageRow(event) }
+                                Group {
+                                    if event.kind == .tool { toolRow(event) }
+                                    else { messageRow(event) }
+                                }.id(event.id)
                             }
                         }
-                        if search.isEmpty, let transcript = reader.transcript, !showContext {
+                        if search.isEmpty, filter == .all, let transcript = reader.transcript, !showContext {
                             let count = transcript.events.filter { $0.kind == .context }.count
                             if count > 0 {
                                 Button { showContext = true } label: {
@@ -207,36 +291,50 @@ struct SessionChatView: View {
                         }
                         Color.clear.frame(height: 22).id("chat-end")
                     }
-                    .frame(maxWidth: 740, alignment: .leading)
-                    .padding(.horizontal, 36).padding(.top, 4).padding(.bottom, 12)
+                    .frame(maxWidth: 860, alignment: .leading)
+                    .padding(.horizontal, 24).padding(.top, 10).padding(.bottom, 12)
                     .frame(maxWidth: .infinity)
                 }
-                HStack(spacing: 0) {
-                    Button { proxy.scrollTo("chat-start", anchor: .top) } label: { Image(systemName: "arrow.up").frame(width: 30, height: 28) }
-                        .help(L10n.text("В начало чата")).accessibilityLabel(L10n.text("В начало чата"))
-                    Button { proxy.scrollTo("chat-end", anchor: .bottom) } label: { Image(systemName: "arrow.down").frame(width: 30, height: 28) }
-                        .help(L10n.text("К последнему сообщению")).accessibilityLabel(L10n.text("К последнему сообщению"))
-                }.buttonStyle(.plain).font(.system(size: 11, weight: .medium))
-                    .background(.regularMaterial, in: Capsule())
-                    .overlay(Capsule().stroke(Color.primary.opacity(0.06)))
-                    .padding(16)
+            }
+            .onChange(of: scrollTarget) { _, target in
+                guard let target else { return }
+                proxy.scrollTo(target, anchor: target == "chat-start" ? .top : .bottom)
+                scrollTarget = nil
             }
             .onChange(of: search) { _, _ in proxy.scrollTo("chat-start", anchor: .top) }
+            .onChange(of: filter) { _, _ in proxy.scrollTo("chat-start", anchor: .top) }
+            .task(id: results.completedInput) {
+                if !search.isEmpty || filter == .errors {
+                    expandedTools.formUnion(rows.flatMap(\.events).filter { $0.kind == .tool }.map(\.id))
+                }
+                if let jumpID, rows.contains(where: { $0.id == jumpID }) {
+                    proxy.scrollTo(jumpID, anchor: .top)
+                    self.jumpID = nil
+                }
+            }
+            .onAppear {
+                if let jumpID, rows.contains(where: { $0.id == jumpID }) {
+                    proxy.scrollTo(jumpID, anchor: .top); self.jumpID = nil
+                }
+            }
         }
     }
 
     private func messageRow(_ event: TranscriptEvent) -> some View {
         let isUser = event.kind == .user
-        return VStack(alignment: .leading, spacing: 12) {
+        return VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
                 Image(systemName: isUser ? "person.fill" : "sparkle")
                     .font(.system(size: 10, weight: .medium))
                     .foregroundStyle(isUser ? Color.secondary : UsageSource.color(session.sourceID))
-                    .frame(width: 22, height: 22)
-                    .background(Color.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 7))
-                Text(isUser ? L10n.text("Вы") : session.sourceLabel).font(.system(size: 12, weight: .semibold))
-                if let date = event.timestamp { Text(time(date)).font(.system(size: 10)).foregroundStyle(.tertiary) }
+                    .frame(width: 16, height: 16)
+                Text(event.isUsageOnly ? L10n.text("Обращение к модели") : isUser ? L10n.text("Вы") : session.sourceLabel).font(.system(size: 12, weight: .semibold))
+                if !isUser, let model = event.model ?? event.requestIDs.compactMap({ results.value.requestsByID[$0]?.model }).first {
+                    Text(model).font(.system(size: 10, design: .monospaced)).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle).help(model)
+                }
+                if let origin = event.origin { Text(origin).font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1).help(origin) }
                 Spacer()
+                if let date = event.timestamp { Text(time(date)).font(.system(size: 10)).foregroundStyle(.secondary).fixedSize() }
                 Menu {
                     Button(L10n.text("Скопировать сообщение"), systemImage: "doc.on.doc") { copy(event.text) }
                     Button(L10n.text("Прочитать полностью"), systemImage: "arrow.up.left.and.arrow.down.right") {
@@ -259,24 +357,31 @@ struct SessionChatView: View {
                     reading = .init(title: event.title, text: event.searchableText, monospaced: true)
                 }.buttonStyle(.link).font(.system(size: 11))
             }
+            usageLine(event)
         }
-        .padding(isUser ? 18 : 2)
+        .padding(.vertical, 12).padding(.horizontal, 14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(isUser ? Color.accentColor.opacity(0.055) : Color.clear, in: RoundedRectangle(cornerRadius: 16))
-        .padding(.leading, isUser ? 20 : 0)
+        .background(isUser ? Color.primary.opacity(0.025) : Color.clear, in: RoundedRectangle(cornerRadius: 8))
+        .overlay(alignment: .leading) {
+            if isUser { RoundedRectangle(cornerRadius: 1).fill(Color.primary.opacity(0.16)).frame(width: 2).padding(.vertical, 12) }
+        }
+    }
+
+    @ViewBuilder private func usageLine(_ event: TranscriptEvent) -> some View {
+        if let transcript = reader.transcript {
+            TranscriptUsageBadge(event: event, requests: event.requestIDs.compactMap { results.value.requestsByID[$0] },
+                                 supported: transcript.usageSupported, policy: policy, jump: navigate)
+        }
     }
 
     private func toolRow(_ event: TranscriptEvent) -> some View {
-        DisclosureGroup(isExpanded: Binding(get: { !search.isEmpty || expandedTools.contains(event.id) }, set: {
+        VStack(alignment: .leading, spacing: 10) {
+        DisclosureGroup(isExpanded: Binding(get: { expandedTools.contains(event.id) }, set: {
             if $0 { expandedTools.insert(event.id) } else { expandedTools.remove(event.id) }
         })) {
-            VStack(alignment: .leading, spacing: 16) {
-                if !event.input.isEmpty { toolContent(L10n.text("Передано"), text: event.input) }
-                if !event.output.isEmpty { toolContent(L10n.text("Получено"), text: event.output) }
-                if event.output.isEmpty { Text(event.hasResult ? L10n.text("Получен пустой результат.") : L10n.text("Результат не записан в журнале.")).font(.system(size: 11)).foregroundStyle(.secondary) }
-                Button(L10n.text("Исходная запись")) { reading = .init(title: event.title, text: event.raw, monospaced: true) }
-                    .buttonStyle(.link).font(.system(size: 11))
-            }.padding(.top, 14).padding(.bottom, 4)
+            TranscriptToolInspector(event: event, query: search, copy: copy) { title, text in
+                reading = .init(title: title, text: text, monospaced: true)
+            }.id(search).padding(.top, 12)
         } label: {
             HStack(spacing: 9) {
                 Image(systemName: event.isError ? "exclamationmark.circle" : "terminal")
@@ -286,28 +391,19 @@ struct SessionChatView: View {
                     Text(summary).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
                 }
                 if event.isError { Text(L10n.text("Ошибка")).foregroundStyle(.orange) }
+                else if event.hasResult { Image(systemName: "checkmark.circle").foregroundStyle(.green).help(L10n.text("Результат получен")) }
+                else { Image(systemName: "circle.dotted").foregroundStyle(.secondary).help(L10n.text("Результат не записан в журнале.")) }
                 Spacer(minLength: 4)
-                if let date = event.timestamp { Text(time(date)).font(.system(size: 10)).foregroundStyle(.tertiary) }
+                if let date = event.timestamp { Text(time(date)).font(.system(size: 10)).foregroundStyle(.secondary).fixedSize() }
             }.font(.system(size: 12))
         }
         .disclosureGroupStyle(WholeRowDisclosureStyle())
-        .padding(.horizontal, 14).padding(.vertical, 11)
-        .background(Color.primary.opacity(0.025), in: RoundedRectangle(cornerRadius: 10))
-    }
-
-    private func toolContent(_ title: String, text: String) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text(title).font(.system(size: 10, weight: .medium)).foregroundStyle(.secondary)
-                Spacer()
-                Button { copy(text) } label: { Image(systemName: "doc.on.doc") }
-                    .buttonStyle(.borderless).help(L10n.text("Скопировать: \(title)")).accessibilityLabel(L10n.text("Скопировать: \(title)"))
-                Button(L10n.text("Открыть полностью")) { reading = .init(title: title, text: text, monospaced: true) }
-                    .buttonStyle(.link).font(.system(size: 10)).accessibilityLabel(L10n.text("Открыть полностью: \(title)"))
-            }
-            Text(String(text.prefix(1600))).font(.system(size: 11, design: .monospaced))
-                .textSelection(.enabled).lineLimit(12).frame(maxWidth: .infinity, alignment: .leading)
+        if let origin = event.origin { Text(origin).font(.system(size: 10)).foregroundStyle(.secondary) }
+        usageLine(event)
         }
+        .padding(12)
+        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(event.isError ? Color.orange.opacity(0.5) : UsageStyle.stroke))
     }
 
     private func contextGroup(_ events: [TranscriptEvent]) -> some View {
@@ -347,14 +443,23 @@ struct SessionChatView: View {
 
     private var footer: some View {
         HStack(spacing: 8) {
-            Image(systemName: "text.bubble").font(.system(size: 11))
-            Text(L10n.text("История сессии")).font(.system(size: 11))
+            let visible = rows.flatMap(\.events)
+            Text(search.isEmpty
+                 ? "\(L10n.count(visible.filter { $0.isMessage && !$0.isUsageOnly }.count, .messages)) · \(L10n.count(visible.filter { $0.kind == .tool && !$0.isToolResultOnly }.count, .actions))"
+                 : L10n.text("Найдено: \(results.value.eventCount)"))
+                .font(.system(size: 10))
             Spacer()
             if reader.isLoading || results.isSearching { ProgressView().controlSize(.mini) }
-            Button { reload += 1 } label: { Label(L10n.text("Обновить"), systemImage: "arrow.clockwise") }
-                .buttonStyle(.borderless).font(.system(size: 11)).disabled(reader.isLoading || isDemo)
-                .keyboardShortcut("r")
-        }.foregroundStyle(.secondary).padding(.horizontal, 28).padding(.vertical, 13)
+            if let file = reader.transcript?.files.first {
+                Text(file.lastPathComponent).font(.system(size: 10, design: .monospaced)).lineLimit(1).truncationMode(.middle).help(file.path)
+            }
+            HStack(spacing: 4) {
+                Button { scrollTarget = "chat-start" } label: { Image(systemName: "arrow.up").frame(width: 24, height: 18) }
+                    .help(L10n.text("В начало чата")).accessibilityLabel(L10n.text("В начало чата"))
+                Button { scrollTarget = "chat-end" } label: { Image(systemName: "arrow.down").frame(width: 24, height: 18) }
+                    .help(L10n.text("К последнему сообщению")).accessibilityLabel(L10n.text("К последнему сообщению"))
+            }.buttonStyle(.borderless).disabled(view != .chat || rows.isEmpty)
+        }.foregroundStyle(.secondary).padding(.horizontal, 24).padding(.vertical, 8)
     }
 
     private func notice(_ text: String) -> some View {
@@ -364,7 +469,7 @@ struct SessionChatView: View {
         let formatter = DateFormatter()
         formatter.locale = L10n.locale
         formatter.timeZone = TimeZone(identifier: timezone)
-        formatter.setLocalizedDateFormatFromTemplate("d MMM j:mm")
+        formatter.setLocalizedDateFormatFromTemplate(scope == .day ? "j:mm:ss" : "d MMM j:mm:ss")
         return formatter.string(from: date)
     }
     private func copy(_ text: String) { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(text, forType: .string) }
@@ -398,6 +503,70 @@ struct SessionChatView: View {
                     }.value
                 } catch { reader.error = L10n.text("Не удалось сохранить историю: \(error.localizedDescription)") }
             }
+        }
+    }
+}
+
+private struct TranscriptToolInspector: View {
+    enum Section: String, CaseIterable, Identifiable {
+        case input, output, raw
+        var id: String { rawValue }
+        var title: String {
+            switch self {
+            case .input: return L10n.text("Аргументы")
+            case .output: return L10n.text("Результат")
+            case .raw: return "JSON"
+            }
+        }
+    }
+    var event: TranscriptEvent
+    var copy: (String) -> Void
+    var open: (String, String) -> Void
+    @State private var section: Section
+
+    init(event: TranscriptEvent, query: String, copy: @escaping (String) -> Void, open: @escaping (String, String) -> Void) {
+        self.event = event; self.copy = copy; self.open = open
+        let matched: Section? = query.isEmpty ? nil : event.input.localizedCaseInsensitiveContains(query) ? .input
+            : event.output.localizedCaseInsensitiveContains(query) ? .output : .raw
+        _section = State(initialValue: matched ?? (event.isError || event.input.isEmpty ? .output : .input))
+    }
+    private var content: String {
+        switch section {
+        case .input: return event.input
+        case .output: return event.output
+        case .raw: return event.raw
+        }
+    }
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Divider()
+            HStack(spacing: 10) {
+                Picker(L10n.text("Данные вызова"), selection: $section) {
+                    ForEach(Section.allCases) { value in Text(value.title).tag(value) }
+                }.pickerStyle(.segmented).labelsHidden().frame(width: 245)
+                Spacer(minLength: 8)
+                Button { copy(content) } label: { Image(systemName: "doc.on.doc").frame(width: 20, height: 20) }
+                    .help(L10n.text("Скопировать: \(section.title)")).accessibilityLabel(L10n.text("Скопировать: \(section.title)"))
+                Button { open(event.title + " · " + section.title, content) } label: {
+                    Image(systemName: "arrow.up.left.and.arrow.down.right").frame(width: 20, height: 20)
+                }.help(L10n.text("Открыть полностью: \(section.title)")).accessibilityLabel(L10n.text("Открыть полностью: \(section.title)"))
+            }.buttonStyle(.borderless)
+            if content.isEmpty {
+                Text(section == .output ? (event.hasResult ? L10n.text("Получен пустой результат.") : L10n.text("Результат не записан в журнале.")) : L10n.text("Нет данных для показа"))
+                    .font(.system(size: 11)).foregroundStyle(.secondary)
+            } else {
+                Text(String(content.prefix(2400))).font(.system(size: 11, design: .monospaced)).lineSpacing(3)
+                    .textSelection(.enabled).lineLimit(14).frame(maxWidth: .infinity, alignment: .leading)
+            }
+            if let callID = event.callID {
+                HStack(spacing: 6) {
+                    Text("Call ID").foregroundStyle(.secondary)
+                    Text(callID).lineLimit(1).truncationMode(.middle).textSelection(.enabled).help(callID)
+                    Button { copy(callID) } label: { Image(systemName: "doc.on.doc") }
+                        .buttonStyle(.borderless).help(L10n.text("Скопировать Call ID")).accessibilityLabel(L10n.text("Скопировать Call ID"))
+                }.font(.system(size: 10, design: .monospaced))
+            }
+            Divider()
         }
     }
 }
@@ -480,14 +649,28 @@ private struct TranscriptNativeText: NSViewRepresentable {
 
 enum TranscriptPreview {
     static var sample: SessionTranscript {
-        let time = ISO8601DateFormatter().date(from: "2026-09-28T12:40:00Z")!
-        return .init(events: [
+        let time = UsageDay().date.addingTimeInterval(12 * 3600 + 40 * 60)
+        var transcript = SessionTranscript(events: [
             .init(id: "1", kind: .user, title: L10n.text("Вы"), text: "Добавь поиск по сессиям. Хочу быстро находить нужный разговор по проекту или названию модели.", timestamp: time, raw: "{\"role\":\"user\",\"content\":\"Добавь поиск по сессиям\"}"),
             .init(id: "2", kind: .assistant, title: L10n.text("Ответ"), text: "Посмотрю, как устроен список сессий, и добавлю поиск рядом с фильтрами. Он будет учитывать **проект, модель и ID сессии**.", timestamp: time.addingTimeInterval(8), raw: "{\"role\":\"assistant\"}"),
-            .init(id: "3", kind: .tool, title: "Read · SessionsView.swift", input: "{\n  \"file_path\": \"LLMUsage/Sessions/SessionsView.swift\"\n}", output: "struct SessionsView: View {\n    @ObservedObject var store: UsageStore\n    @State private var search = \"\"\n}", timestamp: time.addingTimeInterval(12), raw: "{\"type\":\"tool_use\",\"name\":\"Read\"}"),
-            .init(id: "4", kind: .tool, title: "Edit · Поиск по сессиям", input: "Добавлено поле поиска и фильтрация по проекту, модели и ID.", output: "Файл обновлён.", timestamp: time.addingTimeInterval(19), raw: "{\"type\":\"tool_result\"}"),
+            .init(id: "3", kind: .tool, title: "Read", input: "{\n  \"file_path\": \"LLMUsage/Sessions/SessionsView.swift\"\n}", output: "struct SessionsView: View {\n    @ObservedObject var store: UsageStore\n    @State private var search = \"\"\n}", timestamp: time.addingTimeInterval(12), callID: "toolu_01_read_sessions", hasResult: true, raw: "{\"type\":\"tool_use\",\"name\":\"Read\"}"),
+            .init(id: "4", kind: .tool, title: "Edit", input: "{\n  \"file_path\": \"LLMUsage/Sessions/SessionsView.swift\",\n  \"old_string\": \"@State private var search = \\\"\\\"\",\n  \"new_string\": \"@State private var query = \\\"\\\"\"\n}", output: "Файл обновлён.", timestamp: time.addingTimeInterval(19), callID: "toolu_02_edit_sessions", hasResult: true, raw: "{\"type\":\"tool_result\"}"),
+            .init(id: "7", kind: .tool, title: "Bash", input: "{\n  \"command\": \"swift test --filter SessionSearchTests\"\n}", output: "error: no tests found; create a target in the 'Tests' directory\nExit code: 1", timestamp: time.addingTimeInterval(24), callID: "toolu_03_test_sessions", isError: true, hasResult: true, raw: "{\"type\":\"tool_result\",\"is_error\":true,\"exit_code\":1}"),
             .init(id: "5", kind: .assistant, title: L10n.text("Ответ"), text: "Готово. Поиск появился над списком сессий.\n\nМожно ввести часть названия проекта, модели или ID. Результаты обновляются сразу, а выбранная сортировка сохраняется.\n\nНажмите **⌘F**, чтобы перейти к поиску.", timestamp: time.addingTimeInterval(35), raw: "{\"role\":\"assistant\"}"),
             .init(id: "6", kind: .context, title: L10n.text("Контекст запроса"), raw: "{\"model\":\"example\",\"cwd\":\"/example/project\"}")
         ])
+        transcript.usageSupported = true
+        transcript.requests = [
+            .init(id: "demo-request-1", model: "claude-opus-4-6", timestamp: time.addingTimeInterval(8), eventIDs: ["2", "3"],
+                  billing: .init(tokens: [:]), usage: .init(input: 8400, output: 620, cacheCreate: 2300, cacheRead: 18400, cost: 0.083155), priced: true),
+            .init(id: "demo-request-2", model: "claude-sonnet-4-6", timestamp: time.addingTimeInterval(19), eventIDs: ["4", "7"],
+                  billing: .init(tokens: [:]), usage: .init(input: 5300, output: 920, cacheRead: 26800, cost: 0.03774), priced: true),
+            .init(id: "demo-request-3", model: "claude-sonnet-4-6", timestamp: time.addingTimeInterval(35), eventIDs: ["5"],
+                  billing: .init(tokens: [:]), usage: .init(input: 920, output: 430, cacheRead: 31000, cost: 0.01851), priced: true)
+        ]
+        for index in transcript.events.indices {
+            transcript.events[index].requestIDs = transcript.requests.filter { $0.eventIDs.contains(transcript.events[index].id) }.map(\.id)
+        }
+        return transcript
     }
 }

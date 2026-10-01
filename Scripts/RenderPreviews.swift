@@ -32,6 +32,7 @@ struct RenderPreviews {
                     || (requestedNames.contains("--widgets") && name.hasPrefix("widget-"))
                     || (requestedNames.contains("--sidebars") && name.hasPrefix("sidebar-"))
                     || (requestedNames.contains("--models") && name.hasPrefix("models"))
+                    || (requestedNames.contains("--chat") && name.hasPrefix("session-chat"))
                     || (requestedNames.contains("--menus") && name.hasPrefix("menu-dropdown")) else { return }
             let appearance = NSAppearance(named: dark ? .darkAqua : .aqua)!
             app.appearance = appearance
@@ -200,6 +201,31 @@ struct RenderPreviews {
                    name: "session-chat-dark", size: .init(width: 900, height: 780), dark: true)
         try render(SessionChatView(session: chatSession, timezone: "Europe/Moscow", isDemo: true),
                    name: "session-chat-narrow", size: .init(width: 680, height: 640))
+        let chatTranscript = TranscriptPreview.sample
+        var usageChat = chatSession
+        usageChat.usage = chatTranscript.requests.reduce(.zero) { $0 + $1.usage }
+        let chatDay = UsageDay(date: chatTranscript.requests[0].timestamp!, timezone: "Europe/Moscow")
+        for width: CGFloat in [680, 900] {
+            for dark in [false, true] {
+                for tab in TranscriptAnalysisTab.allCases {
+                    try render(SessionChatView(session: usageChat, timezone: "Europe/Moscow", isDemo: true, preview: chatTranscript,
+                                               day: chatDay, initialTab: tab),
+                               name: "session-chat-usage-\(tab.rawValue)-\(Int(width))-\(dark ? "dark" : "light")",
+                               size: .init(width: width, height: 740), dark: dark)
+                }
+                try render(SessionChatView(session: usageChat, timezone: "Europe/Moscow", isDemo: true, preview: chatTranscript,
+                                           day: chatDay, initialFilter: .tools, initiallyExpandedTools: ["3"]),
+                           name: "session-chat-inspector-\(Int(width))-\(dark ? "dark" : "light")",
+                           size: .init(width: width, height: 740), dark: dark)
+                try render(SessionChatView(session: usageChat, timezone: "Europe/Moscow", isDemo: true, preview: chatTranscript,
+                                           day: chatDay, initialFilter: .errors, initiallyExpandedTools: ["7"]),
+                           name: "session-chat-errors-\(Int(width))-\(dark ? "dark" : "light")",
+                           size: .init(width: width, height: 740), dark: dark)
+            }
+        }
+        try render(TranscriptRequestDetails(request: chatTranscript.requests[0], policy: .init()).padding(18)
+            .frame(width: 330).background(Color(nsColor: .windowBackgroundColor)),
+                   name: "session-chat-request-details", size: .init(width: 330, height: 340))
         store.tab = .sessions
         try render(DashboardView(store: store).contentPreview, name: "sessions", size: .init(width: 900, height: 700))
         try render(DashboardView(store: store).contentPreview, name: "sessions-narrow", size: .init(width: 370, height: 600))
