@@ -25,6 +25,18 @@ struct WindowChecks {
             if !value { throw NSError(domain: "WindowChecks", code: 1, userInfo: [NSLocalizedDescriptionKey: message]) }
         }
         func settle() { RunLoop.main.run(until: Date().addingTimeInterval(0.15)) }
+        func sidebarTable(in view: NSView) -> NSTableView? {
+            if let table = view as? NSTableView, table.effectiveStyle == .sourceList { return table }
+            return view.subviews.lazy.compactMap { sidebarTable(in: $0) }.first
+        }
+        func arrowKey(_ keyCode: UInt16, characters: String, in table: NSTableView) {
+            let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [.function, .numericPad],
+                                        timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: table.window!.windowNumber,
+                                        context: nil, characters: characters, charactersIgnoringModifiers: characters,
+                                        isARepeat: false, keyCode: keyCode)!
+            table.keyDown(with: event)
+            settle()
+        }
         func checkBounds(_ view: NSView, host: NSView) throws -> Int {
             guard !view.isHiddenOrHasHiddenAncestor else { return 0 }
             var checked = 0
@@ -57,12 +69,28 @@ struct WindowChecks {
             settle()
             let normal = window.contentMinSize.width
             try require(normal >= 860 && normal < 1160, "Dashboard cannot use its normal minimum width")
+            guard let sidebar = sidebarTable(in: host) else {
+                throw NSError(domain: "WindowChecks", code: 2, userInfo: [NSLocalizedDescriptionKey: "Missing native sidebar"])
+            }
             for tab in [DashboardTab.overview, .sessions, .models, .settings] {
                 store.tab = tab
                 for width: CGFloat in [1080, 860, 1000, 860] {
                     try resizeAndCheck(window, host: host, width: width)
+                    try require(sidebar.selectionHighlightStyle == .none, "Native accent fill returned after navigation or resize")
                 }
+                let expectedRow = [DashboardTab.overview, .sessions, .models].firstIndex(of: tab) ?? -1
+                try require(sidebar.selectedRow == expectedRow, "Sidebar selection does not follow the current tab")
             }
+            store.tab = .overview
+            settle()
+            arrowKey(125, characters: "\u{F701}", in: sidebar)
+            try require(store.tab == .sessions, "Down arrow no longer selects Sessions")
+            arrowKey(126, characters: "\u{F700}", in: sidebar)
+            try require(store.tab == .overview, "Up arrow no longer selects Overview")
+            sidebar.selectRowIndexes(IndexSet(integer: 2), byExtendingSelection: false)
+            settle()
+            try require(store.tab == .models, "Native row selection no longer opens Models")
+            print("PASS Sidebar keeps native selection and keyboard navigation without an accent-filled highlight")
             store.tab = .sessions
             store.selectedSessionID = store.snapshot!.sessions[0].id
             settle()
@@ -83,6 +111,49 @@ struct WindowChecks {
             window.contentView = nil
         }
         print("PASS Dashboard minimum width reserves sidebar, content and inspector in both languages")
+
+        store.tab = .overview
+        for dark in [false, true] {
+            for active in [true, false] {
+                let appearance = NSAppearance(named: dark ? .darkAqua : .aqua)!
+                let host = NSHostingView(rootView: DashboardView(store: store).sidebarPreview
+                    .environment(\.colorScheme, dark ? .dark : .light)
+                    .environment(\.appearsActive, active)
+                    .accentColor(.blue)
+                    .background(Color(nsColor: .windowBackgroundColor)))
+                let window = NSWindow(contentRect: NSRect(x: -8000, y: -8000, width: 220, height: 560),
+                                      styleMask: .borderless, backing: .buffered, defer: false)
+                window.appearance = appearance
+                window.contentView = host
+                window.orderFront(nil)
+                host.layoutSubtreeIfNeeded()
+                settle()
+                guard let table = sidebarTable(in: host),
+                      let row = table.rowView(atRow: table.selectedRow, makeIfNecessary: true),
+                      let bitmap = row.bitmapImageRepForCachingDisplay(in: row.bounds) else {
+                    throw NSError(domain: "WindowChecks", code: 3, userInfo: [NSLocalizedDescriptionKey: "Cannot render selected sidebar row"])
+                }
+                row.cacheDisplay(in: row.bounds, to: bitmap)
+                var accentPixels = 0
+                for y in 0..<bitmap.pixelsHigh {
+                    for x in 0..<bitmap.pixelsWide {
+                        guard let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB), color.alphaComponent > 0.3 else { continue }
+                        let channels = [color.redComponent, color.greenComponent, color.blueComponent]
+                        if channels.max()! - channels.min()! > 0.15 { accentPixels += 1 }
+                    }
+                }
+                try require(active ? accentPixels > 10 : accentPixels == 0,
+                            "Sidebar text/icon did not follow active state (dark: \(dark), active: \(active), colored pixels: \(accentPixels))")
+                // Sample the empty trailing part of the row, away from text and icons.
+                let fill = bitmap.colorAt(x: bitmap.pixelsWide - 28, y: bitmap.pixelsHigh / 2)!.usingColorSpace(.deviceRGB)!
+                let channels = [fill.redComponent, fill.greenComponent, fill.blueComponent]
+                try require(fill.alphaComponent > 0.01 && channels.max()! - channels.min()! < 0.03,
+                            "Sidebar selection background is missing or not neutral")
+                window.orderOut(nil)
+                window.contentView = nil
+            }
+        }
+        print("PASS Sidebar uses neutral selection and adapts text/icons in light/dark and active/inactive states")
 
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         let popover = TrackingPopover()

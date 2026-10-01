@@ -1,6 +1,97 @@
 import SwiftUI
 import AppKit
 
+struct DashboardSidebarLabel: View {
+    var title: String
+    var symbol: String
+    var isSelected: Bool
+    @Environment(\.appearsActive) private var appearsActive
+
+    private var foreground: Color {
+        guard appearsActive else { return .secondary }
+        return isSelected ? .accentColor : .primary
+    }
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: symbol).frame(width: 16)
+            Text(title)
+        }
+        .fontWeight(isSelected ? .medium : .regular)
+        .foregroundStyle(foreground)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+struct DashboardSidebarSelection: View {
+    var isSelected: Bool
+    var horizontalInset: CGFloat = 0
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.colorSchemeContrast) private var contrast
+    @Environment(\.appearsActive) private var appearsActive
+
+    private var opacity: Double {
+        if contrast == .increased { return colorScheme == .dark ? 0.24 : 0.16 }
+        if colorScheme == .dark { return appearsActive ? 0.10 : 0.07 }
+        return appearsActive ? 0.055 : 0.04
+    }
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: 8)
+            .fill(isSelected ? Color.primary.opacity(opacity) : .clear)
+            .padding(.horizontal, horizontalInset)
+            .accessibilityHidden(true)
+    }
+}
+
+struct DashboardSidebarSourceLabel: View {
+    var id: String
+    var name: String
+    var count: Int
+    var isSelected: Bool
+    @Environment(\.appearsActive) private var appearsActive
+
+    var body: some View {
+        HStack(spacing: 8) {
+            if id.isEmpty { Image(systemName: "square.stack.3d.up").frame(width: 14) }
+            else { Circle().fill(appearsActive ? UsageSource.color(id) : .secondary).frame(width: 6, height: 6).frame(width: 14) }
+            Text(name).lineLimit(1)
+            Spacer(minLength: 0)
+            if isSelected { Image(systemName: "checkmark").font(.system(size: 10, weight: .semibold)) }
+            else { Text(String(count)).font(.caption).foregroundStyle(.tertiary) }
+        }
+        .font(.system(size: 12))
+        .foregroundStyle(appearsActive && isSelected ? Color.primary : Color.secondary)
+        .padding(.vertical, 3).contentShape(Rectangle())
+    }
+}
+
+/// Keep List's selection, keyboard navigation and accessibility, but draw the
+/// neutral Finder-style highlight instead of AppKit's accent-filled selection.
+struct DashboardSidebarSelectionBridge: NSViewRepresentable {
+    final class Attachment: NSView {
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            suppressNativeHighlight()
+        }
+
+        func suppressNativeHighlight() {
+            var ancestor = superview
+            while let view = ancestor {
+                if let row = view as? NSTableRowView { row.selectionHighlightStyle = .none }
+                if let table = view as? NSTableView {
+                    table.selectionHighlightStyle = .none
+                    break
+                }
+                ancestor = view.superview
+            }
+        }
+    }
+
+    func makeNSView(context: Context) -> Attachment { Attachment() }
+    func updateNSView(_ view: Attachment, context: Context) { view.suppressNativeHighlight() }
+}
+
 /// Standard content material; navigation and controls use the system's separate glass layer.
 struct DashboardBackdrop: NSViewRepresentable {
     func makeNSView(context: Context) -> NSVisualEffectView {

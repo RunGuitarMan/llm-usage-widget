@@ -294,6 +294,26 @@ struct UsageSnapshot: Codable, Equatable, Sendable {
         return totals.map { ModelSummary(id: $0.key, usage: $0.value, sessionCount: ids[$0.key]?.count ?? 0) }
             .sorted { $0.usage.total == $1.usage.total ? $0.id < $1.id : $0.usage.total > $1.usage.total }
     }
+
+    /// Reference-only rows for Models. Accounted totals and other screens keep modelSummaries.
+    func reportedModelSummaries(applying policy: ModelExclusionPolicy) -> [ModelSummary] {
+        var summaries: [String: ModelSummary] = [:]
+        var sessionIDs: [String: Set<String>] = [:]
+        for session in sessions {
+            // Completeness is checked against raw values, before exclusions can turn both sides into zero.
+            for component in session.usageComponents {
+                let names = Array(Set(component.models)).sorted()
+                let id = names.joined(separator: ", ")
+                var summary = summaries[id] ?? ModelSummary(id: id, usage: .zero, sessionCount: 0,
+                    isExcluded: names.contains { !policy.includes($0) })
+                summary.usage = summary.usage + component.reportedUsage
+                sessionIDs[id, default: []].insert(session.id)
+                summary.sessionCount = sessionIDs[id]?.count ?? 0
+                summaries[id] = summary
+            }
+        }
+        return summaries.values.sorted { $0.usage.cost == $1.usage.cost ? $0.id < $1.id : $0.usage.cost > $1.usage.cost }
+    }
 }
 
 struct ModelSummary: Identifiable, Equatable, Sendable {
@@ -301,6 +321,7 @@ struct ModelSummary: Identifiable, Equatable, Sendable {
     var id: String
     var usage: TokenUsage
     var sessionCount: Int
+    var isExcluded = false
 }
 
 enum SessionSort: String, CaseIterable, Identifiable, Sendable {

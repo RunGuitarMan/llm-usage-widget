@@ -6,7 +6,7 @@ enum DashboardTab: String, CaseIterable, Identifiable {
     var title: String { L10n.key(rawValue) }
     var symbol: String {
         switch self {
-        case .overview: return "chart.bar.fill"
+        case .overview: return "square.grid.2x2"
         case .sessions: return "list.bullet"
         case .models: return "cube"
         case .settings: return "gearshape"

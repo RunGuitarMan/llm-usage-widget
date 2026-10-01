@@ -21,7 +21,11 @@ The selected mode is saved and applies to the dashboard, history, menu bar and w
 
 Usage and transcripts are processed locally. `ccusage` can fetch model prices online, so costs are estimates, not invoices. Browser chats and activity without supported local logs are not included. The Swift app has no third-party package dependencies.
 
+Before each report fetch, the app refreshes Claude tariffs from LiteLLM and atomically saves the last valid rates in `~/Library/Application Support/LLMUsage/Pricing/claude-pricing-v1.json`. Conditional requests reuse unchanged prices. Network errors and invalid responses keep the saved tariffs, including after restarting the app, so new offline usage is calculated rather than freezing the previous total. Rates are passed to ccusage through a private, temporary `pricingOverrides` config; its calculation engine still handles cache writes/reads, long context and Fast mode. Existing ccusage settings and explicit user pricing overrides retain priority, and user config files are not modified. Other providers retain ccusage's existing pricing behavior. An initial successful download is required for models absent from ccusage's built-in catalog; a model with no known tariff remains unpriced.
+
 Open the small **Excluded models** button beside the Models summary, or **Settings → Excluded models**, then select a known model or enter its exact name to exclude its tokens and cost from the dashboard, history, menu bar and widgets, including future activity. Names are matched without case sensitivity. Session records and transcripts remain accessible, and clicking **Include** next to an excluded model restores its original values. Z.ai / GLM models are excluded by default and can be explicitly included. Mixed sessions use the CLI's complete model breakdown; when it is missing, a session containing both included and excluded models is excluded from totals as a whole. Excluded models only reduce the token and cost amounts; currency formatting remains unchanged. Older weekly totals without model attribution are rebuilt from the CLI.
+
+The **Models** tab shows original tokens and estimated costs for reference, including excluded models, for the selected date and source. Excluded rows are labeled **Excluded from totals** and have no spending-share bar; the **Included spending** header still follows exclusions. Expanded token details also use the original values. Mixed sessions without a complete breakdown remain one combined reference row rather than duplicating usage across models. This reference view never changes Overview, Sessions, history, menu or widget totals.
 
 Opening session details increases the dashboard's minimum width to keep the sidebar and content visible. While the menu popover is open, its content updates immediately and the status item's size stays fixed; the badge catches up when the popover closes.
 
@@ -82,7 +86,7 @@ Use bundle identifiers available to your team. Xcode builds share data through t
 
 ## Working on the repository
 
-Changes go through pull requests to protected `main`. Each PR runs the **Tests** check; after merge and successful checks, GitHub Actions automatically publishes the next release in the **v1.1** line (**v1.1.1**, **v1.1.2**, etc.). See [CI and releases](Documentation/Releases.md) for versioning, artifacts and retry instructions.
+Changes go through pull requests to protected `main`. Each PR runs the **Tests** check; after merge and successful checks, GitHub Actions automatically publishes the next release in the **v1.2** line (**v1.2.0**, **v1.2.1**, etc.). See [CI and releases](Documentation/Releases.md) for versioning, artifacts and retry instructions.
 
 - `LLMUsage/`: app screens, shared models, data services, widget, resources and tests.
 - `Scripts/`: build, install, validation and asset-generation tools.
@@ -107,6 +111,6 @@ xcodebuild -project LLMUsage.xcodeproj -scheme LLMUsage \
 
 After adding or removing Swift files, run `python3 Scripts/generate_project.py`. Make project structure changes in that generator: it overwrites the project and shared scheme.
 
-The icon's source is `LLMUsage/Shared/BrandGeometry.swift`; local builds regenerate its SVGs and asset catalog. Run `bash Scripts/render-previews.sh` for UI previews in `build/Previews` (optional filters: `--widgets`, `--menus`, `--language=en`).
+The icon's source is `LLMUsage/Shared/BrandGeometry.swift`; local builds regenerate its SVGs and asset catalog. Run `bash Scripts/render-previews.sh` for UI previews in `build/Previews` (optional filters: `--widgets`, `--menus`, `--sidebars`, `--language=en`).
 
 Commit source, tests, build configuration and required app resources. Keep build products, caches and generated preview images in ignored `build/`. If you use the local toolchain, preserve `build/AppleTools26` when cleaning build outputs. Existing `ClaudeUsage` bundle IDs, storage keys and URL aliases preserve compatibility with earlier installs.

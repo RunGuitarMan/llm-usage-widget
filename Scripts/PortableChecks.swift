@@ -324,6 +324,7 @@ struct PortableChecks {
         L10n.preference = .russian // Existing transcript fixtures assert Russian helper labels.
         await TranscriptChecks.run(check: check)
         await RegressionScenarios.run(check: check)
+        await PricingScenarios.run(check: check)
         await LocalizationChecks.run(check: check)
         await check("Locale: preference publishes during failed refresh and preserves history") {
             let suite = "local.LLMUsage.LocaleCheck.\(UUID().uuidString)"
@@ -365,8 +366,11 @@ struct PortableChecks {
             try expect(restarted.interfaceLanguage == .russian, "Language preference not persisted")
         }
         if ProcessInfo.processInfo.arguments.contains("--live-cli") {
+            await check("Installed ccusage: cached tariffs price new offline usage after restart") {
+                try await PricingScenarios.liveCheck()
+            }
             await check("Installed ccusage: resolver, version, real query with online pricing enabled") {
-                let service = CCUsageService()
+                let service = CCUsageService(pricing: ClaudePricingCache(directory: root.appendingPathComponent("build/PricingLiveChecks")))
                 let version = try await service.diagnose(customPath: "", forceDetect: true)
                 let snapshot = try await service.fetch(day: UsageDay(), customPath: "")
                 try expect(!version.version.isEmpty && snapshot.day.isToday(), "Real CLI integration")

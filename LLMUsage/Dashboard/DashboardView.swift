@@ -88,6 +88,7 @@ struct DashboardView: View {
 
     // Content-only image previews avoid bitmap-caching system-composited glass panels.
     var contentPreview: some View { detail }
+    var sidebarPreview: some View { sidebar }
 
     var body: some View {
         NavigationSplitView(columnVisibility: $visibility) {
@@ -127,7 +128,10 @@ struct DashboardView: View {
         VStack(spacing: 0) {
             List(selection: Binding<DashboardTab?>(get: { store.tab }, set: { if let tab = $0 { store.selectedSessionID = nil; store.tab = tab } })) {
                 ForEach([DashboardTab.overview, .sessions, .models]) { tab in
-                    Label(tab.title, systemImage: tab.symbol).tag(tab)
+                    DashboardSidebarLabel(title: tab.title, symbol: tab.symbol, isSelected: store.tab == tab)
+                        .background(DashboardSidebarSelectionBridge().allowsHitTesting(false).accessibilityHidden(true))
+                        .listRowBackground(DashboardSidebarSelection(isSelected: store.tab == tab, horizontalInset: 10))
+                        .tag(tab)
                 }
                 if store.tab != .settings, let data = store.snapshot, !data.sessions.isEmpty {
                     Section(L10n.text("Источники")) {
@@ -141,11 +145,12 @@ struct DashboardView: View {
             .listStyle(.sidebar).scrollContentBackground(.hidden)
             VStack(alignment: .leading, spacing: 14) {
                 Button { store.tab = .settings } label: {
-                    Label(L10n.text("Настройки"), systemImage: "gearshape")
+                    DashboardSidebarLabel(title: L10n.text("Настройки"), symbol: "gearshape", isSelected: store.tab == .settings)
                         .font(.system(size: 13)).frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, 8).padding(.vertical, 7)
-                        .background(store.tab == .settings ? Color.primary.opacity(0.07) : .clear, in: RoundedRectangle(cornerRadius: 7))
+                        .background(DashboardSidebarSelection(isSelected: store.tab == .settings))
                 }.buttonStyle(.plain)
+                    .accessibilityAddTraits(store.tab == .settings ? .isSelected : [])
                 HStack(spacing: 6) {
                     Circle().fill(store.error == nil ? Color.secondary.opacity(0.5) : .orange).frame(width: 5, height: 5)
                     Text(store.isDemo ? L10n.text("Демо-данные") : store.isRefreshing ? L10n.text("Обновление…") : store.snapshot.map { L10n.text("Обновлено \(UsageFormat.time($0.generatedAt))") } ?? L10n.text("Локальные данные"))
@@ -160,17 +165,7 @@ struct DashboardView: View {
             store.sourceFilter = id
             if store.tab == .settings { store.tab = .overview }
         } label: {
-            HStack(spacing: 8) {
-                if id.isEmpty { Image(systemName: "square.stack.3d.up").frame(width: 14) }
-                else { Circle().fill(UsageSource.color(id)).frame(width: 6, height: 6).frame(width: 14) }
-                Text(name).lineLimit(1)
-                Spacer(minLength: 0)
-                if store.sourceFilter == id { Image(systemName: "checkmark").font(.system(size: 10, weight: .semibold)) }
-                else { Text(String(count)).font(.caption).foregroundStyle(.tertiary) }
-            }
-            .font(.system(size: 12))
-            .foregroundStyle(store.sourceFilter == id ? Color.primary : Color.secondary)
-            .padding(.vertical, 3).contentShape(Rectangle())
+            DashboardSidebarSourceLabel(id: id, name: name, count: count, isSelected: store.sourceFilter == id)
         }.buttonStyle(.plain).help(L10n.text("Показать: \(name)"))
     }
 

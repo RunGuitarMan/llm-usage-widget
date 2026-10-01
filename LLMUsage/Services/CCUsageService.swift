@@ -154,20 +154,36 @@ protocol CCUsageServing: Sendable {
 struct CCUsageService: CCUsageServing {
     let resolver = CCUsageExecutableResolver()
     let runner = ProcessRunner()
+    var pricing: any ClaudePricingProviding = ClaudePricingCache()
 
     static func arguments(for day: UsageDay, report: CCUsageDecoder.Report) -> [String] {
         // Explicitly override offline defaults in the user's ccusage config.
-        // ccusage owns HTTP revalidation and falls back to embedded prices on fetch failure.
+        // Cached Claude overrides survive network failures; other sources keep CLI pricing.
         let command = report == .claude ? ["claude", "session", "--json"] : ["session", "--json", "--all"]
         return command + ["--since", day.key, "--until", day.key,
                           "--timezone", day.timezone, "--mode", "calculate", "--order", "desc", "--no-offline"]
     }
     func fetch(day: UsageDay, customPath: String, mode: UsageUpdateMode = .claudeOnly) async throws -> UsageSnapshot {
         let executable = try await resolver.resolve(customPath: customPath)
-        async let claude = fetchReport(.claude, day: day, executable: executable)
+        let prices = try await pricing.refresh()
+        try Task.checkCancellation()
+        let configurationDirectory = FileManager.default.temporaryDirectory.appendingPathComponent("llmusage-pricing-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: configurationDirectory) }
+        var pricingArguments: [String] = []
+        if !prices.isEmpty {
+            try FileManager.default.createDirectory(at: configurationDirectory, withIntermediateDirectories: true,
+                                                    attributes: [.posixPermissions: 0o700])
+            let configuration = configurationDirectory.appendingPathComponent("ccusage.json")
+            let contents = try CCUsagePricingConfiguration.contents(prices: prices, environment: ProcessRunner.environment(for: executable))
+            try contents.write(to: configuration, options: .atomic)
+            try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: configuration.path)
+            pricingArguments = ["--config", configuration.path]
+        }
+        let extraArguments = pricingArguments
+        async let claude = fetchReport(.claude, day: day, executable: executable, extraArguments: extraArguments)
         guard mode == .allAgents else { return try await claude }
 
-        async let unified = fetchReport(.unified, day: day, executable: executable)
+        async let unified = fetchReport(.unified, day: day, executable: executable, extraArguments: extraArguments)
         let (focused, combined) = try await (claude, unified)
         // ccusage 20.0.24/26 filters whole Claude sessions by lastActivity in the
         // unified report. The focused command filters entries before summing.
@@ -176,8 +192,8 @@ struct CCUsageService: CCUsageServing {
         guard sessions.count <= 100_000 else { throw UsageError.outputTooLarge }
         return .init(generatedAt: Date(), day: day, sessions: sessions)
     }
-    private func fetchReport(_ report: CCUsageDecoder.Report, day: UsageDay, executable: URL) async throws -> UsageSnapshot {
-        let result = try await runner.run(executable: executable, arguments: Self.arguments(for: day, report: report))
+    private func fetchReport(_ report: CCUsageDecoder.Report, day: UsageDay, executable: URL, extraArguments: [String]) async throws -> UsageSnapshot {
+        let result = try await runner.run(executable: executable, arguments: Self.arguments(for: day, report: report) + extraArguments)
         return try CCUsageDecoder.decode(result.stdout, day: day, report: report)
     }
     func diagnose(customPath: String, forceDetect: Bool = false) async throws -> CLIDiagnostics {

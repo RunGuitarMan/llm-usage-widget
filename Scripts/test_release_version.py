@@ -60,6 +60,18 @@ class ReleaseVersionTests(unittest.TestCase):
         self.commit()
         self.assertEqual(self.version()["tag"], "v2.3.5")
 
+    def test_new_minor_line_starts_at_zero_after_squash(self):
+        self.config["base_version"] = "1.2.0"
+        self.git("switch", "-c", "release")
+        for _ in range(4):
+            self.commit()
+        self.git("switch", "main")
+        self.git("merge", "--squash", "release")
+        self.commit()
+        self.assertEqual(self.version()["tag"], "v1.2.0")
+        self.commit()
+        self.assertEqual(self.version()["tag"], "v1.2.1")
+
     def test_reject_baseline_without_a_release_commit(self):
         with self.assertRaises(ValueError):
             self.version()
