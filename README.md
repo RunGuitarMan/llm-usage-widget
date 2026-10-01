@@ -25,6 +25,8 @@ Before each report fetch, the app refreshes Claude tariffs from LiteLLM and atom
 
 Open the small **Excluded models** button beside the Models summary, or **Settings → Excluded models**, then select a known model or enter its exact name to exclude its tokens and cost from the dashboard, history, menu bar and widgets, including future activity. Names are matched without case sensitivity. Session records and transcripts remain accessible, and clicking **Include** next to an excluded model restores its original values. Z.ai / GLM models are excluded by default and can be explicitly included. Mixed sessions use the CLI's complete model breakdown; when it is missing, a session containing both included and excluded models is excluded from totals as a whole. Excluded models only reduce the token and cost amounts; currency formatting remains unchanged. Older weekly totals without model attribution are rebuilt from the CLI.
 
+The **Models** tab shows original tokens and estimated costs for reference, including excluded models, for the selected date and source. Excluded rows are labeled **Excluded from totals** and have no spending-share bar; the **Included spending** header still follows exclusions. Expanded token details also use the original values. Mixed sessions without a complete breakdown remain one combined reference row rather than duplicating usage across models. This reference view never changes Overview, Sessions, history, menu or widget totals.
+
 Opening session details increases the dashboard's minimum width to keep the sidebar and content visible. While the menu popover is open, its content updates immediately and the status item's size stays fixed; the badge catches up when the popover closes.
 
 ## Install a ready-made app

@@ -201,6 +201,80 @@ enum RegressionScenarios {
             let daily = DailyUsageTotal(snapshot: rounding).applyingExclusions(.init())
             try requireRegression(daily?.usage == rounding.totals, "History changed unexcluded CLI rounding or incomplete-pricing status")
         }
+        await check("Models reference: excluded amounts stay visible only in the reference projection") {
+            let excluded = TokenUsage(input: 10, output: 20, cacheCreate: 30, cacheRead: 40, cost: 5, additional: 50)
+            let included = TokenUsage(input: 60, cost: 2)
+            let manual = TokenUsage(output: 70, cost: 8)
+            let raw = UsageSnapshot(generatedAt: Date(), day: .init(), sessions: [
+                .init(id: "default", models: ["GLM-5"], usage: excluded),
+                .init(id: "included", models: ["paid"], usage: included),
+                .init(id: "manual", models: ["manual-model"], usage: manual, agent: "codex")
+            ])
+            var policy = ModelExclusionPolicy(overrides: ["manual-model": false])
+            let adjusted = raw.applyingExclusions(policy)
+            let models = adjusted.reportedModelSummaries(applying: policy)
+            try requireRegression(models.map(\.id) == ["manual-model", "GLM-5", "paid"], "Reference order uses excluded zero costs")
+            try requireRegression(models[0].isExcluded && models[1].isExcluded && !models[2].isExcluded,
+                                  "Default/manual exclusions were not labeled")
+            for (name, usage) in [("GLM-5", excluded), ("paid", included), ("manual-model", manual)] {
+                let row = models.first { $0.id == name }!
+                try requireRegression(row.usage.total == usage.total && row.usage.cost == usage.cost
+                    && row.usage.categories.allSatisfy { row.usage.value(for: $0) == usage.value(for: $0) },
+                                      "Reference details lost a token category or original cost")
+            }
+            try requireRegression(adjusted.totals.total == included.total && adjusted.totals.cost == included.cost
+                && adjusted.sessions.first?.usage.total == 0 && adjusted.sessions.first?.usage.cost == 0,
+                                  "Reference amounts leaked into overview/menu/session/widget totals")
+            try requireRegression(adjusted.modelSummaries.reduce(0) { $0 + $1.usage.cost } == 2
+                && adjusted.sourceSummaries.reduce(0) { $0 + $1.usage.cost } == 2, "Accounted summaries changed")
+            let filtered = adjusted.filtered(source: "codex").reportedModelSummaries(applying: policy)
+            try requireRegression(filtered.count == 1 && filtered[0].id == "manual-model" && filtered[0].usage.cost == 8,
+                                  "Reference view ignored the source filter")
+            policy.overrides["glm-5"] = true
+            policy.overrides["manual-model"] = true
+            let restored = adjusted.applyingExclusions(policy)
+            let rows = restored.reportedModelSummaries(applying: policy)
+            try requireRegression(rows.allSatisfy { !$0.isExcluded } && restored.totals.cost == 15
+                && rows.map(\.usage) == models.map(\.usage), "Re-inclusion changed the reference values")
+            let roundTrip = try JSONDecoder().decode(UsageSnapshot.self, from: JSONEncoder().encode(adjusted))
+            try requireRegression(roundTrip.reportedModelSummaries(applying: .init(overrides: ["manual-model": false])) == models,
+                                  "Saved exclusions lost reference rows after restart")
+        }
+        await check("Models reference: complete and incomplete mixed sessions never duplicate usage") {
+            let raw = UsageSnapshot(generatedAt: Date(), day: .init(), sessions: [
+                .init(id: "complete", models: ["glm-5", "paid"], usage: .init(input: 30, cost: 9),
+                    modelBreakdowns: [.init(id: "glm-5", usage: .init(input: 10, cost: 6)),
+                                      .init(id: "paid", usage: .init(input: 20, cost: 3))]),
+                .init(id: "incomplete", models: ["paid", "glm-5"], usage: .init(input: 40, cost: 12),
+                    modelBreakdowns: [.init(id: "glm-5", usage: .init(input: 2, cost: 1))]),
+                .init(id: "incomplete-reversed", models: ["glm-5", "paid"], usage: .init(input: 5, cost: 1)),
+                .init(id: "unknown", models: [], usage: .init(input: 7, cost: 2))
+            ])
+            let adjusted = raw.applyingExclusions(.init())
+            let rows = adjusted.reportedModelSummaries(applying: .init())
+            let mixed = rows.first { $0.id == "glm-5, paid" }
+            try requireRegression(rows.count == 4 && mixed?.usage.total == 45 && mixed?.usage.cost == 13
+                && mixed?.sessionCount == 2 && mixed?.isExcluded == true, "Incomplete breakdown was split, duplicated or mislabeled")
+            try requireRegression(rows.reduce(0) { $0 + $1.usage.total } == raw.totals.total
+                && rows.reduce(0) { $0 + $1.usage.cost } == raw.totals.cost, "Raw mixed totals disagree")
+            try requireRegression(rows.first { $0.id == "paid" }?.usage.cost == 3
+                && rows.first { $0.id == "glm-5" }?.usage.cost == 6
+                && rows.first { $0.id.isEmpty }?.isExcluded == false, "Complete/unknown allocations changed")
+            try requireRegression(adjusted.totals.total == 27 && adjusted.totals.cost == 5, "Mixed exclusions no longer protect totals")
+        }
+        await check("Models reference: unknown prices and all-excluded days retain raw diagnostics") {
+            let raw = UsageSnapshot(generatedAt: Date(), day: .init(), sessions: [
+                .init(id: "unpriced", models: ["glm-5"], usage: .init(input: 100, costIsIncomplete: true)),
+                .init(id: "priced", models: ["glm-5"], usage: .init(input: 200, cost: 5))
+            ])
+            let adjusted = raw.applyingExclusions(.init())
+            let rows = adjusted.reportedModelSummaries(applying: .init())
+            try requireRegression(rows.count == 1 && rows[0].usage.total == 300 && rows[0].usage.cost == 5
+                && rows[0].usage.costIsIncomplete == true && rows[0].sessionCount == 2 && rows[0].isExcluded,
+                                  "All-excluded reference rows became empty or lost missing-price diagnostics")
+            try requireRegression(adjusted.totals.total == 0 && adjusted.totals.cost == 0
+                && adjusted.totals.costIsIncomplete != true, "Reference diagnostics polluted accounted totals")
+        }
         await check("Model exclusions: store recalculates all dates, persists and survives in-flight refresh") {
             let suite = "CostExclusionRegression.\(UUID().uuidString)"
             let defaults = UserDefaults(suiteName: suite)!
@@ -218,6 +292,10 @@ enum RegressionScenarios {
             store.setModelIncluded(false, model: " PAID ")
             try requireRegression(store.snapshot?.totals.cost == 0 && store.todaySnapshot?.totals.cost == 0 && store.previousSnapshot?.totals.cost == 0, "A displayed date retained excluded costs")
             try requireRegression(store.history?.days.allSatisfy { $0.usage.cost == 0 && $0.usage.total == 0 } == true, "Seven-day history was not recalculated")
+            let historicalReference = store.displaySnapshot!.reportedModelSummaries(applying: store.modelExclusionPolicy)
+            try requireRegression(store.displaySnapshot?.day == store.selectedDay && historicalReference.count == 2
+                && historicalReference.allSatisfy(\.isExcluded) && historicalReference.reduce(0) { $0 + $1.usage.cost } == 9,
+                                  "Changing dates or exclusions erased the Models reference amounts")
             store.setModelIncluded(true, model: "glm-5")
             try requireRegression(store.snapshot?.totals.cost == 6, "Re-inclusion requires an unnecessary fetch")
             await service.holdNextRequest()

@@ -7,7 +7,7 @@ struct ModelsView: View {
     @State private var showExplanation = false
     @State private var showExclusions = false
     private var models: [ModelSummary] {
-        snapshot.modelSummaries.sorted { $0.usage.cost == $1.usage.cost ? $0.id < $1.id : $0.usage.cost > $1.usage.cost }
+        snapshot.reportedModelSummaries(applying: store.modelExclusionPolicy)
     }
 
     var body: some View {
@@ -15,8 +15,8 @@ struct ModelsView: View {
             VStack(alignment: .leading, spacing: 22) {
                 HStack(alignment: .bottom, spacing: 16) {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text(L10n.text("Расходы по моделям")).font(.system(size: 12)).foregroundStyle(.secondary)
-                        Text(UsageFormat.cost(snapshot.totals)).font(.system(size: 44, weight: .semibold)).tracking(-1.5)
+                        Text(L10n.text("Учтённые расходы")).font(.system(size: 12)).foregroundStyle(.secondary)
+                        Text(UsageFormat.cost(snapshot.totals)).font(.system(size: 44, weight: .semibold))
                         Text(L10n.text("Модели: \(models.count) · По убыванию стоимости")).font(.system(size: 11)).foregroundStyle(.secondary)
                     }
                     Spacer()
@@ -55,11 +55,17 @@ struct ModelsView: View {
                                         Text(model.title).font(.system(size: 14, weight: .medium)).lineLimit(2)
                                         Text(L10n.text("Сессии: \(model.sessionCount) · \(UsageFormat.tokens(model.usage.total)) токенов"))
                                             .font(.system(size: 11)).foregroundStyle(.secondary)
-                                        UsageBar(fraction: snapshot.totals.cost > 0 ? model.usage.cost / snapshot.totals.cost : 0,
-                                                 color: .accentColor, height: 4).frame(maxWidth: 180)
+                                        if model.isExcluded {
+                                            Label(L10n.text("Не учитывается в итогах"), systemImage: "minus.circle")
+                                                .font(.system(size: 11)).foregroundStyle(.secondary)
+                                        } else {
+                                            UsageBar(fraction: snapshot.totals.cost > 0 ? model.usage.cost / snapshot.totals.cost : 0,
+                                                     color: .accentColor, height: 4).frame(maxWidth: 180)
+                                        }
                                     }
                                     Spacer(minLength: 6)
                                     Text(UsageFormat.cost(model.usage)).font(.system(size: 24, weight: .medium)).monospacedDigit()
+                                        .lineLimit(1).minimumScaleFactor(0.75)
                                 }
                             }.disclosureGroupStyle(WholeRowDisclosureStyle(padding: 18))
                         }

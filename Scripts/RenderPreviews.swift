@@ -31,6 +31,7 @@ struct RenderPreviews {
             guard localePreview || requestedNames.isEmpty || requestedNames.contains(name)
                     || (requestedNames.contains("--widgets") && name.hasPrefix("widget-"))
                     || (requestedNames.contains("--sidebars") && name.hasPrefix("sidebar-"))
+                    || (requestedNames.contains("--models") && name.hasPrefix("models"))
                     || (requestedNames.contains("--menus") && name.hasPrefix("menu-dropdown")) else { return }
             let appearance = NSAppearance(named: dark ? .darkAqua : .aqua)!
             app.appearance = appearance
@@ -56,6 +57,14 @@ struct RenderPreviews {
         }
         for dark in [false, true] {
             let suffix = dark ? "dark" : "light"
+            let modelsStore = previewStore()
+            modelsStore.tab = .models
+            modelsStore.setModelIncluded(false, model: "gpt-6-astra")
+            for width: CGFloat in [610, 880] {
+                try render(ModelsView(store: modelsStore, snapshot: modelsStore.displaySnapshot!)
+                    .background(Color(nsColor: .windowBackgroundColor)),
+                           name: "models-excluded-\(Int(width))-\(suffix)", size: .init(width: width, height: 650), dark: dark)
+            }
             for active in [true, false] {
                 for tab in [DashboardTab.overview, .settings] {
                     let store = previewStore()
