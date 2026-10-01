@@ -1,10 +1,8 @@
 Download the ZIP below and move **LLM Usage.app** to Applications.
 
-- Amounts always retain the dollar sign; model exclusions reduce totals without adding inequality symbols or warning styles.
-- **Model exclusions:** open the small **Excluded models** button in Models or the full list in Settings to remove tokens and cost from every date, including history, menu bar and widgets. Z.ai / GLM are excluded by default; click **Include** next to any excluded model to restore it.
-- The sidebar and session controls stay within the window when narrowed; session details reserve enough room for all columns, and refreshing the menu popover keeps its anchor stable, including fullscreen Spaces.
-- **Claude only** is the default update mode. It uses the dedicated Claude report so daily sessions and costs remain correct when the combined ccusage report omits them.
-- Choose **Settings → Data refresh → Update mode → All agents** to include other local agents. Claude sessions are replaced with the dedicated report, and changing modes rebuilds the cache and history.
+- **Offline Claude pricing (#10):** tariffs are refreshed and saved before each report. After a successful download, cached prices survive network failures and app restarts, and new offline usage continues to be calculated. Invalid responses do not overwrite valid prices; user pricing overrides retain priority.
+- **Excluded model reference data (#11):** Models shows original tokens, cost and token breakdowns for excluded models, labeled **Excluded from totals**. Overview, Sessions, history, menu bar and widgets still exclude those amounts. Mixed sessions without a complete model breakdown remain one combined row.
+- **Native sidebar appearance (#14):** Finder-style neutral selection adapts to light/dark appearance and active/inactive windows. Native keyboard navigation is preserved, and Overview uses a new grid icon.
 - Requires **macOS 26+ on Apple Silicon** and Node.js with `ccusage`.
 - Includes the menu bar app and desktop widget extension.
 - Ad-hoc signed, without Apple notarization. For a trusted download, use **System Settings → Privacy & Security → Open Anyway** if macOS blocks it.
