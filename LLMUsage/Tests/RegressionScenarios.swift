@@ -103,6 +103,14 @@ private actor RegressionRepository: SnapshotPersisting {
     func writeHistory(_ history: UsageHistory) { self.history = history }
 }
 
+private actor RegressionPricing: ClaudePricingProviding {
+    var calls = 0
+    func refresh() throws -> ClaudePricingOverrides {
+        calls += 1
+        return try ClaudePricingCache.parse(PricingScenarios.catalog)
+    }
+}
+
 /// Lets a deliberately uncooperative old search finish after the newer one.
 private final class RegressionSearchGate: @unchecked Sendable {
     private let lock = NSLock()
@@ -244,7 +252,7 @@ enum RegressionScenarios {
             let cli = try RegressionCLI()
             defer { cli.remove() }
             let day = UsageDay(date: ISO8601DateFormatter().date(from: "2026-09-28T18:00:00Z")!)
-            let snapshot = try await CCUsageService().fetch(day: day, customPath: cli.executable)
+            let snapshot = try await CCUsageService(pricing: EmptyPricingFixture()).fetch(day: day, customPath: cli.executable)
             let requests = try cli.requests()
             try requireRegression(requests == ["claude session --json --since 20260928 --until 20260928 --timezone UTC --mode calculate --order desc --no-offline"], "Default mode ran another command or widened the day")
             try requireRegression(snapshot.sessions.count == 1 && snapshot.totals.total == 22 && snapshot.totals.cost == 2, "Claude report totals were lost")
@@ -256,7 +264,7 @@ enum RegressionScenarios {
             let cli = try RegressionCLI()
             defer { cli.remove() }
             let day = UsageDay(date: ISO8601DateFormatter().date(from: "2026-09-28T18:00:00Z")!, timezone: "Europe/Moscow")
-            let service = CCUsageService()
+            let service = CCUsageService(pricing: EmptyPricingFixture())
             let snapshot = try await service.fetch(day: day, customPath: cli.executable, mode: .allAgents)
             let requests = try cli.requests()
             try requireRegression(requests.count == 2 && Set(requests.map { $0.components(separatedBy: " --json")[0] }) == ["claude session", "session"], "All-agent mode did not issue exactly both reports")
@@ -267,10 +275,31 @@ enum RegressionScenarios {
             let focused = try await service.fetch(day: day, customPath: cli.executable, mode: .claudeOnly)
             try requireRegression(snapshot.sessions.first { $0.sourceID == "claude" } == focused.sessions.first, "Switching modes changed Claude identity or metadata")
         }
+        await check("Pricing: both reports share one private config and clean it up on success/failure") {
+            let cli = try RegressionCLI()
+            defer { cli.remove() }
+            let pricing = RegressionPricing()
+            let service = CCUsageService(pricing: pricing)
+            _ = try await service.fetch(day: UsageDay(), customPath: cli.executable, mode: .allAgents)
+            var requests = try cli.requests()
+            let paths = requests.compactMap { $0.components(separatedBy: " --config ").dropFirst().first }
+            let calls = await pricing.calls
+            try requireRegression(calls == 1 && paths.count == 2 && Set(paths).count == 1,
+                                  "Reports did not receive the same pricing config")
+            try requireRegression(paths.allSatisfy { !FileManager.default.fileExists(atPath: $0) }, "Temporary config leaked after success")
+            try cli.write("fail", name: "fail-claude")
+            do {
+                _ = try await service.fetch(day: UsageDay(), customPath: cli.executable)
+                throw RegressionFailure(description: "Failed CLI report succeeded")
+            } catch UsageError.processFailed(7, _) { }
+            requests = try cli.requests()
+            let path = requests.last!.components(separatedBy: " --config ").last!
+            try requireRegression(!FileManager.default.fileExists(atPath: path), "Temporary config leaked after failure")
+        }
         await check("Update mode: empty unified report recovers Claude and empty Claude removes stale rows") {
             let cli = try RegressionCLI()
             defer { cli.remove() }
-            let service = CCUsageService(), day = UsageDay()
+            let service = CCUsageService(pricing: EmptyPricingFixture()), day = UsageDay()
             try cli.write(#"{"session":[]}"#, name: "unified.json")
             let recovered = try await service.fetch(day: day, customPath: cli.executable, mode: .allAgents)
             try requireRegression(recovered.sessions.count == 1 && recovered.totals.total == 22, "The reported empty-unified regression was not recovered")
@@ -285,14 +314,14 @@ enum RegressionScenarios {
             for report in ["claude", "unified"] {
                 try cli.write("fail", name: "fail-" + report)
                 do {
-                    _ = try await CCUsageService().fetch(day: UsageDay(), customPath: cli.executable, mode: .allAgents)
+                    _ = try await CCUsageService(pricing: EmptyPricingFixture()).fetch(day: UsageDay(), customPath: cli.executable, mode: .allAgents)
                     throw RegressionFailure(description: "A failed \(report) report was accepted as a partial success")
                 } catch UsageError.processFailed(7, _) { }
                 try FileManager.default.removeItem(at: cli.directory.appendingPathComponent("fail-" + report))
                 // A valid JSON document in the wrong report format must also fail.
                 try cli.write(report == "claude" ? #"{"session":[]}"# : #"{"sessions":[]}"#, name: report + ".json")
                 do {
-                    _ = try await CCUsageService().fetch(day: UsageDay(), customPath: cli.executable, mode: .allAgents)
+                    _ = try await CCUsageService(pricing: EmptyPricingFixture()).fetch(day: UsageDay(), customPath: cli.executable, mode: .allAgents)
                     throw RegressionFailure(description: "The wrong \(report) schema was accepted")
                 } catch UsageError.malformedJSON { }
                 try cli.write(report == "claude" ? RegressionCLI.claude : RegressionCLI.unified, name: report + ".json")
