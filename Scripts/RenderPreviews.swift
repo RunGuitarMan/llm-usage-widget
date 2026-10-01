@@ -30,6 +30,7 @@ struct RenderPreviews {
                 || (name.hasPrefix("widget-native-") && ["-normal-", "-gaps-budget-", "-huge-", "-empty-", "-error-"].contains(where: name.contains)))
             guard localePreview || requestedNames.isEmpty || requestedNames.contains(name)
                     || (requestedNames.contains("--widgets") && name.hasPrefix("widget-"))
+                    || (requestedNames.contains("--sidebars") && name.hasPrefix("sidebar-"))
                     || (requestedNames.contains("--menus") && name.hasPrefix("menu-dropdown")) else { return }
             let appearance = NSAppearance(named: dark ? .darkAqua : .aqua)!
             app.appearance = appearance
@@ -55,6 +56,17 @@ struct RenderPreviews {
         }
         for dark in [false, true] {
             let suffix = dark ? "dark" : "light"
+            for active in [true, false] {
+                for tab in [DashboardTab.overview, .settings] {
+                    let store = previewStore()
+                    store.tab = tab
+                    let sidebar = DashboardView(store: store).sidebarPreview
+                        .environment(\.appearsActive, active)
+                        .background(Color(nsColor: .windowBackgroundColor))
+                    try render(sidebar, name: "sidebar-\(tab == .settings ? "settings-" : "")\(suffix)-\(active ? "active" : "inactive")",
+                               size: .init(width: 220, height: 560), dark: dark)
+                }
+            }
             let sample = TokenUsage(cost: 23.36)
             for compact in [false, true] {
                 let menu = HStack(spacing: 18) {

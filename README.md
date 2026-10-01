@@ -107,6 +107,6 @@ xcodebuild -project LLMUsage.xcodeproj -scheme LLMUsage \
 
 After adding or removing Swift files, run `python3 Scripts/generate_project.py`. Make project structure changes in that generator: it overwrites the project and shared scheme.
 
-The icon's source is `LLMUsage/Shared/BrandGeometry.swift`; local builds regenerate its SVGs and asset catalog. Run `bash Scripts/render-previews.sh` for UI previews in `build/Previews` (optional filters: `--widgets`, `--menus`, `--language=en`).
+The icon's source is `LLMUsage/Shared/BrandGeometry.swift`; local builds regenerate its SVGs and asset catalog. Run `bash Scripts/render-previews.sh` for UI previews in `build/Previews` (optional filters: `--widgets`, `--menus`, `--sidebars`, `--language=en`).
 
 Commit source, tests, build configuration and required app resources. Keep build products, caches and generated preview images in ignored `build/`. If you use the local toolchain, preserve `build/AppleTools26` when cleaning build outputs. Existing `ClaudeUsage` bundle IDs, storage keys and URL aliases preserve compatibility with earlier installs.
