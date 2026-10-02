@@ -226,6 +226,9 @@ struct RenderPreviews {
         try render(TranscriptRequestDetails(request: chatTranscript.requests[0], policy: .init()).padding(18)
             .frame(width: 330).background(Color(nsColor: .windowBackgroundColor)),
                    name: "session-chat-request-details", size: .init(width: 330, height: 340))
+        try render(TranscriptUserUsageDetails(requests: chatTranscript.requests, policy: .init())
+                    .background(Color(nsColor: .windowBackgroundColor)),
+                   name: "session-chat-user-usage-details", size: .init(width: 370, height: 450))
         store.tab = .sessions
         try render(DashboardView(store: store).contentPreview, name: "sessions", size: .init(width: 900, height: 700))
         try render(DashboardView(store: store).contentPreview, name: "sessions-narrow", size: .init(width: 370, height: 600))

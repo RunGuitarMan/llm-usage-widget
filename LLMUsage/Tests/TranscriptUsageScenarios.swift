@@ -36,6 +36,106 @@ private struct TranscriptUsageFailure: Error, CustomStringConvertible { var desc
     """#
 
     static func run(check: (String, () async throws -> Void) async -> Void) async {
+        await check("User usage: Claude tools and streams share one prompt without duplicate charges") {
+            let value = try decode("claude", #"{"type":"user","message":{"role":"user","content":"First prompt"}}"# + "\n" + claude + "\n" + #"""
+            {"type":"assistant","message":{"id":"next","role":"assistant","model":"claude-chat-fixture","content":"After tools","usage":{"input_tokens":50,"output_tokens":10}}}
+            {"type":"user","message":{"role":"user","content":"Unanswered prompt"}}
+            """#)
+            let users = value.events.filter { $0.kind == .user }
+            let result = try TranscriptSearchResult.evaluate(.init(transcript: value))
+            try require(users.count == 2 && value.requests.count == 2, "Tool result became a prompt or stream duplicated")
+            try require(value.requests.allSatisfy { $0.userEventID == users[0].id }, "Tool continuation lost the original prompt")
+            try require(result.requestsByUserID[users[0].id]?.reduce(0, { $0 + $1.usage.total }) == 250, "Prompt total differs from unique requests")
+            try require(result.requestsByUserID[users[1].id] == nil, "Unanswered prompt inherited a charge")
+            try require(result.analysis?.reported.total == 250 && users.allSatisfy { $0.requestIDs.isEmpty }, "Prompt charge counted twice")
+            let again = try TranscriptUsageParser.annotate(value, source: "claude")
+            try require(again.requests.map(\.userEventID) == value.requests.map(\.userEventID), "Reannotation changed prompt ownership")
+        }
+        await check("User usage: Codex deduplicated prompts, explicit turns and aborted responses") {
+            let value = try decode("codex", #"""
+            {"type":"event_msg","payload":{"type":"task_started","turn_id":"one"}}
+            {"type":"turn_context","payload":{"model":"gpt-chat-fixture","turn_id":"one"}}
+            {"type":"event_msg","payload":{"type":"user_message","message":"Repeat"}}
+            {"type":"response_item","payload":{"role":"user","content":"Repeat"}}
+            {"type":"response_item","payload":{"role":"user","content":"<environment_context>settings</environment_context>"}}
+            {"type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":100,"output_tokens":10}}}}
+            {"type":"event_msg","payload":{"type":"turn_aborted","turn_id":"one"}}
+            {"type":"event_msg","payload":{"type":"task_started","turn_id":"two"}}
+            {"type":"event_msg","payload":{"type":"user_message","message":"Repeat"}}
+            {"type":"response_item","payload":{"role":"user","content":"Repeat"}}
+            {"type":"event_msg","payload":{"type":"token_count","turn_id":"one","info":{"last_token_usage":{"input_tokens":20,"output_tokens":5}}}}
+            {"type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":200,"output_tokens":20}}}}
+            {"type":"event_msg","payload":{"type":"task_complete","turn_id":"two"}}
+            {"type":"event_msg","payload":{"type":"task_started","turn_id":"three"}}
+            {"type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":1,"output_tokens":1}}}}
+            """#)
+            let users = value.events.filter { $0.kind == .user }
+            try require(users.count == 2, "Repeated prompt collapsed or environment counted")
+            try require(value.requests.map(\.userEventID) == [users[0].id, users[0].id, users[1].id, nil], "Late, aborted or unattended request attributed to wrong prompt")
+            try require(value.requests.allSatisfy { $0.anchorID != $0.userEventID }, "Usage-only response anchor replaced by prompt")
+        }
+        await check("User usage: late streamed usage stays with its original message") {
+            let value = try decode("claude", #"""
+            {"type":"user","message":{"role":"user","content":"Old"}}
+            {"type":"assistant","requestId":"r","message":{"id":"m","role":"assistant","content":"Streaming","usage":{"input_tokens":10,"output_tokens":1}}}
+            {"type":"user","message":{"role":"user","content":"New"}}
+            {"type":"assistant","requestId":"r","message":{"id":"m","role":"assistant","content":"Late completion","usage":{"input_tokens":10,"output_tokens":5}}}
+            """#)
+            try require(value.requests.count == 1 && value.requests[0].userEventID == value.events[0].id && value.requests[0].usage.total == 15,
+                        "Late stream update moved cost to the next prompt")
+        }
+        await check("User usage: older Codex logs may place prompts before turn context") {
+            let value = try decode("codex", #"""
+            {"type":"response_item","payload":{"role":"user","content":"First"}}
+            {"type":"turn_context","payload":{"model":"gpt-chat-fixture","turn_id":"one"}}
+            {"type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":10,"output_tokens":1}}}}
+            {"type":"response_item","payload":{"role":"user","content":"Second"}}
+            {"type":"event_msg","payload":{"type":"token_count","turn_id":"one","info":{"last_token_usage":{"input_tokens":5,"output_tokens":1}}}}
+            {"type":"turn_context","payload":{"model":"gpt-chat-fixture","turn_id":"two"}}
+            {"type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":20,"output_tokens":2}}}}
+            {"type":"turn_context","payload":{"model":"gpt-chat-fixture","turn_id":"unattended"}}
+            {"type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":30,"output_tokens":3}}}}
+            """#)
+            let users = value.events.filter { $0.kind == .user }
+            try require(value.requests.map(\.userEventID) == [users[0].id, users[0].id, users[1].id, nil], "Prompt preceding turn context lost or inherited by autonomous turn")
+        }
+        await check("User usage: Gemini prompt changes delimit model and tool continuations") {
+            let value = try decode("gemini", #"{"type":"user","content":"First"}"# + "\n" + gemini + "\n" + #"""
+            {"type":"user","content":"Second"}
+            {"type":"gemini","id":"next","model":"gemini-chat-fixture","content":"Answer","tokens":{"input":20,"output":5}}
+            """#)
+            let users = value.events.filter { $0.kind == .user }
+            try require(value.requests.map(\.userEventID) == users.map { Optional($0.id) }, "Gemini prompt boundary lost")
+        }
+        await check("User usage: child logs cannot inherit the last main-log prompt") {
+            var decoder = TranscriptDecoder(source: "claude")
+            for (origin, text) in [(nil as String?, #"{"type":"user","message":{"role":"user","content":"Main"}}"#),
+                                   ("child.jsonl", #"{"type":"assistant","message":{"id":"child","role":"assistant","usage":{"input_tokens":10,"output_tokens":5}}}"#)] {
+                decoder.origin = origin
+                decoder.append(try JSONSerialization.jsonObject(with: Data(text.utf8)) as! [String: Any])
+            }
+            let value = try TranscriptUsageParser.annotate(.init(events: decoder.finish()), source: "claude")
+            try require(value.requests.count == 1 && value.requests[0].userEventID == nil, "Unrelated child charged to main prompt")
+        }
+        await check("User usage: scope, replay, exclusions, search and unknown prices preserve accounting") {
+            var value = try decode("claude", #"{"type":"user","message":{"role":"user","content":"Find this prompt"}}"# + "\n" + claude)
+            let user = value.events.firstIndex { $0.kind == .user }!
+            let userID = value.events[user].id
+            let day = UsageDay(date: date, timezone: "UTC")
+            value.events[user].timestamp = day.date.addingTimeInterval(-1)
+            var next = value.requests[0]; next.id = "next-day"; next.timestamp = day.end
+            var replay = value.requests[0]; replay.id = "replay"; replay.isReplay = true
+            value.requests += [next, replay]
+            let result = try TranscriptSearchResult.evaluate(.init(transcript: value, query: "Find this prompt", day: day,
+                policy: .init(overrides: ["claude-chat-fixture": false])))
+            try require(result.rows.count == 1 && result.rows[0].id == userID, "Prior-day prompt with current-day usage is hidden")
+            try require(result.requestsByUserID[userID]?.map(\.id) == [value.requests[0].id], "Day boundary or replay counted in prompt cost")
+            try require(result.requestsByUserID[userID]?.first?.usage.costIsIncomplete == true, "Unknown price became free")
+            try require(result.analysis?.reported.total == 190 && result.analysis?.included.total == 0, "Exclusions or totals changed")
+            let all = try TranscriptSearchResult.evaluate(.init(transcript: value))
+            let tools = try TranscriptSearchResult.evaluate(.init(transcript: value, filter: .tools))
+            try require(all.requestsByUserID[userID]?.count == 2 && tools.requestsByUserID[userID]?.count == 2, "Filter changed prompt accounting")
+        }
         await check("Chat debug filters preserve billing totals and combine with search") {
             var transcript = try decode("claude", claude)
             let tool = transcript.events.firstIndex { $0.kind == .tool }!
@@ -209,9 +309,13 @@ private struct TranscriptUsageFailure: Error, CustomStringConvertible { var desc
         let long = #"{"type":"assistant","timestamp":"2026-10-01T12:00:00Z","message":{"id":"long","role":"assistant","model":"claude-chat-fixture","usage":{"input_tokens":300000,"output_tokens":100,"speed":"fast"}}}"#
         for (source, fixture, expected) in [("claude", claude, 0.00022), ("codex", codex, 0.00265), ("gemini", gemini, 0.0011),
                                             ("codex", cacheWrite, 0.00105), ("claude", oneHour, 0.00089), ("claude", long, 0.8004)] {
-            let original = try decode(source, fixture)
+            let original = try decode(source, #"{"role":"user","content":"Billing prompt"}"# + "\n" + fixture)
             let priced = try await service.price(original, source: source, customPath: "", pricingKey: key)
             let summary = TranscriptUsageSummary(transcript: priced, day: nil, policy: .init())
+            let user = priced.events.first { $0.kind == .user }!
+            let userRequests = try TranscriptSearchResult.evaluate(.init(transcript: priced)).requestsByUserID[user.id] ?? []
+            try require(userRequests.count == priced.requests.count && userRequests.reduce(.zero, { $0 + $1.usage }) == summary.reported,
+                        "\(source) pricing lost prompt ownership or changed its aggregate")
             if !priced.requests.allSatisfy(\.priced) {
                 let debug = directory.appendingPathComponent("debug")
                 try TranscriptCostService.prepare(original.requests, source: source, root: debug, configuration: archive.configuration(key: key, source: source))

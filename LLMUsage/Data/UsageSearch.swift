@@ -90,18 +90,22 @@ struct TranscriptSearchResult: Sendable {
     var eventCount = 0
     var analysis: TranscriptUsageSummary?
     var requestsByID: [String: TranscriptRequest] = [:]
+    var requestsByUserID: [String: [TranscriptRequest]] = [:]
 
     static func evaluate(_ request: TranscriptSearchRequest) throws -> Self {
         var result = Self()
         if let transcript = request.transcript {
             result.analysis = TranscriptUsageSummary(transcript: transcript, day: request.day, policy: request.policy)
             result.requestsByID = Dictionary(uniqueKeysWithValues: transcript.requests.map { ($0.id, $0) })
+            for request in result.analysis?.requests ?? [] {
+                if let user = request.userEventID { result.requestsByUserID[user, default: []].append(request) }
+            }
         }
         var recordMatches: [UUID: Bool] = [:]
         let requestEvents = Set(result.analysis?.requests.flatMap(\.eventIDs) ?? [])
         for event in request.transcript?.events ?? [] {
             try Task.checkCancellation()
-            if let day = request.day, !requestEvents.contains(event.id),
+            if let day = request.day, !requestEvents.contains(event.id), result.requestsByUserID[event.id] == nil,
                event.timestamp.map({ $0 >= day.date && $0 < day.end }) != true { continue }
             guard request.filter.includes(event) else { continue }
             guard request.showContext || event.kind != .context || !request.query.isEmpty else { continue }

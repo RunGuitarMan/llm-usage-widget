@@ -369,8 +369,13 @@ struct SessionChatView: View {
 
     @ViewBuilder private func usageLine(_ event: TranscriptEvent) -> some View {
         if let transcript = reader.transcript {
-            TranscriptUsageBadge(event: event, requests: event.requestIDs.compactMap { results.value.requestsByID[$0] },
-                                 supported: transcript.usageSupported, policy: policy, jump: navigate)
+            if event.kind == .user {
+                TranscriptUserUsageBadge(requests: results.value.requestsByUserID[event.id] ?? [],
+                                         supported: transcript.usageSupported, policy: policy, jump: navigate)
+            } else {
+                TranscriptUsageBadge(event: event, requests: event.requestIDs.compactMap { results.value.requestsByID[$0] },
+                                     supported: transcript.usageSupported, policy: policy, jump: navigate)
+            }
         }
     }
 
@@ -671,6 +676,7 @@ enum TranscriptPreview {
         for index in transcript.events.indices {
             transcript.events[index].requestIDs = transcript.requests.filter { $0.eventIDs.contains(transcript.events[index].id) }.map(\.id)
         }
+        for index in transcript.requests.indices { transcript.requests[index].userEventID = "1" }
         return transcript
     }
 }

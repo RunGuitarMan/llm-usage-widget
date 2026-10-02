@@ -16,6 +16,7 @@ struct TranscriptRequest: Identifiable, Sendable {
     var priced = false
     var sequence = 0
     var accountingModel: String?
+    var userEventID: String?
     var modelForAccounting: String { accountingModel ?? model }
     var anchorID: String? { eventIDs.first }
 }
@@ -100,6 +101,61 @@ struct TranscriptUsageSummary: Sendable {
     }
 }
 
+private struct TranscriptUserAttribution {
+    private var users: [UUID: String] = [:]
+    private var currentUser: String?
+    private var origin: String?
+    private var turn: String?
+    private var turnUsers: [String: String] = [:]
+    private var awaitingTurn = false
+    private(set) var owners: [UUID: String] = [:]
+
+    init(events: [TranscriptEvent]) {
+        for event in events where event.kind == .user {
+            // Codex's two streams describe one visible message. Only its first
+            // occurrence starts a new attribution boundary.
+            if let record = event.records.min(by: { $0.sequence < $1.sequence }) { users[record.id] = event.id }
+        }
+    }
+
+    mutating func observe(_ record: TranscriptRecord, root: [String: Any], source: String) {
+        if origin != record.origin {
+            currentUser = nil; turn = nil; turnUsers = [:]; awaitingTurn = false
+            origin = record.origin
+        }
+        let payload = TranscriptJSON.object(root["payload"])
+        let type = root["type"] as? String
+        let eventType = type == "event_msg" ? payload["type"] as? String : nil
+        let turnID = payload["turn_id"] as? String
+        if source == "codex", let turnID, turnID != turn,
+           type == "turn_context" || eventType == "task_started" {
+            currentUser = turnUsers[turnID] ?? (awaitingTurn ? currentUser : nil)
+            turn = turnID
+            if let currentUser { turnUsers[turnID] = currentUser }
+            awaitingTurn = false
+        }
+        if let user = users[record.id] {
+            currentUser = user
+            awaitingTurn = true
+            if let turn, turnUsers[turn] == nil { turnUsers[turn] = user }
+        } else if type == "turn_context"
+                    || (eventType == "token_count" && (turnID == nil || turnID.flatMap { turnUsers[$0] } == currentUser))
+                    || payload["role"] as? String == "assistant"
+                    || ["function_call", "custom_tool_call"].contains(payload["type"] as? String ?? "") {
+            if let turn, let currentUser, turnID == nil || type == "turn_context" { turnUsers[turn] = currentUser }
+            awaitingTurn = false
+        }
+        let owner: String?
+        if source == "codex", let turnID { owner = turnUsers[turnID] }
+        else { owner = currentUser }
+        if let owner { owners[record.id] = owner }
+        if source == "codex", ["task_complete", "turn_aborted"].contains(eventType ?? ""),
+           turnID == nil || turnID == turn {
+            currentUser = nil; turn = nil; awaitingTurn = false
+        }
+    }
+}
+
 enum TranscriptUsageParser {
     static let supportedSources: Set<String> = ["claude", "codex", "gemini"]
     static let maximumRequests = 50_000
@@ -135,6 +191,7 @@ enum TranscriptUsageParser {
             }
         }
         var indexes: [String: Int] = [:]
+        var userAttribution = TranscriptUserAttribution(events: transcript.events)
         var sidechainIndexes: [String: Int] = [:]
         var model = ""
         var speed: String?
@@ -171,6 +228,7 @@ enum TranscriptUsageParser {
             try Task.checkCancellation()
             sequence = record.sequence
             let root = object(record.text)
+            userAttribution.observe(record, root: root, source: source)
             let date = TranscriptJSON.date(root["timestamp"] ?? root["created_at"])
             let events = references[record.id] ?? []
             if source == "claude" {
@@ -284,6 +342,12 @@ enum TranscriptUsageParser {
         var eventIndex = Dictionary(uniqueKeysWithValues: transcript.events.enumerated().map { ($0.element.id, $0.offset) })
         let sourceRecords = records(original).reduce(into: [Int: TranscriptRecord]()) { $0[$1.sequence] = $1 }
         for index in transcript.requests.indices {
+            // Use the response's first record, not a later usage counter or tool
+            // result that may arrive after the next user message.
+            let firstEvent = transcript.requests[index].eventIDs.first.flatMap { eventIndex[$0] }
+            let firstRecord = firstEvent.flatMap { transcript.events[$0].records.min { $0.sequence < $1.sequence } }
+                ?? sourceRecords[transcript.requests[index].sequence]
+            transcript.requests[index].userEventID = firstRecord.flatMap { userAttribution.owners[$0.id] }
             if source == "claude", transcript.requests[index].billing.speed == "fast" {
                 transcript.requests[index].accountingModel = transcript.requests[index].model + "-fast"
             }

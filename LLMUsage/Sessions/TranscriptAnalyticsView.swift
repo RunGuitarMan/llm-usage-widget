@@ -52,6 +52,86 @@ struct TranscriptTokenLegend: View {
     }
 }
 
+struct TranscriptUserUsageBadge: View {
+    var requests: [TranscriptRequest]
+    var supported: Bool
+    var policy: ModelExclusionPolicy
+    var jump: (String) -> Void
+    @State private var details = false
+
+    private var usage: TokenUsage { requests.reduce(.zero) { $0 + $1.usage } }
+
+    var body: some View {
+        if !requests.isEmpty {
+            Button { details.toggle() } label: {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        Text(L10n.text("Расход обработки сообщения"))
+                        Spacer(minLength: 8)
+                        Text(L10n.text("Обращений: \(requests.count)"))
+                        Image(systemName: "chevron.down").font(.system(size: 8, weight: .semibold))
+                    }.font(.system(size: 10)).foregroundStyle(.secondary)
+                    TranscriptTokenLine(usage: usage)
+                }.contentShape(Rectangle())
+            }.buttonStyle(.plain)
+                .help(L10n.text("Связанные обращения за выбранный период, включая контекст и инструменты. Уже учтены в итоге сессии."))
+                .popover(isPresented: $details, arrowEdge: .bottom) {
+                    TranscriptUserUsageDetails(requests: requests, policy: policy) { id in
+                        details = false
+                        jump(id)
+                    }
+                }
+        } else if supported {
+            Text(L10n.text("Расход обработки не записан")).font(.system(size: 10)).foregroundStyle(.secondary)
+        }
+    }
+}
+
+struct TranscriptUserUsageDetails: View {
+    var requests: [TranscriptRequest]
+    var policy: ModelExclusionPolicy
+    var jump: (String) -> Void = { _ in }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                Text(L10n.text("Расход обработки сообщения")).font(.system(size: 12, weight: .semibold))
+                TokenUsageDetails(usage: requests.reduce(.zero) { $0 + $1.usage })
+                HStack {
+                    Text(L10n.text("Обращений: \(requests.count)")).foregroundStyle(.secondary)
+                    Spacer()
+                    Text(TranscriptUsageFormat.cost(requests.reduce(.zero) { $0 + $1.usage })).fontWeight(.semibold)
+                }.font(.system(size: 12)).monospacedDigit()
+                Text(L10n.text("Связанные обращения за выбранный период, включая контекст и инструменты. Уже учтены в итоге сессии."))
+                    .font(.system(size: 10)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                Divider()
+                LazyVStack(alignment: .leading, spacing: 12) {
+                    ForEach(requests) { request in
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack(spacing: 8) {
+                                Text("#" + (request.id.components(separatedBy: "-").last ?? request.id))
+                                    .font(.system(size: 10, design: .monospaced)).foregroundStyle(.secondary)
+                                Text(request.model.isEmpty ? L10n.text("Модель неизвестна") : request.model)
+                                    .font(.system(size: 11)).lineLimit(1).truncationMode(.middle).help(request.model)
+                                Spacer(minLength: 0)
+                                if !policy.includes(request.modelForAccounting) {
+                                    Image(systemName: "minus.circle").foregroundStyle(.secondary).help(L10n.text("Не учитывается в итогах"))
+                                }
+                                if let id = request.anchorID {
+                                    Button { jump(id) } label: { Image(systemName: "arrow.up.right") }
+                                        .buttonStyle(.plain).help(L10n.text("Перейти к сообщению"))
+                                        .accessibilityLabel(L10n.text("Перейти к сообщению"))
+                                }
+                            }
+                            TranscriptTokenLine(usage: request.usage)
+                        }
+                    }
+                }
+            }.padding(18)
+        }.frame(width: 370).frame(maxHeight: 450)
+    }
+}
+
 struct TranscriptUsageBadge: View {
     var event: TranscriptEvent
     var requests: [TranscriptRequest]
