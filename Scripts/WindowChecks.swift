@@ -25,6 +25,10 @@ struct WindowChecks {
             if !value { throw NSError(domain: "WindowChecks", code: 1, userInfo: [NSLocalizedDescriptionKey: message]) }
         }
         func settle() { RunLoop.main.run(until: Date().addingTimeInterval(0.15)) }
+        for provider in [ModelProvider.anthropic, .openai, .google] {
+            try require(ProviderLogo.images[provider]?.isValid == true, "Missing bundled vector logo: \(provider)")
+        }
+        print("PASS All three provider SVG resources load as native template images")
         func sidebarTable(in view: NSView) -> NSTableView? {
             if let table = view as? NSTableView, table.effectiveStyle == .sourceList { return table }
             return view.subviews.lazy.compactMap { sidebarTable(in: $0) }.first

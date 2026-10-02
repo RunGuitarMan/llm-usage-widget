@@ -3,8 +3,9 @@ import SwiftUI
 /// Keep padding inside the native control so the toolbar capsule and its highlight share bounds.
 private struct PeriodToolbarMenu: NSViewRepresentable {
     @ObservedObject var store: UsageStore
+    var onCustomDate: () -> Void
 
-    func makeCoordinator() -> Coordinator { Coordinator(store: store) }
+    func makeCoordinator() -> Coordinator { Coordinator(store: store, onCustomDate: onCustomDate) }
 
     func makeNSView(context: Context) -> PeriodMenuHostView {
         let button = PeriodPopUpButton(frame: .zero, pullsDown: true)
@@ -31,6 +32,7 @@ private struct PeriodToolbarMenu: NSViewRepresentable {
     func updateNSView(_ host: PeriodMenuHostView, context: Context) {
         let button = host.button
         context.coordinator.store = store
+        context.coordinator.onCustomDate = onCustomDate
         button.menu?.items.first?.title = store.period.title
         button.synchronizeTitleAndSelectedItem()
         for (index, item) in (button.menu?.items.dropFirst() ?? []).enumerated() {
@@ -46,10 +48,15 @@ private struct PeriodToolbarMenu: NSViewRepresentable {
 
     @MainActor final class Coordinator {
         var store: UsageStore
-        init(store: UsageStore) { self.store = store }
+        var onCustomDate: () -> Void
+        init(store: UsageStore, onCustomDate: @escaping () -> Void) {
+            self.store = store
+            self.onCustomDate = onCustomDate
+        }
 
         @objc func selectPeriod(_ item: NSMenuItem) {
             let period = DataPeriod.allCases[item.tag]
+            if period == .custom { onCustomDate(); return }
             guard store.period != period else { return }
             store.period = period
             Task { await store.selectPeriod() }
@@ -83,6 +90,9 @@ struct DashboardView: View {
     @ObservedObject var store: UsageStore
     @State private var visibility = NavigationSplitViewVisibility.all
     @State private var showTokenDetails = false
+    @State private var overviewSort = OverviewSessionSort.cost
+    @State private var datePopover: DatePopoverAnchor?
+    private enum DatePopoverAnchor { case period, date }
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Namespace private var summaryActions
 
@@ -201,19 +211,22 @@ struct DashboardView: View {
         if store.tab != .settings {
             ToolbarItem(placement: .automatic) {
                 if store.period == .custom {
-                    DatePicker(L10n.text("Дата"), selection: Binding(get: { store.customDate }, set: { date in
-                        store.customDate = date
-                        Task { await store.selectPeriod() }
-                    }), in: ...Date(), displayedComponents: .date)
-                        .labelsHidden().frame(width: 115)
-                        .environment(\.timeZone, TimeZone(identifier: store.timezone)!)
+                    Button { datePopover = .date } label: {
+                        Label(UsageFormat.date(store.customDate, timezone: store.timezone), systemImage: "calendar")
+                            .labelStyle(.titleAndIcon).font(.system(size: 13)).fixedSize()
+                    }
+                    .disabled(store.isDemo)
+                    .help(L10n.text("Выбрать дату"))
+                    .accessibilityLabel(L10n.text("Выбрать дату: \(UsageFormat.date(store.customDate, timezone: store.timezone))"))
+                    .popover(isPresented: calendarPresented(at: .date)) { calendarPopover }
                 }
             }
             if store.period == .custom {
                 ToolbarSpacer(.fixed, placement: .primaryAction)
             }
             ToolbarItem(placement: .primaryAction) {
-                PeriodToolbarMenu(store: store).fixedSize()
+                PeriodToolbarMenu(store: store) { datePopover = .period }.fixedSize()
+                    .popover(isPresented: calendarPresented(at: .period)) { calendarPopover }
             }
             ToolbarSpacer(.fixed, placement: .primaryAction)
         }
@@ -224,6 +237,19 @@ struct DashboardView: View {
             }
             .keyboardShortcut("r").disabled(store.isRefreshing || store.isDemo)
             .help(L10n.text("Обновить статистику · ⌘R")).accessibilityLabel(L10n.text("Обновить статистику"))
+        }
+    }
+
+    private func calendarPresented(at anchor: DatePopoverAnchor) -> Binding<Bool> {
+        Binding(get: { datePopover == anchor }, set: { if !$0 && datePopover == anchor { datePopover = nil } })
+    }
+
+    private var calendarPopover: some View {
+        UsageDatePopover(date: store.selectedDay.date, timezone: store.timezone) { date in
+            datePopover = nil
+            Task { await store.selectCustomDate(date) }
+        } onCancel: {
+            datePopover = nil
         }
     }
 
@@ -265,29 +291,41 @@ struct DashboardView: View {
                     sourceSpending(snapshot)
                 }
                 VStack(alignment: .leading, spacing: 12) {
-                    HStack {
-                        Text(L10n.text("Основные расходы")).font(.system(size: 15, weight: .semibold))
-                        Spacer()
-                        Text(L10n.text("По стоимости")).font(.system(size: 12)).foregroundStyle(.secondary)
+                    HStack(alignment: .firstTextBaseline, spacing: 12) {
+                        Text(overviewSort.heading).font(.system(size: 15, weight: .semibold))
+                            .lineLimit(1).minimumScaleFactor(0.85)
+                        Spacer(minLength: 0)
+                        Menu {
+                            Picker(L10n.text("Сортировка"), selection: $overviewSort) {
+                                ForEach(OverviewSessionSort.allCases) { sort in
+                                    Text(sort.title + " · " + sort.orderDescription).tag(sort)
+                                }
+                            }
+                        } label: {
+                            Label(overviewSort.title, systemImage: "arrow.down")
+                                .font(.system(size: 12)).fixedSize()
+                        }
+                        .menuStyle(.borderlessButton).fixedSize()
+                        .help(L10n.text("Сортировка: \(overviewSort.title) · \(overviewSort.orderDescription)"))
+                        .accessibilityLabel(L10n.text("Сортировка"))
+                        .accessibilityValue(overviewSort.title + ", " + overviewSort.orderDescription)
                     }
+                    .padding(.leading, 18).padding(.trailing, 39)
                     if snapshot.sessions.isEmpty {
                         DashboardSection { EmptyUsageView() }
                     } else {
                         DashboardSection {
-                            let rows = Array(SessionSort.cost.sorted(snapshot.sessions).prefix(5))
+                            let rows = overviewSort.sessions(in: snapshot)
                             ForEach(Array(rows.enumerated()), id: \.element.id) { index, session in
-                                if index > 0 { Divider().padding(.leading, 56) }
+                                if index > 0 { Divider().padding(.leading, 60).padding(.trailing, 18) }
                                 SessionSummaryRow(session: session, timezone: snapshot.day.timezone,
-                                                  selected: store.selectedSessionID == session.id,
-                                                  share: snapshot.totals.cost > 0 ? session.usage.cost / snapshot.totals.cost : 0) {
+                                                  selected: store.selectedSessionID == session.id) {
                                     store.selectedSessionID = session.id
                                 }
                             }
                         }.clipShape(RoundedRectangle(cornerRadius: 18))
                     }
                 }
-                Text(L10n.text("Данные на этом Mac · Стоимость рассчитана по тарифам ccusage"))
-                    .font(.system(size: 10)).foregroundStyle(.tertiary)
             }
             .padding(30).frame(maxWidth: 1000, alignment: .leading).frame(maxWidth: .infinity)
         }

@@ -8,6 +8,7 @@ A native macOS 26 app that shows token usage and estimated costs from local AI c
 ## What it does
 
 - Shows daily totals, a seven-day spending chart, and usage by model and session.
+- Overview ranks the top five sessions by cost, tokens or recent activity. Model-provider logos identify Anthropic, OpenAI and Google independently of the coding agent; mixed and unknown providers use neutral icons. Each row's token bar shows that session's token composition, with exact categories in its tooltip.
 - Filters by date, source and model; searches sessions and local chat transcripts.
 - Breaks down chat request tokens and estimated cost for Claude Code, Codex and Gemini, with costliest requests and tool-call frequency.
 - Excludes models by exact name from token and cost totals for every date; Z.ai / GLM are excluded by default.
@@ -39,6 +40,8 @@ Open the small **Excluded models** button beside the Models summary, or **Settin
 The **Models** tab shows original tokens and estimated costs for reference, including excluded models, for the selected date and source. Excluded rows are labeled **Excluded from totals** and have no spending-share bar; the **Included spending** header still follows exclusions. Expanded token details also use the original values. Mixed sessions without a complete breakdown remain one combined reference row rather than duplicating usage across models. This reference view never changes Overview, Sessions, history, menu or widget totals.
 
 Opening session details increases the dashboard's minimum width to keep the sidebar and content visible. While the menu popover is open, its content updates immediately and the status item's size stays fixed; the badge catches up when the popover closes.
+
+Choose **Other date** to open a calendar, or click the date in the toolbar to change it. Browsing the calendar does not reload the report; selecting a day applies it, and Escape cancels. The full session ID and its copy button are under **Additional information** in the session inspector.
 
 ## Install a ready-made app
 

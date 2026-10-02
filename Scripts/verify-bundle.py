@@ -21,6 +21,8 @@ def inspect(bundle):
     return info, entitlements
 
 host, _ = inspect(app)
+for provider in ["anthropic", "openai", "google"]:
+    assert (app / "Contents/Resources/Providers" / f"{provider}.svg").is_file(), f"Missing provider logo: {provider}"
 extension, entitlements = inspect(widget)
 assert extension["NSExtension"]["NSExtensionPointIdentifier"] == "com.apple.widgetkit-extension"
 assert extension["CFBundlePackageType"] == "XPC!"

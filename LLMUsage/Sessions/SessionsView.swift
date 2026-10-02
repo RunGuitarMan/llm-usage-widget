@@ -208,6 +208,12 @@ struct SessionDetailView: View {
     @State private var showMetadata = false
     @State private var chatSession: SessionChatSelection?
 
+    init(store: UsageStore, sessionID: String, initiallyExpandedMetadata: Bool = false) {
+        self.store = store
+        self.sessionID = sessionID
+        _showMetadata = State(initialValue: initiallyExpandedMetadata)
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
@@ -221,27 +227,14 @@ struct SessionDetailView: View {
                     VStack(alignment: .leading, spacing: 9) {
                         SourceBadge(source: session.sourceID)
                         Text(session.modelLabel).font(.system(size: 18, weight: .semibold)).textSelection(.enabled)
-                        HStack(spacing: 8) {
-                            Text(session.shortID).font(.system(size: 11, design: .monospaced)).foregroundStyle(.secondary)
-                            Button {
-                                NSPasteboard.general.clearContents()
-                                NSPasteboard.general.setString(session.rawID, forType: .string)
-                                copied = true
-                            } label: { Image(systemName: copied ? "checkmark" : "doc.on.doc").font(.system(size: 11)) }
-                                .buttonStyle(.borderless).help(copied ? L10n.text("Скопировано") : L10n.text("Скопировать полный ID"))
-                        }
                     }
                     Button {
                         chatSession = .init(session: session, day: store.snapshot?.day ?? store.selectedDay,
                                             policy: store.modelExclusionPolicy, customPath: store.customPath, pricingKey: store.snapshot?.pricingKey)
                     } label: {
-                        HStack(spacing: 9) {
-                            Image(systemName: "text.bubble")
-                            Text(L10n.text("Просмотреть чат"))
-                            Spacer(minLength: 0)
-                            Image(systemName: "arrow.up.right").font(.system(size: 10, weight: .medium))
-                        }.font(.system(size: 12, weight: .medium)).padding(.vertical, 5)
-                    }.buttonStyle(.borderedProminent).controlSize(.large)
+                        Label(L10n.text("Просмотреть чат"), systemImage: "text.bubble")
+                            .font(.system(size: 12, weight: .medium))
+                    }.buttonStyle(.bordered).controlSize(.regular).fixedSize()
                         .help(L10n.text("Сообщения, ответы и действия в этой сессии"))
                     VStack(alignment: .leading, spacing: 5) {
                         Text(UsageFormat.cost(session.usage)).font(.system(size: 44, weight: .semibold)).tracking(-1.5)
@@ -256,7 +249,27 @@ struct SessionDetailView: View {
                     Divider()
                     DisclosureGroup(L10n.text("Дополнительная информация"), isExpanded: $showMetadata) {
                         VStack(alignment: .leading, spacing: 16) {
-                            metadata("ID", value: session.rawID, monospaced: true)
+                            VStack(alignment: .leading, spacing: 5) {
+                                HStack(spacing: 8) {
+                                    Text("ID").font(.caption).foregroundStyle(.secondary)
+                                    Spacer()
+                                    if copied { Text(L10n.text("Скопировано")).font(.caption).foregroundStyle(.secondary) }
+                                    Button {
+                                        NSPasteboard.general.clearContents()
+                                        NSPasteboard.general.setString(session.rawID, forType: .string)
+                                        copied = true
+                                    } label: {
+                                        Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                                            .font(.system(size: 11)).frame(width: 24, height: 24)
+                                    }
+                                    .buttonStyle(.borderless)
+                                    .help(L10n.text("Скопировать полный ID"))
+                                    .accessibilityLabel(L10n.text("Скопировать полный ID"))
+                                    .accessibilityValue(copied ? L10n.text("Скопировано") : "")
+                                }
+                                Text(session.rawID).font(.system(size: 11, design: .monospaced))
+                                    .textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+                            }
                             metadata(L10n.text("Последняя активность"), value: UsageFormat.activity(session, timezone: store.timezone) + " · " + store.timezone)
                             if let path = session.projectPath, !path.isEmpty { metadata(L10n.text("Проект"), value: path) }
                             if let reasoning = session.reasoningOutputTokens, reasoning > 0, session.usage.reportedAmounts == nil {
@@ -277,6 +290,10 @@ struct SessionDetailView: View {
             }.padding(22)
         }
         .onChange(of: sessionID) { _, _ in copied = false; showMetadata = false }
+        .task(id: copied) {
+            guard copied else { return }
+            do { try await Task.sleep(for: .seconds(2)); copied = false } catch { }
+        }
         .sheet(item: $chatSession) { selection in
             SessionChatView(session: selection.session, timezone: selection.day.timezone, isDemo: store.isDemo,
                             day: selection.day, policy: selection.policy,

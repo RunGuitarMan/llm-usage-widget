@@ -295,6 +295,16 @@ final class UsageStore: ObservableObject {
         reloadWidget()
     }
 
+    /// The calendar browses locally; only a confirmed day changes the report.
+    func selectCustomDate(_ date: Date) async {
+        let day = UsageDay(date: date, timezone: timezone)
+        guard day.date <= UsageDay(date: now(), timezone: timezone).date else { return }
+        guard period != .custom || selectedDay != day else { return }
+        customDate = day.date
+        period = .custom
+        await selectPeriod()
+    }
+
     func selectPeriod() async {
         selectedSessionID = nil
         snapshot = cache[selectedDay.cacheKey]

@@ -108,6 +108,7 @@ struct UsageSession: Codable, Equatable, Identifiable, Sendable {
         return UsageFormat.shortID(basename.isEmpty ? rawID : basename)
     }
     var modelLabel: String { models.isEmpty ? L10n.text("Модель неизвестна") : models.joined(separator: ", ") }
+    var modelProvider: ModelProvider { .resolve(models: models + modelBreakdowns.map(\.id)) }
 
     var usageComponents: [ModelUsageComponent] {
         let total = modelBreakdowns.reduce(TokenUsage.zero) { $0 + $1.usage.reported }
@@ -134,6 +135,62 @@ struct UsageSession: Codable, Equatable, Identifiable, Sendable {
             return adjusted
         }
         return result
+    }
+}
+
+/// Model authorship is independent of the CLI agent (and of a routing service).
+/// Unknown model names deliberately do not inherit the agent's vendor.
+enum ModelProvider: String, CaseIterable, Sendable {
+    case anthropic, openai, google, custom, mixed
+
+    var title: String {
+        switch self {
+        case .anthropic: return "Anthropic"
+        case .openai: return "OpenAI"
+        case .google: return "Google"
+        case .custom: return L10n.text("Другой или неизвестный провайдер")
+        case .mixed: return L10n.text("Несколько провайдеров")
+        }
+    }
+
+    static func resolve(models: [String]) -> Self {
+        let names = models.map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }.filter { !$0.isEmpty }
+        let providers = Set(names.map { name -> Self in
+            // Match whole family prefixes, including namespaces used by routers
+            // and Bedrock (e.g. openrouter/anthropic/claude-… or us.anthropic.claude-…).
+            if name.range(of: #"(?:^|[/.:])(?:claude|opus|sonnet|haiku)(?:$|[-_.])"#, options: .regularExpression) != nil { return .anthropic }
+            if name.range(of: #"(?:^|[/.:])(?:gpt(?:$|[-_.])|chatgpt(?:$|[-_.])|o[1-9][0-9]*(?:$|[-_.]))"#, options: .regularExpression) != nil { return .openai }
+            if name.range(of: #"(?:^|[/.:])(?:gemini|gemma)(?:$|[-_.])"#, options: .regularExpression) != nil { return .google }
+            return .custom
+        })
+        return providers.count > 1 ? .mixed : providers.first ?? .custom
+    }
+}
+
+/// Overview ranks the entire filtered report before selecting its five rows.
+enum OverviewSessionSort: String, CaseIterable, Identifiable {
+    case cost, tokens, activity
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .cost: return L10n.text("Стоимость")
+        case .tokens: return L10n.text("Токены")
+        case .activity: return L10n.text("Активность")
+        }
+    }
+    var heading: String {
+        switch self {
+        case .cost: return L10n.text("Основные расходы")
+        case .tokens: return L10n.text("Больше всего токенов")
+        case .activity: return L10n.text("Последняя активность")
+        }
+    }
+    var orderDescription: String {
+        self == .activity ? L10n.text("Сначала недавние") : L10n.text("По убыванию")
+    }
+    func sessions(in snapshot: UsageSnapshot) -> [UsageSession] {
+        let sort: SessionSort = self == .cost ? .cost : self == .tokens ? .tokens : .activity
+        return Array(sort.sorted(snapshot.sessions).prefix(5))
     }
 }
 

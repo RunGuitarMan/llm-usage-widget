@@ -33,6 +33,7 @@ struct RenderPreviews {
                     || (requestedNames.contains("--sidebars") && name.hasPrefix("sidebar-"))
                     || (requestedNames.contains("--models") && name.hasPrefix("models"))
                     || (requestedNames.contains("--chat") && name.hasPrefix("session-chat"))
+                    || (requestedNames.contains("--ui-polish") && (name.hasPrefix("polish-") || name.hasPrefix("overview-")))
                     || (requestedNames.contains("--menus") && name.hasPrefix("menu-dropdown")) else { return }
             let appearance = NSAppearance(named: dark ? .darkAqua : .aqua)!
             app.appearance = appearance
@@ -58,6 +59,36 @@ struct RenderPreviews {
         }
         for dark in [false, true] {
             let suffix = dark ? "dark" : "light"
+            let rowUsage = TokenUsage(input: 460, output: 85_337, cacheCreate: 1_844_043, cacheRead: 32_397_328, cost: 17.41)
+            let rowSessions: [UsageSession] = [
+                .init(id: "db11b858-cb3a-484c-a6b2-57ea64bf91c0", models: ["claude-opus-5-5"], usage: rowUsage, lastActivity: Date()),
+                .init(id: "openai-row", models: ["openai/gpt-6-astra"], usage: .init(input: 4000, output: 800, cacheRead: 12000, cost: 4.52), agent: "opencode"),
+                .init(id: "google-row", models: ["gemini-2.5-pro"], usage: .init(input: 1000, output: 2000, cost: 1.37, additional: 2000), agent: "gemini"),
+                .init(id: "custom-row", models: ["custom-model-with-a-long-name-and-release-version"], usage: .zero, agent: "opencode"),
+                .init(id: "mixed-row", models: ["claude-sonnet-4.6", "gpt-6-astra"], usage: rowUsage, agent: "opencode"),
+                .init(id: "huge-row", models: ["gpt-6-astra"], usage: .init(input: 123_456_789, cost: 123_456.78), agent: "codex")
+            ]
+            for width: CGFloat in [370, 520, 880] {
+                let rows = DashboardSection {
+                    ForEach(Array(rowSessions.enumerated()), id: \.element.id) { index, session in
+                        if index > 0 { Divider().padding(.leading, 60).padding(.trailing, 18) }
+                        SessionSummaryRow(session: session, timezone: "Europe/Moscow", selected: index == 1) { }
+                    }
+                }.clipShape(RoundedRectangle(cornerRadius: 18)).padding(20)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                    .background(Color(nsColor: .windowBackgroundColor))
+                try render(rows, name: "polish-rows-\(Int(width))-\(suffix)", size: .init(width: width, height: width < 600 ? 620 : 430), dark: dark)
+            }
+            let detailsStore = previewStore()
+            detailsStore.selectedSessionID = detailsStore.snapshot!.sessions[0].id
+            for width: CGFloat in [280, 360] {
+                try render(SessionDetailView(store: detailsStore, sessionID: detailsStore.selectedSessionID!, initiallyExpandedMetadata: true)
+                    .background(Color(nsColor: .windowBackgroundColor)), name: "polish-inspector-\(Int(width))-\(suffix)",
+                           size: .init(width: width, height: 760), dark: dark)
+            }
+            try render(UsageDatePopover(date: Date(), timezone: "Europe/Moscow", onSelect: { _ in }, onCancel: {})
+                .background(Color(nsColor: .windowBackgroundColor)), name: "polish-calendar-\(suffix)",
+                       size: .init(width: 320, height: 350), dark: dark)
             let modelsStore = previewStore()
             modelsStore.tab = .models
             modelsStore.setModelIncluded(false, model: "gpt-6-astra")

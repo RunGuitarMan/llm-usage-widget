@@ -123,6 +123,69 @@ private final class RegressionSearchGate: @unchecked Sendable {
 /// Shared by XCTest and the CLT harness, so regression coverage does not diverge.
 enum RegressionScenarios {
     @MainActor static func run(check: (String, () async throws -> Void) async -> Void) async {
+        await check("Overview: model logos follow model families across agents, namespaces and mixed sessions") {
+            let cases: [(String, ModelProvider)] = [
+                ("claude-opus-5-5", .anthropic), (" OpenRouter/Anthropic/Claude-Sonnet-4.6 ", .anthropic),
+                ("us.anthropic.claude-opus-4-6-v1:0", .anthropic), ("sonnet-4", .anthropic),
+                ("gpt-6-astra", .openai), ("azure/openai/gpt-5", .openai), ("openai:o3-mini", .openai),
+                ("chatgpt-4o-latest", .openai), ("google/gemini-2.5-pro", .google), ("gemma-3-27b", .google),
+                ("glm-5", .custom), ("my-claude-wrapper", .custom), ("gptish", .custom), ("o123wrapper", .custom)
+            ]
+            for (name, provider) in cases {
+                let session = UsageSession(id: "provider", models: [name], usage: .zero, agent: "opencode")
+                try requireRegression(session.modelProvider == provider, "Wrong provider for \(name)")
+            }
+            try requireRegression(UsageSession(id: "empty", models: [], usage: .zero, agent: "claude").modelProvider == .custom,
+                                  "Agent incorrectly substituted for unknown model provider")
+            try requireRegression(ModelProvider.resolve(models: ["claude-opus", "claude-sonnet"]) == .anthropic
+                && ModelProvider.resolve(models: ["claude-opus", "gpt-6"]) == .mixed
+                && ModelProvider.resolve(models: ["claude-opus", "custom-model"]) == .mixed, "Mixed provider identity lost")
+            let breakdownOnly = UsageSession(id: "breakdown", models: [], usage: .zero,
+                                             modelBreakdowns: [.init(id: "gemini-2.5-pro", usage: .zero)])
+            try requireRegression(breakdownOnly.modelProvider == .google, "Model breakdown names ignored")
+        }
+        await check("Overview: ranking precedes the five-row limit and respects source and exclusion filters") {
+            let sessions: [UsageSession] = (0..<8).map { index in
+                let model = index == 7 ? "glm-5" : "gpt-6"
+                let source = index == 0 ? "claude" : "codex"
+                let usage = TokenUsage(input: Int64(100 - index), cost: Double(index))
+                return UsageSession(id: "s\(index)", models: [model], usage: usage,
+                                    lastActivity: Date(timeIntervalSince1970: Double(index)), agent: source)
+            }
+            let snapshot = UsageSnapshot(generatedAt: Date(), day: .init(), sessions: sessions).applyingExclusions(.init())
+            let cost = OverviewSessionSort.cost.sessions(in: snapshot.filtered(source: "codex"))
+            try requireRegression(cost.map(\.id) == ["s6", "s5", "s4", "s3", "s2"], "Ranking truncated before sort or included excluded cost")
+            try requireRegression(OverviewSessionSort.tokens.sessions(in: snapshot).map(\.id) == ["s0", "s1", "s2", "s3", "s4"], "Token ranking incorrect")
+            try requireRegression(OverviewSessionSort.activity.sessions(in: snapshot).map(\.id) == ["s7", "s6", "s5", "s4", "s3"], "Activity ranking incorrect")
+            var tied = snapshot
+            tied.sessions = [sessions[1], sessions[0]].map { var session = $0; session.usage.cost = 1; return session }
+            try requireRegression(OverviewSessionSort.cost.sessions(in: tied).map(\.id) == ["s0", "s1"], "Equal costs reorder nondeterministically")
+            tied.sessions = []
+            try requireRegression(OverviewSessionSort.cost.sessions(in: tied).isEmpty, "Empty report produced rows")
+        }
+        await check("Calendar: committed dates use report timezone, reject future days and avoid duplicate loads") {
+            let suite = "CalendarRegression.\(UUID().uuidString)"
+            let defaults = UserDefaults(suiteName: suite)!
+            defaults.set("Europe/Moscow", forKey: "timezone")
+            defer { defaults.removePersistentDomain(forName: suite) }
+            let clock = RegressionClock(), service = RegressionService(), repository = RegressionRepository()
+            let store = UsageStore(service: service, repository: repository, defaults: defaults, now: { clock.now }, reloadWidget: {})
+            let date = ISO8601DateFormatter().date(from: "2026-09-14T23:30:00Z")!
+            await store.selectCustomDate(date)
+            await store.waitForHistoryBackfill()
+            let day = store.selectedDay
+            try requireRegression(store.period == .custom && day.key == "20260915"
+                && store.customDate == day.date && store.snapshot?.day == day, "Calendar date was applied in the wrong timezone")
+            let count = await service.count(day)
+            try requireRegression(count == 1, "Date selection requested the historical report more than once")
+            store.selectedSessionID = store.snapshot?.sessions.first?.id
+            let selected = store.selectedSessionID
+            await store.selectCustomDate(date.addingTimeInterval(3600))
+            await store.selectCustomDate(clock.now.addingTimeInterval(86400))
+            let finalCount = await service.count(day)
+            try requireRegression(finalCount == count && store.selectedSessionID == selected && store.selectedDay == day,
+                                  "Same-day or future selection reloaded data or cleared the inspector")
+        }
         await check("Amounts: exclusions and missing prices retain the dollar sign without inequality symbols") {
             let language = L10n.preference
             defer { L10n.preference = language }

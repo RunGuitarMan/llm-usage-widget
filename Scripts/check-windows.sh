@@ -2,6 +2,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 mkdir -p build/ModuleCache
+ditto LLMUsage/Resources/Providers build/Providers
 source Scripts/toolchain.sh
 SOURCES=(LLMUsage/App/RefreshSchedule.swift LLMUsage/App/UsageStore.swift LLMUsage/App/MenuBarBadge.swift
          LLMUsage/App/MenuBarUsageView.swift LLMUsage/App/MenuBarController.swift
