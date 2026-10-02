@@ -154,11 +154,13 @@ protocol CCUsageServing: Sendable {
 struct CCUsageService: CCUsageServing {
     let resolver = CCUsageExecutableResolver()
     let runner = ProcessRunner()
-    var pricing: any ClaudePricingProviding = ClaudePricingCache()
+    var pricing: any ClaudePricingProviding = ClaudePricingCache(includeTranscriptModels: true)
+    var pricingArchive = TranscriptPricingArchive()
 
     static func arguments(for day: UsageDay, report: CCUsageDecoder.Report) -> [String] {
         // Explicitly override offline defaults in the user's ccusage config.
-        // Cached Claude overrides survive network failures; other sources keep CLI pricing.
+        // Cached transcript-model overrides survive network failures; the CLI
+        // still owns calculation rules and fallback model pricing.
         let command = report == .claude ? ["claude", "session", "--json"] : ["session", "--json", "--all"]
         return command + ["--since", day.key, "--until", day.key,
                           "--timezone", day.timezone, "--mode", "calculate", "--order", "desc", "--no-offline"]
@@ -170,18 +172,23 @@ struct CCUsageService: CCUsageServing {
         let configurationDirectory = FileManager.default.temporaryDirectory.appendingPathComponent("llmusage-pricing-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: configurationDirectory) }
         var pricingArguments: [String] = []
+        let contents = try CCUsagePricingConfiguration.contents(prices: prices, environment: ProcessRunner.environment(for: executable))
+        let pricingKey = try? pricingArchive.save(configuration: contents, environment: ProcessRunner.environment(for: executable))
         if !prices.isEmpty {
             try FileManager.default.createDirectory(at: configurationDirectory, withIntermediateDirectories: true,
                                                     attributes: [.posixPermissions: 0o700])
             let configuration = configurationDirectory.appendingPathComponent("ccusage.json")
-            let contents = try CCUsagePricingConfiguration.contents(prices: prices, environment: ProcessRunner.environment(for: executable))
             try contents.write(to: configuration, options: .atomic)
             try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: configuration.path)
             pricingArguments = ["--config", configuration.path]
         }
         let extraArguments = pricingArguments
         async let claude = fetchReport(.claude, day: day, executable: executable, extraArguments: extraArguments)
-        guard mode == .allAgents else { return try await claude }
+        guard mode == .allAgents else {
+            var result = try await claude
+            result.pricingKey = pricingKey
+            return result
+        }
 
         async let unified = fetchReport(.unified, day: day, executable: executable, extraArguments: extraArguments)
         let (focused, combined) = try await (claude, unified)
@@ -190,7 +197,7 @@ struct CCUsageService: CCUsageServing {
         // Always replace Claude, including when its focused report is empty.
         let sessions = combined.sessions.filter { $0.sourceID != "claude" } + focused.sessions
         guard sessions.count <= 100_000 else { throw UsageError.outputTooLarge }
-        return .init(generatedAt: Date(), day: day, sessions: sessions)
+        return .init(generatedAt: Date(), day: day, sessions: sessions, pricingKey: pricingKey)
     }
     private func fetchReport(_ report: CCUsageDecoder.Report, day: UsageDay, executable: URL, extraArguments: [String]) async throws -> UsageSnapshot {
         let result = try await runner.run(executable: executable, arguments: Self.arguments(for: day, report: report) + extraArguments)

@@ -60,7 +60,8 @@ struct WindowChecks {
         for language in [InterfaceLanguage.english, .russian] {
             print("Checking window language: \(language.rawValue)")
             store.interfaceLanguage = language
-            let host = NSHostingView(rootView: DashboardView(store: store))
+            // Geometry checks resize immediately; do not race native inspector animations.
+            let host = NSHostingView(rootView: DashboardView(store: store).transaction { $0.disablesAnimations = true })
             let window = NSWindow(contentRect: NSRect(x: -8000, y: -8000, width: 860, height: 560),
                                   styleMask: [.titled, .resizable], backing: .buffered, defer: false)
             window.contentView = host
@@ -111,6 +112,44 @@ struct WindowChecks {
             window.contentView = nil
         }
         print("PASS Dashboard minimum width reserves sidebar, content and inspector in both languages")
+
+        for language in [InterfaceLanguage.english, .russian] {
+            store.interfaceLanguage = language
+            let transcript = TranscriptPreview.sample
+            for timing in [transcript.events[0].timing!, TranscriptTiming(kind: .processing),
+                           TranscriptTiming(kind: .tool, duration: 0.25, evidence: .recorded)] {
+                let details = NSHostingView(rootView: TranscriptTimingDetails(timing: timing, timezone: "UTC")
+                    .padding(18).frame(width: 340))
+                let size = details.fittingSize
+                try require(abs(size.width - 340) <= 1 && size.height > 80 && size.height < 500,
+                            "Timing popover has invalid intrinsic size in \(language): \(size)")
+            }
+            var session = store.snapshot!.sessions[0]
+            session.usage = transcript.requests.reduce(.zero) { $0 + $1.usage }
+            let configurations = TranscriptAnalysisTab.allCases.map { ($0, TranscriptEventFilter.all) }
+                + [(TranscriptAnalysisTab.chat, .tools), (.chat, .errors)]
+            for (tab, filter) in configurations {
+                let chat = SessionChatView(session: session, timezone: "UTC", isDemo: true, preview: transcript,
+                                           day: UsageDay(date: transcript.requests[0].timestamp!), initialTab: tab,
+                                           initialFilter: filter, initiallyExpandedTools: filter == .all ? [] : ["3", "7"])
+                let host = NSHostingView(rootView: chat)
+                let window = NSWindow(contentRect: NSRect(x: -8000, y: -8000, width: 680, height: 640),
+                                      styleMask: [.titled, .resizable], backing: .buffered, defer: false)
+                window.contentView = host
+                window.orderFront(nil)
+                for width: CGFloat in [680, 900, 680] {
+                    window.setContentSize(.init(width: width, height: 640))
+                    settle(); host.layoutSubtreeIfNeeded(); settle()
+                    try require(try checkBounds(host, host: host) > 0, "Chat check did not inspect scroll/search views")
+                    try require(abs(host.bounds.width - width) <= 1 && window.contentMinSize.width <= 681,
+                                "Chat cannot fit \(width)px (actual: \(host.bounds.width), minimum: \(window.contentMinSize.width))")
+                }
+                window.orderOut(nil)
+                window.contentView = nil
+            }
+        }
+        print("PASS Chat, costliest requests, tools and expanded debug filters fit 680/900px in both languages")
+        print("PASS Timing popover intrinsic size stays bounded for complete, unknown and tool metrics in both languages")
 
         store.tab = .overview
         for dark in [false, true] {

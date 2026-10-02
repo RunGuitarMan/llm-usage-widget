@@ -29,15 +29,19 @@ actor ClaudePricingCache: ClaudePricingProviding {
 
     private let directory: URL
     private let fetch: Fetch
+    private let includeTranscriptModels: Bool
+    private var cacheFilename: String { includeTranscriptModels ? "chat-pricing-v1.json" : Self.filename }
     private var saved: Saved?
     private var loaded = false
     private var pending: Task<ClaudePricingOverrides, Error>?
 
     init(directory: URL = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent("Library/Application Support/LLMUsage/Pricing", isDirectory: true),
+         includeTranscriptModels: Bool = false,
          fetch: @escaping Fetch = { try await ClaudePricingCache.download(etag: $0) }) {
         self.directory = directory
         self.fetch = fetch
+        self.includeTranscriptModels = includeTranscriptModels
     }
 
     func refresh() async throws -> ClaudePricingOverrides {
@@ -58,13 +62,21 @@ actor ClaudePricingCache: ClaudePricingProviding {
     private func update() async throws -> ClaudePricingOverrides {
         if !loaded {
             loaded = true
-            let url = directory.appendingPathComponent(Self.filename)
+            let url = directory.appendingPathComponent(cacheFilename)
             if let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize,
                size <= Self.maximumBytes, let data = try? Data(contentsOf: url) {
                 let decoder = JSONDecoder()
                 decoder.dateDecodingStrategy = .iso8601
                 if let value = try? decoder.decode(Saved.self, from: data), value.schemaVersion == 1,
-                   Self.validates(value.prices) { saved = value }
+                   Self.validates(value.prices, includeTranscriptModels: includeTranscriptModels) { saved = value }
+            }
+            // Upgrade without losing Claude tariffs on the first offline launch.
+            if saved == nil, includeTranscriptModels,
+               let data = try? Data(contentsOf: directory.appendingPathComponent(Self.filename)) {
+                let decoder = JSONDecoder(); decoder.dateDecodingStrategy = .iso8601
+                if var value = try? decoder.decode(Saved.self, from: data), value.schemaVersion == 1, Self.validates(value.prices) {
+                    value.etag = nil; saved = value
+                }
             }
         }
         let response: PricingResponse
@@ -75,7 +87,7 @@ actor ClaudePricingCache: ClaudePricingProviding {
             try persist(value)
             return value.prices
         }
-        guard response.status == 200, let fresh = try? Self.parse(response.data), !fresh.isEmpty else {
+        guard response.status == 200, let fresh = try? Self.parse(response.data, includeTranscriptModels: includeTranscriptModels), !fresh.isEmpty else {
             return saved?.prices ?? [:]
         }
         // A removed or malformed entry must not erase a previously usable tariff.
@@ -86,7 +98,7 @@ actor ClaudePricingCache: ClaudePricingProviding {
     }
 
     private func persist(_ value: Saved) throws {
-        try SnapshotFiles.write(value, name: Self.filename, directory: directory)
+        try SnapshotFiles.write(value, name: cacheFilename, directory: directory)
         saved = value
     }
 
@@ -118,13 +130,13 @@ actor ClaudePricingCache: ClaudePricingProviding {
         ("max_input_tokens", "maxInputTokens")
     ]
 
-    static func parse(_ data: Data) throws -> ClaudePricingOverrides {
+    static func parse(_ data: Data, includeTranscriptModels: Bool = false) throws -> ClaudePricingOverrides {
         guard data.count <= maximumBytes,
               let root = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             throw URLError(.cannotParseResponse)
         }
         var result: ClaudePricingOverrides = [:]
-        for (model, raw) in root where model.lowercased().contains("claude") {
+        for (model, raw) in root where accepts(model, includeTranscriptModels: includeTranscriptModels) {
             guard let entry = raw as? [String: Any] else { continue }
             var rates: [String: Double] = [:]
             var invalid = false
@@ -156,10 +168,16 @@ actor ClaudePricingCache: ClaudePricingProviding {
         return value.doubleValue
     }
 
-    private static func validates(_ prices: ClaudePricingOverrides) -> Bool {
+    private static func accepts(_ model: String, includeTranscriptModels: Bool) -> Bool {
+        let name = model.lowercased()
+        return name.contains("claude") || (includeTranscriptModels &&
+            (name.contains("gpt-") || name.contains("gemini") || name.range(of: #"(?:^|/)o[1-9](?:$|-)"#, options: .regularExpression) != nil))
+    }
+
+    private static func validates(_ prices: ClaudePricingOverrides, includeTranscriptModels: Bool = false) -> Bool {
         let allowed = Set(fields.map(\.1) + ["fastMultiplier"])
         return !prices.isEmpty && prices.count <= 100_000 && prices.allSatisfy { model, rates in
-            model.lowercased().contains("claude") && rates["inputCostPerToken"] != nil
+            accepts(model, includeTranscriptModels: includeTranscriptModels) && rates["inputCostPerToken"] != nil
                 && rates["outputCostPerToken"] != nil && rates["cacheCreationInputTokenCost"] != nil
                 && rates["cacheReadInputTokenCost"] != nil && rates.allSatisfy { key, value in
                     allowed.contains(key) && value.isFinite && value >= 0

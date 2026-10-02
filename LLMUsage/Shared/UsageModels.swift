@@ -242,6 +242,7 @@ struct UsageSnapshot: Codable, Equatable, Sendable {
     var generatedAt: Date
     var day: UsageDay
     var sessions: [UsageSession]
+    var pricingKey: String? = nil
     // Derived totals prevent a stale or inconsistent CLI totals object from contradicting rows.
     var totals: TokenUsage { sessions.reduce(.zero) { $0 + $1.usage } }
     var topModel: String { modelSummaries.first?.id ?? "—" }

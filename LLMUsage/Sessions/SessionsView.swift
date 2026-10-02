@@ -191,13 +191,22 @@ struct SessionSearchField: NSViewRepresentable {
     }
 }
 
+private struct SessionChatSelection: Identifiable {
+    var id = UUID()
+    var session: UsageSession
+    var day: UsageDay
+    var policy: ModelExclusionPolicy
+    var customPath: String
+    var pricingKey: String?
+}
+
 /// An inspector keeps the selected session's context visible in the dashboard/table.
 struct SessionDetailView: View {
     @ObservedObject var store: UsageStore
     var sessionID: String
     @State private var copied = false
     @State private var showMetadata = false
-    @State private var chatSession: UsageSession?
+    @State private var chatSession: SessionChatSelection?
 
     var body: some View {
         ScrollView {
@@ -222,7 +231,10 @@ struct SessionDetailView: View {
                                 .buttonStyle(.borderless).help(copied ? L10n.text("Скопировано") : L10n.text("Скопировать полный ID"))
                         }
                     }
-                    Button { chatSession = session } label: {
+                    Button {
+                        chatSession = .init(session: session, day: store.snapshot?.day ?? store.selectedDay,
+                                            policy: store.modelExclusionPolicy, customPath: store.customPath, pricingKey: store.snapshot?.pricingKey)
+                    } label: {
                         HStack(spacing: 9) {
                             Image(systemName: "text.bubble")
                             Text(L10n.text("Просмотреть чат"))
@@ -265,8 +277,10 @@ struct SessionDetailView: View {
             }.padding(22)
         }
         .onChange(of: sessionID) { _, _ in copied = false; showMetadata = false }
-        .sheet(item: $chatSession) { session in
-            SessionChatView(session: session, timezone: store.timezone, isDemo: store.isDemo)
+        .sheet(item: $chatSession) { selection in
+            SessionChatView(session: selection.session, timezone: selection.day.timezone, isDemo: store.isDemo,
+                            day: selection.day, policy: selection.policy,
+                            customPath: selection.customPath, pricingKey: selection.pricingKey)
         }
     }
 

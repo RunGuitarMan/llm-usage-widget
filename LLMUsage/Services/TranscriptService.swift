@@ -42,7 +42,19 @@ struct TranscriptService: Sendable {
     static let maximumBytes = 256 * 1024 * 1024
 
     func load(session: UsageSession, file: URL? = nil) async throws -> SessionTranscript {
-        let task = Task.detached(priority: .userInitiated) { try read(session: session, file: file) }
+        let task = Task.detached(priority: .userInitiated) {
+            var transcript = try read(session: session, file: file)
+            transcript.imported = file != nil
+            var parent: SessionTranscript?
+            if session.sourceID == "codex", let parentID = TranscriptUsageParser.parentID(transcript), parentID != session.rawID {
+                var parentSession = session
+                parentSession.originalID = parentID
+                parent = try? read(session: parentSession, file: nil)
+            }
+            transcript = try TranscriptUsageParser.annotate(transcript, source: session.sourceID, parent: parent)
+            transcript = try TranscriptTimingParser.annotate(transcript, source: session.sourceID)
+            return transcript
+        }
         return try await withTaskCancellationHandler(operation: { try await task.value }, onCancel: { task.cancel() })
     }
 
@@ -163,9 +175,11 @@ struct TranscriptService: Sendable {
             }
             return score(lhs) == score(rhs) ? lhs.path < rhs.path : score(lhs) < score(rhs)
         }
-        var transcript = try readFiles([preferred[0]], source: session.sourceID, sessionID: session.rawID)
+        let subagents = session.sourceID == "claude" ? preferred.filter { $0.path.contains("/\(session.rawID)/subagents/") } : []
+        let main = preferred.first { !subagents.contains($0) } ?? preferred[0]
+        var transcript = try readFiles([main] + subagents.filter { $0 != main }, source: session.sourceID, sessionID: session.rawID)
         if preferred.count > 1 {
-            transcript.relatedFiles = Array(preferred.dropFirst())
+            transcript.relatedFiles = preferred.filter { $0 != main }
             transcript.notices.append(L10n.text("Есть дополнительные журналы этой сессии. Они доступны в меню «Другие журналы»."))
         }
         if discoveryIncomplete { transcript.notices.append(L10n.text("Некоторые папки не удалось проверить. Можно выбрать файл вручную.")) }
@@ -211,16 +225,23 @@ struct TranscriptService: Sendable {
     private func readFiles(_ files: [URL], source: String, sessionID: String, imported: Bool = false) throws -> SessionTranscript {
         var decoder = TranscriptDecoder(source: source)
         var notices: [String] = imported ? [L10n.text("Открыт выбранный файл. Его содержимое может отличаться от сессии в статистике.")] : []
-        for url in files {
+        var uncertain = false
+        var totalBytes = 0
+        for (index, url) in files.enumerated() {
             try Task.checkCancellation()
+            totalBytes += try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
+            guard totalBytes <= Self.maximumBytes else { throw TranscriptError.tooLarge }
+            // Identity uses the full path; the UI displays just the filename.
+            decoder.origin = index == 0 ? nil : url.path
             let parsed = try Self.records(at: url)
+            uncertain = uncertain || parsed.invalid > 0
             if parsed.invalid > 0 { notices.append(L10n.text("Не удалось разобрать строк: \(parsed.invalid). Они сохранены в служебных событиях; история может быть неполной.")) }
             for record in parsed.records { try Task.checkCancellation(); decoder.append(record) }
         }
         let events = decoder.finish()
         guard !events.isEmpty else { throw TranscriptError.unavailable(L10n.text("Файл пока не содержит записей. Обновите историю после следующего сообщения.")) }
         if !events.contains(where: \.isMessage) { notices.append(L10n.text("В журнале нет распознанных сообщений. Все доступные записи находятся в служебных событиях.")) }
-        return .init(events: events, files: files, notices: notices)
+        return .init(events: events, files: files, notices: notices, usageUncertain: uncertain)
     }
 
     static func records(at url: URL) throws -> (records: [[String: Any]], invalid: Int) {
