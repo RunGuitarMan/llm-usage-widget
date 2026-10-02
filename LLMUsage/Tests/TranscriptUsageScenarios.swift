@@ -1,4 +1,9 @@
 import Foundation
+#if SWIFT_PACKAGE
+@testable import LLMUsageCore
+#elseif !PORTABLE_CHECKS
+@testable import LLMUsage
+#endif
 
 private struct TranscriptUsageFailure: Error, CustomStringConvertible { var description: String }
 

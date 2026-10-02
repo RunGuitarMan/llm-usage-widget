@@ -107,7 +107,7 @@ bash Scripts/check.sh
 bash Scripts/check-icons.sh
 ```
 
-`check.sh` also typechecks the app and widget. The [audit regression checks](Documentation/RegressionChecks.md) cover shared transcript records, background search cancellation, historical cache expiry, day labels and dated widget links; the same scenarios run in XCTest.
+`check.sh` also checks that shared test scenarios import the separate core module correctly (even without XCTest), then typechecks the app and widget. The [audit regression checks](Documentation/RegressionChecks.md) cover shared transcript records, background search cancellation, historical cache expiry, day labels and dated widget links; the same scenarios run in XCTest.
 
 With full Xcode selected, run `swift test` for the core XCTest suite, or test the configured app target:
 
