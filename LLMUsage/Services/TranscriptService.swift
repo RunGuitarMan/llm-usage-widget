@@ -52,6 +52,7 @@ struct TranscriptService: Sendable {
                 parent = try? read(session: parentSession, file: nil)
             }
             transcript = try TranscriptUsageParser.annotate(transcript, source: session.sourceID, parent: parent)
+            transcript = try TranscriptTimingParser.annotate(transcript, source: session.sourceID)
             return transcript
         }
         return try await withTaskCancellationHandler(operation: { try await task.value }, onCancel: { task.cancel() })
@@ -230,7 +231,8 @@ struct TranscriptService: Sendable {
             try Task.checkCancellation()
             totalBytes += try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
             guard totalBytes <= Self.maximumBytes else { throw TranscriptError.tooLarge }
-            decoder.origin = index == 0 ? nil : url.lastPathComponent
+            // Identity uses the full path; the UI displays just the filename.
+            decoder.origin = index == 0 ? nil : url.path
             let parsed = try Self.records(at: url)
             uncertain = uncertain || parsed.invalid > 0
             if parsed.invalid > 0 { notices.append(L10n.text("Не удалось разобрать строк: \(parsed.invalid). Они сохранены в служебных событиях; история может быть неполной.")) }

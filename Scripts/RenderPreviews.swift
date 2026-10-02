@@ -202,6 +202,10 @@ struct RenderPreviews {
         try render(SessionChatView(session: chatSession, timezone: "Europe/Moscow", isDemo: true),
                    name: "session-chat-narrow", size: .init(width: 680, height: 640))
         let chatTranscript = TranscriptPreview.sample
+        try render(TranscriptTimingDetails(timing: chatTranscript.events[0].timing!, timezone: "Europe/Moscow")
+                    .padding(18).frame(width: 340, height: 450, alignment: .topLeading)
+                    .background(Color(nsColor: .windowBackgroundColor)),
+                   name: "session-chat-timing-details", size: .init(width: 340, height: 450))
         var usageChat = chatSession
         usageChat.usage = chatTranscript.requests.reduce(.zero) { $0 + $1.usage }
         let chatDay = UsageDay(date: chatTranscript.requests[0].timestamp!, timezone: "Europe/Moscow")

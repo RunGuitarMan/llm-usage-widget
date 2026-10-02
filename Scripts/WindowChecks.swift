@@ -116,6 +116,14 @@ struct WindowChecks {
         for language in [InterfaceLanguage.english, .russian] {
             store.interfaceLanguage = language
             let transcript = TranscriptPreview.sample
+            for timing in [transcript.events[0].timing!, TranscriptTiming(kind: .processing),
+                           TranscriptTiming(kind: .tool, duration: 0.25, evidence: .recorded)] {
+                let details = NSHostingView(rootView: TranscriptTimingDetails(timing: timing, timezone: "UTC")
+                    .padding(18).frame(width: 340))
+                let size = details.fittingSize
+                try require(abs(size.width - 340) <= 1 && size.height > 80 && size.height < 500,
+                            "Timing popover has invalid intrinsic size in \(language): \(size)")
+            }
             var session = store.snapshot!.sessions[0]
             session.usage = transcript.requests.reduce(.zero) { $0 + $1.usage }
             let configurations = TranscriptAnalysisTab.allCases.map { ($0, TranscriptEventFilter.all) }
@@ -141,6 +149,7 @@ struct WindowChecks {
             }
         }
         print("PASS Chat, costliest requests, tools and expanded debug filters fit 680/900px in both languages")
+        print("PASS Timing popover intrinsic size stays bounded for complete, unknown and tool metrics in both languages")
 
         store.tab = .overview
         for dark in [false, true] {

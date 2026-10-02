@@ -106,7 +106,12 @@ struct TranscriptSearchResult: Sendable {
         for event in request.transcript?.events ?? [] {
             try Task.checkCancellation()
             if let day = request.day, !requestEvents.contains(event.id), result.requestsByUserID[event.id] == nil,
-               event.timestamp.map({ $0 >= day.date && $0 < day.end }) != true { continue }
+               event.timestamp.map({ $0 >= day.date && $0 < day.end }) != true {
+                // A recorded operation can overlap the selected day even when its
+                // start and billing request belong to yesterday. Keep the full span.
+                guard let start = event.timing?.start, let end = event.timing?.end,
+                      start < day.end, end > day.date, end > start else { continue }
+            }
             guard request.filter.includes(event) else { continue }
             guard request.showContext || event.kind != .context || !request.query.isEmpty else { continue }
             if !request.query.isEmpty {

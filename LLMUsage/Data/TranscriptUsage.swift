@@ -101,7 +101,7 @@ struct TranscriptUsageSummary: Sendable {
     }
 }
 
-private struct TranscriptUserAttribution {
+struct TranscriptUserAttribution {
     private var users: [UUID: String] = [:]
     private var currentUser: String?
     private var origin: String?

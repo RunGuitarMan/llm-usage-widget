@@ -1,4 +1,5 @@
 import Foundation
+import CoreFoundation
 
 enum TranscriptKind: String, Sendable { case user, assistant, tool, context }
 
@@ -27,7 +28,8 @@ struct TranscriptEvent: Identifiable, Sendable {
     var requestIDs: [String] = []
     var isUsageOnly = false
     var isToolResultOnly = false
-    var origin: String? { records.compactMap(\.origin).first }
+    var timing: TranscriptTiming?
+    var origin: String? { records.compactMap(\.origin).first.map { ($0 as NSString).lastPathComponent } }
     var raw: String { records.map(\.text).joined(separator: "\n\n") }
 
     init(id: String, kind: TranscriptKind, title: String, text: String = "", input: String = "",
@@ -83,6 +85,7 @@ struct SessionTranscript: Sendable {
         return events.map { event in
             var parts = ["## \(event.title)"]
             if let date = event.timestamp { parts.append(date.ISO8601Format()) }
+            if let timing = event.timing { parts.append(timing.exportText) }
             if !event.text.isEmpty { parts.append(event.text) }
             if !event.input.isEmpty { parts.append(L10n.text("Передано:\n\(event.input)")) }
             if !event.output.isEmpty { parts.append(L10n.text("Получено:\n\(event.output)")) }
@@ -108,6 +111,7 @@ enum TranscriptJSON {
     static func date(_ value: Any?) -> Date? {
         if let number = value as? NSNumber {
             let n = number.doubleValue
+            guard CFGetTypeID(number) != CFBooleanGetTypeID(), n.isFinite, n >= 0, n <= 253_402_300_799_000 else { return nil }
             return Date(timeIntervalSince1970: n > 10_000_000_000 ? n / 1000 : n)
         }
         guard let text = value as? String else { return nil }
@@ -130,7 +134,9 @@ enum TranscriptJSON {
 /// aggregated reports are deliberately not treated as a conversation.
 struct TranscriptDecoder {
     private(set) var events: [TranscriptEvent] = []
-    private var pendingTools: [String: Int] = [:]
+    private struct ToolKey: Hashable { var origin: String?; var id: String }
+    private var pendingTools: [ToolKey: Int] = [:]
+    private var ambiguousTools: Set<ToolKey> = []
     private var codexFallbacks: [(String, TranscriptEvent)] = []
     private var codexMessages: [String: [Int]] = [:]
     private var serial = 0
@@ -361,15 +367,23 @@ struct TranscriptDecoder {
         event.title = name ?? L10n.text("Вызов инструмента")
         event.callID = callID
         event.input = TranscriptJSON.render(input)
-        if let callID { pendingTools[callID] = events.count }
+        event.timing = .init(kind: .tool, start: timestamp, status: .incomplete)
+        if let callID {
+            let key = ToolKey(origin: origin, id: callID)
+            if pendingTools.removeValue(forKey: key) != nil { ambiguousTools.insert(key) }
+            if !ambiguousTools.contains(key) { pendingTools[key] = events.count }
+        }
         events.append(event)
     }
     private mutating func result(callID: String?, value: Any?, failed: Bool, raw: TranscriptRecord?, timestamp: Date?) {
-        if let callID, let index = pendingTools.removeValue(forKey: callID) {
+        if let callID, let index = pendingTools.removeValue(forKey: .init(origin: origin, id: callID)) {
             events[index].output = TranscriptJSON.content(value)
             events[index].isError = failed
             events[index].hasResult = true
             events[index].attach(raw)
+            // Inline results share the message timestamp: that is not a measured zero-duration call.
+            events[index].timing = .init(kind: .tool, start: raw == nil ? nil : events[index].timestamp,
+                                        end: raw == nil ? nil : timestamp)
         } else {
             var event = make(.tool, raw: raw, timestamp: timestamp)
             event.title = L10n.text("Результат инструмента")

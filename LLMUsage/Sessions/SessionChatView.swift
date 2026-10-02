@@ -358,6 +358,7 @@ struct SessionChatView: View {
                 }.buttonStyle(.link).font(.system(size: 11))
             }
             usageLine(event)
+            TranscriptTimingBadge(timing: event.timing, kind: isUser ? .processing : .message, timezone: timezone)
         }
         .padding(.vertical, 12).padding(.horizontal, 14)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -405,6 +406,7 @@ struct SessionChatView: View {
         .disclosureGroupStyle(WholeRowDisclosureStyle())
         if let origin = event.origin { Text(origin).font(.system(size: 10)).foregroundStyle(.secondary) }
         usageLine(event)
+        TranscriptTimingBadge(timing: event.timing, kind: .tool, timezone: timezone)
         }
         .padding(12)
         .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
@@ -425,6 +427,9 @@ struct SessionChatView: View {
                             Image(systemName: "arrow.up.right")
                         }.font(.system(size: 11)).contentShape(Rectangle())
                     }.buttonStyle(.plain)
+                    if let timing = event.timing {
+                        TranscriptTimingBadge(timing: timing, kind: .service, timezone: timezone)
+                    }
                 }
             }.padding(.top, 12)
         } label: {
@@ -677,6 +682,16 @@ enum TranscriptPreview {
             transcript.events[index].requestIDs = transcript.requests.filter { $0.eventIDs.contains(transcript.events[index].id) }.map(\.id)
         }
         for index in transcript.requests.indices { transcript.requests[index].userEventID = "1" }
+        for index in transcript.events.indices {
+            switch transcript.events[index].id {
+            case "1": transcript.events[index].timing = .init(kind: .processing, start: time,
+                end: time.addingTimeInterval(35), duration: 35, timeToFirstToken: 2.4, outputTokens: 1970, evidence: .recorded)
+            case "2": transcript.events[index].timing = .init(kind: .message, start: time.addingTimeInterval(2.4), end: time.addingTimeInterval(8))
+            case "3", "4", "7": transcript.events[index].timing = .init(kind: .tool, duration: 1.35, evidence: .recorded)
+            case "5": transcript.events[index].timing = .init(kind: .message, start: time.addingTimeInterval(28), end: time.addingTimeInterval(35))
+            default: break
+            }
+        }
         return transcript
     }
 }

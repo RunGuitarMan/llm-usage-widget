@@ -324,6 +324,7 @@ struct PortableChecks {
         L10n.preference = .russian // Existing transcript fixtures assert Russian helper labels.
         await TranscriptChecks.run(check: check)
         await TranscriptUsageScenarios.run(check: check)
+        await TranscriptTimingScenarios.run(check: check)
         await RegressionScenarios.run(check: check)
         await PricingScenarios.run(check: check)
         await LocalizationChecks.run(check: check)
