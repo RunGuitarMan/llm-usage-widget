@@ -160,6 +160,12 @@ enum TranscriptUsageParser {
     static let supportedSources: Set<String> = ["claude", "codex", "gemini"]
     static let maximumRequests = 50_000
 
+    private struct CodexTurn {
+        var model = ""
+        var speed: String?
+        var pending: [String] = []
+    }
+
     static func records(_ transcript: SessionTranscript) -> [TranscriptRecord] {
         var seen = Set<UUID>()
         return transcript.events.flatMap(\.records).filter { seen.insert($0.id).inserted }
@@ -193,10 +199,16 @@ enum TranscriptUsageParser {
         var indexes: [String: Int] = [:]
         var userAttribution = TranscriptUserAttribution(events: transcript.events)
         var sidechainIndexes: [String: Int] = [:]
+        let sourceRecords = records(original)
         var model = ""
         var speed: String?
+        var currentTurn: String?
+        var turns: [String: CodexTurn] = [:]
+        var legacyTurn = CodexTurn()
+        var eventOwners: [String: String] = [:]
+        // Codex's cumulative counter is thread-wide, while response ownership
+        // and the model/tier used to price it belong to an individual turn.
         var previous: [String: Int64]?
-        var pending: [String] = []
         var serial = 0
         var sequence = 0
         func append(model: String, date: Date?, events: [String], billing: TranscriptBilling,
@@ -224,7 +236,7 @@ enum TranscriptUsageParser {
             transcript.requests.append(.init(id: "request-\(serial)", model: model, timestamp: date,
                 eventIDs: ids, billing: billing, usage: usage, reasoning: reasoning, isSidechain: sidechain, sequence: sequence))
         }
-        for record in records(original) {
+        for record in sourceRecords {
             try Task.checkCancellation()
             sequence = record.sequence
             let root = object(record.text)
@@ -264,13 +276,33 @@ enum TranscriptUsageParser {
             } else if source == "codex" {
                 let payload = TranscriptJSON.object(root["payload"])
                 let type = root["type"] as? String ?? ""
+                let eventType = type == "event_msg" ? payload["type"] as? String : nil
+                let explicitTurn = payload["turn_id"] as? String
+                if let explicitTurn, type == "turn_context" || eventType == "task_started" {
+                    if turns[explicitTurn] == nil { turns[explicitTurn] = .init(model: model, speed: speed) }
+                    currentTurn = explicitTurn
+                }
+                let turnID = explicitTurn ?? currentTurn
+                // An unknown explicit turn must not inherit the active turn's
+                // model, tier or response events.
+                var turn = turnID.flatMap { turns[$0] } ?? (turnID == nil ? legacyTurn : CodexTurn())
+                defer {
+                    if let turnID { turns[turnID] = turn } else { legacyTurn = turn }
+                    if ["task_complete", "turn_aborted"].contains(eventType ?? ""), turnID == currentTurn {
+                        currentTurn = nil
+                    }
+                }
                 if type == "turn_context" || payload["type"] as? String == "thread_settings_applied" {
                     let settings = TranscriptJSON.object(payload["thread_settings"])
-                    if let value = (settings["model"] ?? payload["model"]) as? String { model = value }
-                    if let value = settings["service_tier"] as? String { speed = value }
+                    if let value = (settings["model"] ?? payload["model"]) as? String { turn.model = value }
+                    if let value = settings["service_tier"] as? String { turn.speed = value }
+                    if turnID == currentTurn { model = turn.model; speed = turn.speed }
                 }
-                if payload["type"] as? String == "user_message" || payload["role"] as? String == "user" { pending.removeAll() }
-                pending += events.filter { !pending.contains($0) }
+                if turnID == nil, payload["type"] as? String == "user_message" || payload["role"] as? String == "user" {
+                    turn.pending.removeAll()
+                }
+                for event in events { eventOwners[event] = userAttribution.owners[record.id] }
+                turn.pending += events.filter { !turn.pending.contains($0) }
                 guard type == "event_msg", payload["type"] as? String == "token_count" else { continue }
                 let info = TranscriptJSON.object(payload["info"])
                 let keys = ["input_tokens", "cached_input_tokens", "cache_creation_tokens", "output_tokens", "reasoning_output_tokens", "total_tokens"]
@@ -293,10 +325,15 @@ enum TranscriptUsageParser {
                 guard input + output > 0 else { continue }
                 let usage = TokenUsage(input: input - cached - create, output: output, cacheCreate: create, cacheRead: cached,
                     additional: max(0, tokens["total_tokens", default: input + output] - input - output), costIsIncomplete: true)
-                let recordedModel = (payload["model"] ?? info["model"]) as? String ?? model
-                append(model: recordedModel, date: date, events: pending, billing: .init(tokens: tokens, speed: speed),
+                let recordedModel = (payload["model"] ?? info["model"]) as? String ?? turn.model
+                // A prompt can precede its turn_context in older logs. Preserve
+                // the previous turn's pending reply until its own counter arrives.
+                let owner = userAttribution.owners[record.id]
+                let pending = turn.pending.filter { owner == nil || eventOwners[$0] == owner }
+                append(model: recordedModel, date: date, events: pending, billing: .init(tokens: tokens, speed: turn.speed),
                        usage: usage, reasoning: tokens["reasoning_output_tokens", default: 0], key: nil)
-                pending.removeAll()
+                let consumed = Set(pending)
+                turn.pending.removeAll { consumed.contains($0) }
             } else {
                 guard root["type"] as? String == "gemini", let raw = root["tokens"] as? [String: Any] else { continue }
                 let aliases = ["input": ["input", "prompt", "input_tokens", "prompt_tokens"], "output": ["output", "candidates", "output_tokens", "candidates_tokens"],
@@ -323,15 +360,17 @@ enum TranscriptUsageParser {
             guard transcript.requests.count <= maximumRequests else { throw UsageError.outputTooLarge }
         }
         if source == "codex", parentID(original) != nil {
-            if let parent {
-                let forkTime = records(original).first.flatMap { TranscriptJSON.date(object($0.text)["timestamp"]) }
-                let parentUsage = try annotate(parent, source: source).requests.filter { request in
-                    guard let forkTime, let time = request.timestamp else { return true }
-                    return time <= forkTime
-                }
+            let metadata = sourceRecords.first { object($0.text)["type"] as? String == "session_meta" }
+            if let parent, let forkTime = metadata.flatMap({ TranscriptJSON.date(object($0.text)["timestamp"]) }) {
+                let parentUsage = try annotate(parent, source: source)
+                let childEvidence = replayEvidence(transcript, records: sourceRecords)
+                let parentEvidence = replayEvidence(parentUsage, records: records(parent))
                 var matched = 0
-                for (child, ancestor) in zip(transcript.requests, parentUsage) {
-                    guard child.billing.tokens == ancestor.billing.tokens else { break }
+                for (child, ancestor) in zip(transcript.requests, parentUsage.requests) {
+                    guard let date = child.timestamp, date <= forkTime, date == ancestor.timestamp,
+                          child.model == ancestor.model, child.billing == ancestor.billing,
+                          let evidence = childEvidence[child.id], !evidence.isEmpty,
+                          evidence == parentEvidence[ancestor.id] else { break }
                     transcript.requests[matched].isReplay = true
                     matched += 1
                 }
@@ -340,13 +379,13 @@ enum TranscriptUsageParser {
             if transcript.usageUncertain { transcript.notices.append(L10n.text("Не удалось подтвердить границу перенесённой истории. Сверка расходов неполная.")) }
         }
         var eventIndex = Dictionary(uniqueKeysWithValues: transcript.events.enumerated().map { ($0.element.id, $0.offset) })
-        let sourceRecords = records(original).reduce(into: [Int: TranscriptRecord]()) { $0[$1.sequence] = $1 }
+        let recordsBySequence = sourceRecords.reduce(into: [Int: TranscriptRecord]()) { $0[$1.sequence] = $1 }
         for index in transcript.requests.indices {
             // Use the response's first record, not a later usage counter or tool
             // result that may arrive after the next user message.
             let firstEvent = transcript.requests[index].eventIDs.first.flatMap { eventIndex[$0] }
             let firstRecord = firstEvent.flatMap { transcript.events[$0].records.min { $0.sequence < $1.sequence } }
-                ?? sourceRecords[transcript.requests[index].sequence]
+                ?? recordsBySequence[transcript.requests[index].sequence]
             transcript.requests[index].userEventID = firstRecord.flatMap { userAttribution.owners[$0.id] }
             if source == "claude", transcript.requests[index].billing.speed == "fast" {
                 transcript.requests[index].accountingModel = transcript.requests[index].model + "-fast"
@@ -355,7 +394,7 @@ enum TranscriptUsageParser {
                 let request = transcript.requests[index]
                 var event = TranscriptEvent(id: request.id, kind: .assistant, title: L10n.text("Обращение к модели"), timestamp: request.timestamp, model: request.model)
                 event.isUsageOnly = true
-                if let record = sourceRecords[request.sequence] { event.attach(record) }
+                if let record = recordsBySequence[request.sequence] { event.attach(record) }
                 eventIndex[event.id] = transcript.events.count
                 transcript.events.append(event)
                 transcript.requests[index].eventIDs = [event.id]
@@ -370,6 +409,20 @@ enum TranscriptUsageParser {
             return left == right ? $0.offset < $1.offset : left < right
         }.map(\.element)
         return transcript
+    }
+
+    /// Match the actual counter and response records, not a coincidental token
+    /// count. Tool results may arrive after the fork, so only the call is evidence.
+    private static func replayEvidence(_ transcript: SessionTranscript, records: [TranscriptRecord]) -> [String: [String]] {
+        let bySequence = Dictionary(uniqueKeysWithValues: records.map { ($0.sequence, $0) })
+        let events = Dictionary(uniqueKeysWithValues: transcript.events.map { ($0.id, $0) })
+        return Dictionary(uniqueKeysWithValues: transcript.requests.map { request in
+            var seen = Set<UUID>()
+            let evidence = ([bySequence[request.sequence]] + request.eventIDs.map { events[$0]?.records.first })
+                .compactMap { $0 }.filter { seen.insert($0.id).inserted }
+                .sorted { $0.sequence < $1.sequence }.map(\.text)
+            return (request.id, evidence)
+        })
     }
 
     private static func object(_ text: String) -> [String: Any] {

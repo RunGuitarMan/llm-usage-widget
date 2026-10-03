@@ -303,6 +303,12 @@ struct SessionChatView: View {
             }
             .onChange(of: search) { _, _ in proxy.scrollTo("chat-start", anchor: .top) }
             .onChange(of: filter) { _, _ in proxy.scrollTo("chat-start", anchor: .top) }
+            .onChange(of: jumpID) { _, id in
+                guard let id, results.completedInput == searchRequest,
+                      rows.contains(where: { $0.id == id }) else { return }
+                proxy.scrollTo(id, anchor: .top)
+                jumpID = nil
+            }
             .task(id: results.completedInput) {
                 if !search.isEmpty || filter == .errors {
                     expandedTools.formUnion(rows.flatMap(\.events).filter { $0.kind == .tool }.map(\.id))

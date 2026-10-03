@@ -89,6 +89,50 @@ private struct TranscriptUsageFailure: Error, CustomStringConvertible { var desc
             try require(value.requests.count == 1 && value.requests[0].userEventID == value.events[0].id && value.requests[0].usage.total == 15,
                         "Late stream update moved cost to the next prompt")
         }
+        await check("User usage: late Codex counters preserve turn model, tier, response and prompt") {
+            let value = try decode("codex", #"""
+            {"type":"event_msg","payload":{"type":"task_started","turn_id":"one"}}
+            {"type":"turn_context","payload":{"model":"gpt-old","turn_id":"one"}}
+            {"type":"event_msg","payload":{"type":"thread_settings_applied","thread_settings":{"service_tier":"priority"}}}
+            {"type":"response_item","payload":{"role":"user","content":"Old prompt"}}
+            {"type":"response_item","payload":{"role":"assistant","content":"Old answer"}}
+            {"type":"event_msg","payload":{"type":"turn_aborted","turn_id":"one"}}
+            {"type":"event_msg","payload":{"type":"task_started","turn_id":"two"}}
+            {"type":"turn_context","payload":{"model":"gpt-new","turn_id":"two"}}
+            {"type":"event_msg","payload":{"type":"thread_settings_applied","thread_settings":{"service_tier":"standard"}}}
+            {"type":"response_item","payload":{"role":"user","content":"New prompt"}}
+            {"type":"response_item","payload":{"role":"assistant","content":"New answer"}}
+            {"type":"event_msg","payload":{"type":"token_count","turn_id":"one","info":{"last_token_usage":{"input_tokens":100,"output_tokens":10}}}}
+            {"type":"event_msg","payload":{"type":"token_count","turn_id":"two","info":{"last_token_usage":{"input_tokens":200,"output_tokens":20}}}}
+            """#)
+            let users = value.events.filter { $0.kind == .user }
+            let answers = value.events.filter { $0.kind == .assistant }
+            try require(value.requests.map(\.model) == ["gpt-old", "gpt-new"], "Late usage priced as the next model")
+            try require(value.requests.map { $0.billing.speed } == ["priority", "standard"], "Late usage inherited next tier")
+            try require(value.requests.map(\.userEventID) == users.map { Optional($0.id) }, "Late usage charged to next prompt")
+            try require(value.requests.map(\.eventIDs) == answers.map { [$0.id] }, "Late usage consumed next response")
+            let result = try TranscriptSearchResult.evaluate(.init(transcript: value))
+            try require(users.map { result.requestsByUserID[$0.id]?.reduce(0, { $0 + $1.usage.total }) } == [110, 220],
+                        "Prompt totals differ from their turn counters")
+            let again = try TranscriptUsageParser.annotate(value, source: "codex")
+            try require(again.requests.map(\.eventIDs) == value.requests.map(\.eventIDs), "Reannotation changed late response links")
+        }
+        await check("User usage: a prompt before turn context retains the preceding pending answer") {
+            let value = try decode("codex", #"""
+            {"type":"response_item","payload":{"role":"user","content":"First"}}
+            {"type":"turn_context","payload":{"model":"gpt-old","turn_id":"one"}}
+            {"type":"response_item","payload":{"role":"assistant","content":"First answer"}}
+            {"type":"response_item","payload":{"role":"user","content":"Second"}}
+            {"type":"event_msg","payload":{"type":"token_count","turn_id":"one","info":{"last_token_usage":{"input_tokens":10,"output_tokens":1}}}}
+            {"type":"turn_context","payload":{"model":"gpt-new","turn_id":"two"}}
+            {"type":"response_item","payload":{"role":"assistant","content":"Second answer"}}
+            {"type":"event_msg","payload":{"type":"token_count","turn_id":"two","info":{"last_token_usage":{"input_tokens":20,"output_tokens":2}}}}
+            """#)
+            let answers = value.events.filter { $0.kind == .assistant }
+            let users = value.events.filter { $0.kind == .user }
+            try require(value.requests.map(\.eventIDs) == answers.map { [$0.id] }, "Previous pending answer was discarded")
+            try require(value.requests.map(\.userEventID) == users.map { Optional($0.id) }, "Previous counter attached to new prompt")
+        }
         await check("User usage: older Codex logs may place prompts before turn context") {
             let value = try decode("codex", #"""
             {"type":"response_item","payload":{"role":"user","content":"First"}}
@@ -199,12 +243,39 @@ private struct TranscriptUsageFailure: Error, CustomStringConvertible { var desc
         }
         await check("Chat usage: replayed Codex prefix excluded and missing parent is explicit") {
             let parent = try decode("codex", codex)
-            let fork = #"{"type":"session_meta","payload":{"forked_from_id":"parent"}}"# + "\n" + codex
+            let fork = #"{"type":"session_meta","timestamp":"2026-10-01T13:00:00Z","payload":{"forked_from_id":"parent"}}"# + "\n" + codex
             let value = try decode("codex", fork, parent: parent)
             try require(value.requests.allSatisfy(\.isReplay), "Parent requests charged again")
             try require(TranscriptUsageSummary(transcript: value, day: nil, policy: .init()).reported.total == 0, "Replay leaks into total")
             let unknown = try decode("codex", fork)
             try require(unknown.usageUncertain && !unknown.notices.isEmpty, "Missing fork parent silently accepted")
+        }
+        await check("Chat usage: equal Codex counters alone never prove replay identity") {
+            let parent = try decode("codex", codex)
+            let metadata = #"{"type":"session_meta","timestamp":"2026-10-01T13:00:00Z","payload":{"forked_from_id":"parent"}}"#
+            let variants = [
+                codex.replacingOccurrences(of: "pwd", with: "ls"),
+                codex.replacingOccurrences(of: "gpt-chat-fixture", with: "gpt-other"),
+                codex.replacingOccurrences(of: "T12:", with: "T14:")
+            ]
+            for text in variants {
+                let value = try decode("codex", metadata + "\n" + text, parent: parent)
+                try require(value.requests.allSatisfy { !$0.isReplay }, "Distinct requests with equal counters were discarded")
+                try require(TranscriptUsageSummary(transcript: value, day: nil, policy: .init()).reported.total == 1750,
+                            "False replay changed billable tokens")
+                try require(value.usageUncertain, "Unverified fork claimed complete reconciliation")
+            }
+            let undated = try decode("codex", #"{"type":"session_meta","payload":{"forked_from_id":"parent"}}"# + "\n" + codex, parent: parent)
+            try require(undated.requests.allSatisfy { !$0.isReplay } && undated.usageUncertain, "Missing fork boundary accepted")
+        }
+        await check("Chat usage: verified replay stops before new requests with equal counters") {
+            let continued = codex + "\n" + codex.replacingOccurrences(of: "T12:", with: "T14:")
+            let parent = try decode("codex", continued)
+            let metadata = #"{"type":"session_meta","timestamp":"2026-10-01T13:00:00Z","payload":{"forked_from_id":"parent"}}"#
+            let child = try decode("codex", metadata + "\n" + continued, parent: parent)
+            try require(child.requests.map(\.isReplay) == [true, true, false, false], "New requests past fork boundary were excluded")
+            try require(TranscriptUsageSummary(transcript: child, day: nil, policy: .init()).reported.total == 1750,
+                        "Verified prefix excluded new usage")
         }
         await check("Chat usage: day boundaries, exclusion reference and strict reconciliation") {
             var value = try decode("claude", claude)
