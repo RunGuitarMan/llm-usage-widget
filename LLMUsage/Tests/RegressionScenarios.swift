@@ -123,7 +123,7 @@ private final class RegressionSearchGate: @unchecked Sendable {
 /// Shared by XCTest and the CLT harness, so regression coverage does not diverge.
 enum RegressionScenarios {
     @MainActor static func run(check: (String, () async throws -> Void) async -> Void) async {
-        await check("Overview: model logos follow model families across agents, namespaces and mixed sessions") {
+        await check("Statistics: model logos follow model families across agents, namespaces and mixed sessions") {
             let cases: [(String, ModelProvider)] = [
                 ("claude-opus-5-5", .anthropic), (" OpenRouter/Anthropic/Claude-Sonnet-4.6 ", .anthropic),
                 ("us.anthropic.claude-opus-4-6-v1:0", .anthropic), ("sonnet-4", .anthropic),
@@ -144,7 +144,7 @@ enum RegressionScenarios {
                                              modelBreakdowns: [.init(id: "gemini-2.5-pro", usage: .zero)])
             try requireRegression(breakdownOnly.modelProvider == .google, "Model breakdown names ignored")
         }
-        await check("Overview: ranking precedes the five-row limit and respects source and exclusion filters") {
+        await check("Statistics: ranking precedes the five-row limit and respects source and exclusion filters") {
             let sessions: [UsageSession] = (0..<8).map { index in
                 let model = index == 7 ? "glm-5" : "gpt-6"
                 let source = index == 0 ? "claude" : "codex"
@@ -153,15 +153,15 @@ enum RegressionScenarios {
                                     lastActivity: Date(timeIntervalSince1970: Double(index)), agent: source)
             }
             let snapshot = UsageSnapshot(generatedAt: Date(), day: .init(), sessions: sessions).applyingExclusions(.init())
-            let cost = OverviewSessionSort.cost.sessions(in: snapshot.filtered(source: "codex"))
+            let cost = SessionSort.cost.topSessions(in: snapshot.filtered(source: "codex"))
             try requireRegression(cost.map(\.id) == ["s6", "s5", "s4", "s3", "s2"], "Ranking truncated before sort or included excluded cost")
-            try requireRegression(OverviewSessionSort.tokens.sessions(in: snapshot).map(\.id) == ["s0", "s1", "s2", "s3", "s4"], "Token ranking incorrect")
-            try requireRegression(OverviewSessionSort.activity.sessions(in: snapshot).map(\.id) == ["s7", "s6", "s5", "s4", "s3"], "Activity ranking incorrect")
+            try requireRegression(SessionSort.tokens.topSessions(in: snapshot).map(\.id) == ["s0", "s1", "s2", "s3", "s4"], "Token ranking incorrect")
+            try requireRegression(SessionSort.activity.topSessions(in: snapshot).map(\.id) == ["s7", "s6", "s5", "s4", "s3"], "Activity ranking incorrect")
             var tied = snapshot
             tied.sessions = [sessions[1], sessions[0]].map { var session = $0; session.usage.cost = 1; return session }
-            try requireRegression(OverviewSessionSort.cost.sessions(in: tied).map(\.id) == ["s0", "s1"], "Equal costs reorder nondeterministically")
+            try requireRegression(SessionSort.cost.topSessions(in: tied).map(\.id) == ["s0", "s1"], "Equal costs reorder nondeterministically")
             tied.sessions = []
-            try requireRegression(OverviewSessionSort.cost.sessions(in: tied).isEmpty, "Empty report produced rows")
+            try requireRegression(SessionSort.cost.topSessions(in: tied).isEmpty, "Empty report produced rows")
         }
         await check("Calendar: committed dates use report timezone, reject future days and avoid duplicate loads") {
             let suite = "CalendarRegression.\(UUID().uuidString)"
@@ -727,15 +727,30 @@ enum RegressionScenarios {
             try await withStore { store, service, clock in
                 await store.refresh(reason: .startup); await store.waitForHistoryBackfill()
                 let day = UsageDay(date: clock.now).adding(days: -10)
+                store.sessionList = .init(isExpanded: true, query: "hidden query", model: "missing-model", sort: .cacheRead)
                 store.navigate(UsageRoute(url: UsageRoute.datedSession("s-" + day.key, day).url)!)
                 for _ in 0..<100 where store.snapshot?.day != day || store.isRefreshing { try await Task.sleep(for: .milliseconds(10)) }
                 try requireRegression(store.snapshot?.day == day && store.selectedSession?.id == "s-" + day.key, "Widget opened today's or missing session")
+                try requireRegression(store.tab == .overview && store.sessionList.isExpanded
+                    && store.sessionList.query.isEmpty && store.sessionList.model.isEmpty,
+                    "Session link did not reveal Statistics or retained filters hiding the target")
                 let count = await service.count(day)
                 try requireRegression(count == 1, "Cold route did not fetch the target day exactly once")
                 store.navigate(.datedSessions(day))
                 try requireRegression(store.snapshot?.day == day && store.selectedSessionID == nil, "Dated background link lost context")
+                store.sessionList.setExpanded(false)
+                store.tab = .models
                 store.navigate(.sessions)
+                try requireRegression(store.tab == .overview && store.sessionList.isExpanded, "Legacy list link did not expand Statistics")
                 try requireRegression(store.period == .today && store.snapshot == store.todaySnapshot, "Legacy sessions link retained an unrelated period")
+                store.sessionList.query = "gpt"
+                store.sessionList.model = "missing-model"
+                store.sessionList.setExpanded(false)
+                try requireRegression(store.sessionList.query.isEmpty && store.sessionList.model.isEmpty && store.sessionList.sort == .cost,
+                                     "Compact rankings retained invisible full-list filters")
+                store.navigate(.overview)
+                try requireRegression(store.tab == .overview && !store.sessionList.isExpanded && store.selectedSessionID == nil,
+                                     "Statistics link did not restore compact rankings")
                 await store.waitForHistoryBackfill()
             }
         }

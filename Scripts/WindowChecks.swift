@@ -33,6 +33,11 @@ struct WindowChecks {
             if let table = view as? NSTableView, table.effectiveStyle == .sourceList { return table }
             return view.subviews.lazy.compactMap { sidebarTable(in: $0) }.first
         }
+        func nestedScrollViews(in view: NSView) -> [NSScrollView] {
+            var result: [NSScrollView] = []
+            if let scroll = view as? NSScrollView { result.append(scroll) }
+            return result + view.subviews.flatMap { nestedScrollViews(in: $0) }
+        }
         func arrowKey(_ keyCode: UInt16, characters: String, in table: NSTableView) {
             let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [.function, .numericPad],
                                         timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: table.window!.windowNumber,
@@ -77,26 +82,47 @@ struct WindowChecks {
             guard let sidebar = sidebarTable(in: host) else {
                 throw NSError(domain: "WindowChecks", code: 2, userInfo: [NSLocalizedDescriptionKey: "Missing native sidebar"])
             }
-            for tab in [DashboardTab.overview, .sessions, .models, .settings] {
+            for tab in [DashboardTab.overview, .models, .settings] {
                 store.tab = tab
                 for width: CGFloat in [1080, 860, 1000, 860] {
                     try resizeAndCheck(window, host: host, width: width)
                     try require(sidebar.selectionHighlightStyle == .none, "Native accent fill returned after navigation or resize")
                 }
-                let expectedRow = [DashboardTab.overview, .sessions, .models].firstIndex(of: tab) ?? -1
+                let expectedRow = [DashboardTab.overview, .models].firstIndex(of: tab) ?? -1
                 try require(sidebar.selectedRow == expectedRow, "Sidebar selection does not follow the current tab")
             }
             store.tab = .overview
             settle()
             arrowKey(125, characters: "\u{F701}", in: sidebar)
-            try require(store.tab == .sessions, "Down arrow no longer selects Sessions")
+            try require(store.tab == .models, "Down arrow no longer selects Models")
             arrowKey(126, characters: "\u{F700}", in: sidebar)
-            try require(store.tab == .overview, "Up arrow no longer selects Overview")
-            sidebar.selectRowIndexes(IndexSet(integer: 2), byExtendingSelection: false)
+            try require(store.tab == .overview, "Up arrow no longer selects Statistics")
+            sidebar.selectRowIndexes(IndexSet(integer: 1), byExtendingSelection: false)
             settle()
             try require(store.tab == .models, "Native row selection no longer opens Models")
             print("PASS Sidebar keeps native selection and keyboard navigation without an accent-filled highlight")
-            store.tab = .sessions
+            store.tab = .overview
+            store.sessionList.setExpanded(false)
+            settle()
+            let compactScrolls = Set(nestedScrollViews(in: host).map(ObjectIdentifier.init))
+            try require(compactScrolls.count >= 3, "Compact rankings lack their persistent session viewport")
+            for expanded in [true, false, true] {
+                store.sessionList.setExpanded(expanded)
+                settle()
+                let currentScrolls = Set(nestedScrollViews(in: host).map(ObjectIdentifier.init))
+                try require(compactScrolls.isSubset(of: currentScrolls), "Session expansion recreated a scroll view and lost its geometry")
+            }
+            print("PASS Expanding and collapsing preserve the native scroll views")
+            for width: CGFloat in [860, 1080] { try resizeAndCheck(window, host: host, width: width) }
+            func searchField(in view: NSView) -> NSSearchField? {
+                (view as? NSSearchField) ?? view.subviews.lazy.compactMap { searchField(in: $0) }.first
+            }
+            try require(searchField(in: host)?.isEnabled == true, "Expanded Statistics lost the active session search field")
+            store.sessionList.setExpanded(false)
+            settle()
+            try require(searchField(in: host)?.isEnabled == false, "Collapsed session search can still accept hidden input")
+            store.sessionList.setExpanded(true)
+            settle()
             store.selectedSessionID = store.snapshot!.sessions[0].id
             settle()
             host.layoutSubtreeIfNeeded()
@@ -112,6 +138,7 @@ struct WindowChecks {
             try resizeAndCheck(window, host: host, width: 860)
             print("PASS minimum width: \(normal) → \(inspected) → \(window.contentMinSize.width)")
             print("PASS Native split views, scroll views and search remain inside resized window on every tab")
+            store.sessionList.setExpanded(false)
             window.orderOut(nil)
             window.contentView = nil
         }

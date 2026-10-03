@@ -167,33 +167,6 @@ enum ModelProvider: String, CaseIterable, Sendable {
     }
 }
 
-/// Overview ranks the entire filtered report before selecting its five rows.
-enum OverviewSessionSort: String, CaseIterable, Identifiable {
-    case cost, tokens, activity
-    var id: String { rawValue }
-    var title: String {
-        switch self {
-        case .cost: return L10n.text("Стоимость")
-        case .tokens: return L10n.text("Токены")
-        case .activity: return L10n.text("Активность")
-        }
-    }
-    var heading: String {
-        switch self {
-        case .cost: return L10n.text("Основные расходы")
-        case .tokens: return L10n.text("Больше всего токенов")
-        case .activity: return L10n.text("Последняя активность")
-        }
-    }
-    var orderDescription: String {
-        self == .activity ? L10n.text("Сначала недавние") : L10n.text("По убыванию")
-    }
-    func sessions(in snapshot: UsageSnapshot) -> [UsageSession] {
-        let sort: SessionSort = self == .cost ? .cost : self == .tokens ? .tokens : .activity
-        return Array(sort.sorted(snapshot.sessions).prefix(5))
-    }
-}
-
 /// Exact, case-insensitive model-name overrides take precedence over provider defaults.
 struct ModelExclusionPolicy: Codable, Equatable, Sendable {
     var overrides: [String: Bool] = [:] // true means include tokens and cost
@@ -387,6 +360,31 @@ enum SessionSort: String, CaseIterable, Identifiable, Sendable {
     case output = "По Output", cacheRead = "По Cache read"
     var id: String { rawValue }
     var title: String { L10n.key(rawValue) }
+    static let compactCases: [Self] = [.cost, .tokens, .activity]
+    var metricTitle: String {
+        switch self {
+        case .cost: return L10n.text("Стоимость")
+        case .tokens: return L10n.text("Токены")
+        case .activity: return L10n.text("Активность")
+        case .output: return "Output"
+        case .cacheRead: return "Cache read"
+        }
+    }
+    var heading: String {
+        switch self {
+        case .cost: return L10n.text("Основные расходы")
+        case .tokens: return L10n.text("Больше всего токенов")
+        case .activity: return L10n.text("Последняя активность")
+        case .output, .cacheRead: return L10n.text("Все сессии")
+        }
+    }
+    var orderDescription: String {
+        self == .activity ? L10n.text("Сначала недавние") : L10n.text("По убыванию")
+    }
+    /// Rank the entire filtered report before applying the compact five-row limit.
+    func topSessions(in snapshot: UsageSnapshot) -> [UsageSession] {
+        Array(sorted(snapshot.sessions).prefix(5))
+    }
     func sorted(_ sessions: [UsageSession]) -> [UsageSession] {
         sessions.sorted { a, b in
             let left: Double, right: Double

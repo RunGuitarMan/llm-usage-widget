@@ -13,6 +13,8 @@ enum DataPeriod: String, CaseIterable, Identifiable {
 @MainActor
 final class UsageStore: ObservableObject {
     @Published var tab: DashboardTab = .overview
+    @Published var sessionList = SessionListState()
+    @Published private(set) var sessionNavigationID = UUID()
     @Published var selectedSessionID: String?
     @Published private(set) var snapshot: UsageSnapshot?
     @Published private(set) var todaySnapshot: UsageSnapshot?
@@ -493,6 +495,7 @@ final class UsageStore: ObservableObject {
         sourceFilter = ""
         switch route {
         case .overview:
+            sessionList = .init()
             tab = .overview
             selectedSessionID = nil
             period = .today
@@ -510,11 +513,13 @@ final class UsageStore: ObservableObject {
         if let day, timezone != day.timezone { timezone = day.timezone }
         let today = UsageDay(date: now(), timezone: timezone)
         let requested = day ?? today
-        tab = .sessions
+        sessionList = .init(isExpanded: true, sort: sessionList.sort)
+        tab = .overview
         period = requested == today ? .today : .custom
         if period == .custom { customDate = requested.date }
         snapshot = cache[requested.cacheKey] ?? (todaySnapshot?.day == requested ? todaySnapshot : nil)
         selectedSessionID = id
+        sessionNavigationID = UUID()
         if !isDemo, snapshot?.canReuse(for: requested, now: now(), liveInterval: refreshInterval) != true {
             Task { await self.refresh(reason: .selection) }
         }

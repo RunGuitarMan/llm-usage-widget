@@ -63,7 +63,7 @@ struct LocalizationChecks {
             try requireLocale(failure.errorDescription == "ccusage not found", "Stored error stuck in old language")
             try requireLocale(reportError.details.hasPrefix("A combined ccusage"), "Stored report helper stayed Russian")
             try requireLocale(detail.details == "Total token count is inconsistent with its components", "English technical helper")
-            try requireLocale(DashboardTab.overview.rawValue == "Обзор" && DashboardTab.overview.title == "Overview", "Dashboard persisted identity changed")
+            try requireLocale(DashboardTab.overview.rawValue == "Обзор" && DashboardTab.overview.title == "Statistics", "Dashboard persisted identity changed")
             try requireLocale(DataPeriod.today.rawValue == "Сегодня" && DataPeriod.today.title == "Today", "Period identity changed")
             try requireLocale(SessionSort.cost.rawValue == "По стоимости" && SessionSort.cost.title == "By cost", "Sort identity changed")
             try requireLocale(MenuContentMode.trend.rawValue == "trend" && MenuContentMode.trend.title == "7-day trend", "Menu identity changed")

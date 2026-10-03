@@ -315,19 +315,20 @@ struct SessionSummaryRow: View {
 
     private func row(compact: Bool) -> some View {
         HStack(spacing: 12) {
-            ProviderLogo(provider: session.modelProvider)
-            VStack(alignment: .leading, spacing: 5) {
-                Text(session.modelLabel).font(.system(size: 13, weight: .medium)).lineLimit(1)
-                    .help(session.modelLabel)
-                HStack(spacing: 5) {
-                    Text(session.sourceLabel)
-                    Text("·")
-                    Text(session.shortID).fontDesign(.monospaced)
-                }.font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
-                    .help(UsageFormat.activity(session, timezone: timezone))
-                if compact { tokenSummary.padding(.top, 5).frame(maxWidth: 160) }
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 12) {
+                    ProviderLogo(provider: session.modelProvider)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(session.modelLabel).font(.system(size: 14, weight: .medium)).lineLimit(1)
+                            .help(session.modelLabel)
+                        Text(session.sourceLabel).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
+                            .help(UsageFormat.activity(session, timezone: timezone))
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                if compact { tokenSummary.frame(maxWidth: 160).padding(.leading, 42) }
             }
-            .frame(minWidth: compact ? 70 : 140, maxWidth: .infinity, alignment: .leading)
+            .frame(minWidth: compact ? 112 : 182, maxWidth: .infinity, alignment: .leading)
             if !compact { tokenSummary.frame(width: 140).padding(.trailing, 8) }
             Text(UsageFormat.cost(session.usage)).font(.system(size: 18, weight: .medium)).monospacedDigit()
                 .lineLimit(1).minimumScaleFactor(0.65)

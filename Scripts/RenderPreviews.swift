@@ -86,6 +86,21 @@ struct RenderPreviews {
                     .background(Color(nsColor: .windowBackgroundColor)), name: "polish-inspector-\(Int(width))-\(suffix)",
                            size: .init(width: width, height: 760), dark: dark)
             }
+            let headerSessions: [UsageSession] = [
+                .init(id: "typical", models: ["gpt-6-astra"], usage: .init(input: 411834, output: 21651, cacheRead: 6630528, cost: 11.83), agent: "codex"),
+                .init(id: "long-model", models: ["custom-model-with-a-long-name-and-release-version"], usage: .init(input: 123456789, cost: 123456.78), agent: "opencode"),
+                .init(id: "mixed-models", models: ["claude-sonnet-4.6", "gpt-6-astra"], usage: .zero, agent: "opencode")
+            ]
+            for width: CGFloat in [280, 360] {
+                try render(VStack(spacing: 28) {
+                    ForEach(headerSessions) { session in
+                        SessionInspectorSummary(session: session) { }
+                        Divider()
+                    }
+                }.padding(22).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                    .background(Color(nsColor: .windowBackgroundColor)), name: "polish-inspector-summary-\(Int(width))-\(suffix)",
+                           size: .init(width: width, height: 600), dark: dark)
+            }
             try render(UsageDatePopover(date: Date(), timezone: "Europe/Moscow", onSelect: { _ in }, onCancel: {})
                 .background(Color(nsColor: .windowBackgroundColor)), name: "polish-calendar-\(suffix)",
                        size: .init(width: 320, height: 350), dark: dark)
@@ -264,9 +279,21 @@ struct RenderPreviews {
         try render(TranscriptUserUsageDetails(requests: chatTranscript.requests, policy: .init())
                     .background(Color(nsColor: .windowBackgroundColor)),
                    name: "session-chat-user-usage-details", size: .init(width: 370, height: 450))
-        store.tab = .sessions
+        store.tab = .overview
+        store.sessionList.setExpanded(true)
         try render(DashboardView(store: store).contentPreview, name: "sessions", size: .init(width: 900, height: 700))
         try render(DashboardView(store: store).contentPreview, name: "sessions-narrow", size: .init(width: 370, height: 600))
+        try render(DashboardSessionsSection(store: store).padding(30).background(DashboardBackdrop()),
+                   name: "statistics-sessions-narrow", size: .init(width: 520, height: 500))
+        store.sessionList.query = "no-match"
+        try render(DashboardSessionsSection(store: store).padding(30).background(DashboardBackdrop()),
+                   name: "statistics-sessions-empty", size: .init(width: 520, height: 450))
+        store.sessionList.query = ""
+        store.sessionList.model = "gpt-6-astra"
+        store.sessionList.sort = .cacheRead
+        try render(DashboardSessionsSection(store: store).padding(30).background(DashboardBackdrop()),
+                   name: "statistics-sessions-filtered-dark", size: .init(width: 520, height: 400), dark: true)
+        store.sessionList.setExpanded(false)
         store.selectedSessionID = SampleData.multiSourceSnapshot().sessions[2].id
         try render(SessionDetailView(store: store, sessionID: store.selectedSessionID!)
             .background(Color(nsColor: .windowBackgroundColor)), name: "session-detail", size: .init(width: 310, height: 740))

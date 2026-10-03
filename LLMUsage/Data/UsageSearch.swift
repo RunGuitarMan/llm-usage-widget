@@ -12,7 +12,8 @@ final class SearchResults<Input: Sendable, Output: Sendable>: ObservableObject {
     private var worker: Task<Output, Error>?
     private let evaluate: @Sendable (Input) throws -> Output
 
-    init(initial: Output, evaluate: @escaping @Sendable (Input) throws -> Output) {
+    init(initial: Output, input: Input? = nil, evaluate: @escaping @Sendable (Input) throws -> Output) {
+        completedInput = input
         value = initial
         self.evaluate = evaluate
     }
@@ -137,6 +138,23 @@ struct TranscriptSearchResult: Sendable {
             } else { result.rows.append(TranscriptRow(events: [event])) }
         }
         return result
+    }
+}
+
+/// Shared presentation state lets legacy session links reveal an unfiltered list in Statistics.
+struct SessionListState: Equatable {
+    var isExpanded = false
+    var query = ""
+    var model = ""
+    var sort = SessionSort.cost
+
+    mutating func setExpanded(_ expanded: Bool) {
+        isExpanded = expanded
+        if !expanded {
+            query = ""
+            model = ""
+            if !SessionSort.compactCases.contains(sort) { sort = .cost }
+        }
     }
 }
 

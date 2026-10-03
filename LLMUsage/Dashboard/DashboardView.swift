@@ -90,7 +90,6 @@ struct DashboardView: View {
     @ObservedObject var store: UsageStore
     @State private var visibility = NavigationSplitViewVisibility.all
     @State private var showTokenDetails = false
-    @State private var overviewSort = OverviewSessionSort.cost
     @State private var datePopover: DatePopoverAnchor?
     private enum DatePopoverAnchor { case period, date }
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -137,7 +136,7 @@ struct DashboardView: View {
     private var sidebar: some View {
         VStack(spacing: 0) {
             List(selection: Binding<DashboardTab?>(get: { store.tab }, set: { if let tab = $0 { store.selectedSessionID = nil; store.tab = tab } })) {
-                ForEach([DashboardTab.overview, .sessions, .models]) { tab in
+                ForEach([DashboardTab.overview, .models]) { tab in
                     DashboardSidebarLabel(title: tab.title, symbol: tab.symbol, isSelected: store.tab == tab)
                         .background(DashboardSidebarSelectionBridge().allowsHitTesting(false).accessibilityHidden(true))
                         .listRowBackground(DashboardSidebarSelection(isSelected: store.tab == tab, horizontalInset: 10))
@@ -197,7 +196,6 @@ struct DashboardView: View {
                 if let snapshot = store.displaySnapshot {
                     switch store.tab {
                     case .overview: overview(snapshot)
-                    case .sessions: SessionsView(store: store)
                     case .models: ModelsView(store: store, snapshot: snapshot)
                     case .settings: EmptyView()
                     }
@@ -274,64 +272,56 @@ struct DashboardView: View {
     }
 
     private func overview(_ snapshot: UsageSnapshot) -> some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
-                spendSummary(snapshot)
-                if snapshot.totals.costIsIncomplete == true {
-                    Label(L10n.text("Часть данных для расчёта недоступна. Показаны только учтённые токены и известная стоимость."), systemImage: "info.circle")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-                if showTokenDetails {
-                    DashboardSection {
-                        TokenUsageGrid(usage: snapshot.totals).padding(22)
-                    }
-                    .transition(.opacity.combined(with: .move(edge: .top)))
-                }
-                if store.sourceFilter.isEmpty, snapshot.sourceSummaries.count > 1 {
-                    sourceSpending(snapshot)
-                }
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack(alignment: .firstTextBaseline, spacing: 12) {
-                        Text(overviewSort.heading).font(.system(size: 15, weight: .semibold))
-                            .lineLimit(1).minimumScaleFactor(0.85)
-                        Spacer(minLength: 0)
-                        Menu {
-                            Picker(L10n.text("Сортировка"), selection: $overviewSort) {
-                                ForEach(OverviewSessionSort.allCases) { sort in
-                                    Text(sort.title + " · " + sort.orderDescription).tag(sort)
-                                }
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+                    spendSummary(snapshot) {
+                        if store.sessionList.isExpanded {
+                            scrollToSessions(using: proxy)
+                        } else {
+                            withAnimation(reduceMotion ? nil : DashboardSessionsSection.expansionAnimation,
+                                          completionCriteria: .removed) {
+                                store.sessionList.setExpanded(true)
+                            } completion: {
+                                if store.sessionList.isExpanded { scrollToSessions(using: proxy) }
                             }
-                        } label: {
-                            Label(overviewSort.title, systemImage: "arrow.down")
-                                .font(.system(size: 12)).fixedSize()
                         }
-                        .menuStyle(.borderlessButton).fixedSize()
-                        .help(L10n.text("Сортировка: \(overviewSort.title) · \(overviewSort.orderDescription)"))
-                        .accessibilityLabel(L10n.text("Сортировка"))
-                        .accessibilityValue(overviewSort.title + ", " + overviewSort.orderDescription)
                     }
-                    .padding(.leading, 18).padding(.trailing, 39)
-                    if snapshot.sessions.isEmpty {
-                        DashboardSection { EmptyUsageView() }
-                    } else {
+                    if snapshot.totals.costIsIncomplete == true {
+                        Label(L10n.text("Часть данных для расчёта недоступна. Показаны только учтённые токены и известная стоимость."), systemImage: "info.circle")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                    if showTokenDetails {
                         DashboardSection {
-                            let rows = overviewSort.sessions(in: snapshot)
-                            ForEach(Array(rows.enumerated()), id: \.element.id) { index, session in
-                                if index > 0 { Divider().padding(.leading, 60).padding(.trailing, 18) }
-                                SessionSummaryRow(session: session, timezone: snapshot.day.timezone,
-                                                  selected: store.selectedSessionID == session.id) {
-                                    store.selectedSessionID = session.id
-                                }
-                            }
-                        }.clipShape(RoundedRectangle(cornerRadius: 18))
+                            TokenUsageGrid(usage: snapshot.totals).padding(22)
+                        }
+                        .transition(.opacity.combined(with: .move(edge: .top)))
                     }
+                    if store.sourceFilter.isEmpty, snapshot.sourceSummaries.count > 1 {
+                        sourceSpending(snapshot)
+                    }
+                    DashboardSessionsSection(store: store) { scrollToSessions(using: proxy) }
+                        .id("session-list")
                 }
+                .padding(30).frame(maxWidth: 1000, alignment: .leading).frame(maxWidth: .infinity)
             }
-            .padding(30).frame(maxWidth: 1000, alignment: .leading).frame(maxWidth: .infinity)
+            .task(id: store.sessionNavigationID) {
+                // Reveal explicit widget/deep links once; local toggles do not auto-scroll.
+                guard store.sessionList.isExpanded else { return }
+                await Task.yield()
+                guard !Task.isCancelled else { return }
+                proxy.scrollTo("session-list", anchor: .top)
+            }
         }
     }
 
-    private func spendSummary(_ snapshot: UsageSnapshot) -> some View {
+    private func scrollToSessions(using proxy: ScrollViewProxy) {
+        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) {
+            proxy.scrollTo("session-list", anchor: .top)
+        }
+    }
+
+    private func spendSummary(_ snapshot: UsageSnapshot, showSessions: @escaping () -> Void) -> some View {
         VStack(alignment: .leading, spacing: 26) {
             ViewThatFits(in: .horizontal) {
                 HStack(alignment: .center, spacing: 38) {
@@ -353,8 +343,8 @@ struct DashboardView: View {
                     }
                     .glassEffectID("tokens", in: summaryActions)
                     .accessibilityValue(showTokenDetails ? L10n.text("Развёрнуто") : L10n.text("Свёрнуто"))
-                    Button { store.tab = .sessions } label: {
-                        Label(L10n.text("Все сессии"), systemImage: "arrow.up.right")
+                    Button(action: showSessions) {
+                        Label(L10n.text("Все сессии"), systemImage: "list.bullet")
                     }.glassEffectID("sessions", in: summaryActions)
                 }
                 .buttonStyle(.glass).controlSize(.large)

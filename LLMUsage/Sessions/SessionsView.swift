@@ -1,163 +1,243 @@
 import SwiftUI
 
-struct SessionsView: View {
-    @ObservedObject var store: UsageStore
-    @StateObject private var results: SearchResults<SessionSearchRequest, SessionSearchResult>
-    @State private var search = ""
-    @State private var model = ""
-    @State private var sort = SessionSort.cost
-    @State private var searchFocusRequest = 0
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Namespace private var filterEffects
+/// Both list sizes use the original overview rows and share search and the inspector.
+struct DashboardSessionsSection: View {
+    static let expansionAnimation = Animation.easeInOut(duration: 0.22)
 
-    init(store: UsageStore) {
+    @ObservedObject var store: UsageStore
+    private let revealSearch: () -> Void
+    @StateObject private var results: SearchResults<SessionSearchRequest, SessionSearchResult>
+    @State private var searchFocusRequest = 0
+    @State private var sessionRowHeight: CGFloat = 76
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    init(store: UsageStore, revealSearch: @escaping () -> Void = {}) {
         self.store = store
-        let request = SessionSearchRequest(sessions: store.snapshot?.sessions ?? [], source: store.sourceFilter)
+        self.revealSearch = revealSearch
+        let state = store.sessionList
+        let request = SessionSearchRequest(sessions: store.snapshot?.sessions ?? [], source: store.sourceFilter,
+                                           query: state.query, model: state.model, sort: state.sort)
         _results = StateObject(wrappedValue: SearchResults(
-            initial: (try? SessionSearchResult.evaluate(request)) ?? .init(),
+            initial: (try? SessionSearchResult.evaluate(request)) ?? .init(), input: request,
             evaluate: { try SessionSearchResult.evaluate($0) }))
     }
 
     private var searchRequest: SessionSearchRequest {
-        .init(sessions: store.snapshot?.sessions ?? [], source: store.sourceFilter, query: search, model: model, sort: sort)
+        .init(sessions: store.snapshot?.sessions ?? [], source: store.sourceFilter,
+              query: store.sessionList.query, model: store.sessionList.model, sort: store.sessionList.sort)
     }
     private var sessions: [UsageSession] { results.value.sessions }
+    private var isCurrent: Bool { results.completedInput == searchRequest }
+    private var isExpanded: Bool { store.sessionList.isExpanded }
+    private var sort: SessionSort { store.sessionList.sort }
+    private var visibleSessions: [UsageSession] { isExpanded ? sessions : Array(sessions.prefix(5)) }
+    private var listHeight: CGFloat {
+        let compactCount = min(5, sessions.count)
+        let compactHeight = sessionRowHeight * CGFloat(compactCount) + CGFloat(max(0, compactCount - 1))
+        let fullHeight = sessionRowHeight * CGFloat(sessions.count) + CGFloat(max(0, sessions.count - 1))
+        // Expanding must never make the viewport shorter than its five-row preview.
+        return isExpanded ? min(fullHeight, max(360, compactHeight)) : compactHeight
+    }
 
     var body: some View {
-        VStack(spacing: 0) {
-            sessionHeader
-            if sessions.isEmpty {
-                EmptyUsageView(title: search.isEmpty && model.isEmpty ? L10n.text("Пока нет сессий") : L10n.text("Ничего не найдено"),
-                               message: L10n.text("Выберите другой день или измените фильтры."))
-                    .frame(maxHeight: .infinity)
-            } else {
-                GeometryReader { geometry in
-                    Table(sessions, selection: $store.selectedSessionID) {
-                        TableColumn(L10n.text("Сессия")) { session in
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(session.modelLabel).font(.system(size: 12, weight: .medium)).lineLimit(1)
-                                HStack(spacing: 5) {
-                                    if geometry.size.width < 620 {
-                                        Circle().fill(UsageSource.color(session.sourceID)).frame(width: 5, height: 5)
-                                        Text(session.sourceLabel).font(.system(size: 10))
-                                    }
-                                    if geometry.size.width < 500 {
-                                        Text(L10n.text("· \(UsageFormat.tokens(session.usage.total)) токенов")).font(.system(size: 10))
-                                    } else {
-                                        Text(session.shortID).font(.system(size: 10, design: .monospaced))
-                                    }
-                                }.foregroundStyle(.secondary)
-                            }.padding(.vertical, 3).help(session.rawID)
-                        }.width(min: 130, ideal: geometry.size.width < 500 ? 150 : 220, max: .infinity)
-                        TableColumn(L10n.text("Стоимость")) { Text(UsageFormat.cost($0.usage)).fontWeight(.medium).monospacedDigit() }.width(min: 76, ideal: 90)
-                        if geometry.size.width >= 500 {
-                            TableColumn(L10n.text("Токены")) { Text(UsageFormat.tokens($0.usage.total)).monospacedDigit() }.width(min: 65, ideal: 85)
-                        }
-                        if geometry.size.width >= 620 {
-                            TableColumn(L10n.text("Источник")) { SourceBadge(source: $0.sourceID) }.width(min: 85, ideal: 110)
-                        }
-                        if geometry.size.width >= 740 {
-                            TableColumn(L10n.text("Активность")) { session in
-                                Text(activityLabel(session)).foregroundStyle(.secondary).lineLimit(1)
-                                    .help(UsageFormat.activity(session, timezone: store.timezone))
-                            }.width(min: 75, ideal: 100)
-                        }
-                    }
-                    .tableStyle(.inset).alternatingRowBackgrounds(.disabled)
-                    .scrollContentBackground(.hidden)
-                    .contextMenu(forSelectionType: String.self) { ids in
-                        if let id = ids.first {
-                            Button(L10n.text("Подробности"), systemImage: "sidebar.right") { store.selectedSessionID = id }
-                            Button(L10n.text("Скопировать ID"), systemImage: "doc.on.doc") {
-                                let rawID = sessions.first { $0.id == id }?.rawID ?? id
-                                NSPasteboard.general.clearContents(); NSPasteboard.general.setString(rawID, forType: .string)
-                            }
-                        }
+        VStack(alignment: .leading, spacing: 0) {
+            sectionHeader.padding(.bottom, 12)
+            searchControls
+                .frame(height: isExpanded ? 32 : 0, alignment: .top)
+                .opacity(isExpanded ? 1 : 0).clipped()
+                .allowsHitTesting(isExpanded).accessibilityHidden(!isExpanded)
+                .padding(.bottom, isExpanded ? 12 : 0)
+            DashboardSection {
+                Group {
+                    if sessions.isEmpty {
+                        EmptyUsageView(title: store.sessionList.query.isEmpty && store.sessionList.model.isEmpty
+                                       ? L10n.text("Пока нет сессий") : L10n.text("Ничего не найдено"),
+                                       message: L10n.text("Выберите другой день или измените фильтры."))
+                            .frame(height: 190)
+                    } else {
+                        sessionRows
                     }
                 }
+                .disabled(!isCurrent).opacity(isCurrent ? 1 : 0.5)
+                Divider().padding(.horizontal, 18)
+                sectionFooter
             }
-            HStack {
-                Text(L10n.text("Сессии: \(sessions.count)"))
-                Spacer()
-                Text(UsageFormat.cost(results.value.total))
-            }.font(.system(size: 11)).foregroundStyle(.secondary)
-                .padding(.horizontal, 22).padding(.vertical, 12)
+            .clipShape(RoundedRectangle(cornerRadius: 18))
         }
         .task(id: searchRequest) {
-            await results.update(searchRequest, delay: search.isEmpty ? .zero : .milliseconds(120))
+            await results.update(searchRequest, delay: store.sessionList.query.isEmpty ? .zero : .milliseconds(120))
         }
         .background {
-            Button(L10n.text("Найти сессию")) { searchFocusRequest += 1 }
-                .keyboardShortcut("f").hidden().accessibilityHidden(true)
+            Button(L10n.text("Найти сессию")) {
+                withAnimation(reduceMotion ? nil : Self.expansionAnimation, completionCriteria: .removed) {
+                    store.sessionList.setExpanded(true)
+                } completion: {
+                    guard store.sessionList.isExpanded else { return }
+                    revealSearch()
+                    searchFocusRequest += 1
+                }
+            }.keyboardShortcut("f").hidden().accessibilityHidden(true)
         }
-        .onChange(of: store.sourceFilter) { _, _ in model = "" }
+        .onChange(of: store.sourceFilter) { _, _ in store.sessionList.model = "" }
         .onChange(of: store.selectedModels) { _, models in
-            if !model.isEmpty && !models.contains(model) { model = "" }
+            if !store.sessionList.model.isEmpty && !models.contains(store.sessionList.model) {
+                store.sessionList.model = ""
+            }
         }
-        .onChange(of: sessions.map(\.id)) { _, visibleIDs in
-            guard results.completedInput == searchRequest else { return }
-            if let selected = store.selectedSessionID, store.selectedSession != nil, !visibleIDs.contains(selected) {
-                store.selectedSessionID = nil
+        .onChange(of: results.completedInput) { _, completed in
+            guard completed == searchRequest, let selected = store.selectedSession else { return }
+            if !sessions.contains(where: { $0.id == selected.id }) { store.selectedSessionID = nil }
+        }
+    }
+
+    private var sectionHeader: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
+            Text(isExpanded ? L10n.text("Все сессии") : sort.heading)
+                .font(.system(size: 15, weight: .semibold)).lineLimit(1).minimumScaleFactor(0.85)
+            Spacer(minLength: 0)
+            Menu {
+                Picker(L10n.text("Сортировка"), selection: $store.sessionList.sort) {
+                    ForEach(isExpanded ? SessionSort.allCases : SessionSort.compactCases) { order in
+                        Text(order.metricTitle + " · " + order.orderDescription).tag(order)
+                    }
+                }
+            } label: {
+                Label(sort.metricTitle, systemImage: "arrow.down").font(.system(size: 12)).fixedSize()
+            }
+            .menuStyle(.borderlessButton).fixedSize()
+            .help(L10n.text("Сортировка: \(sort.metricTitle) · \(sort.orderDescription)"))
+            .accessibilityLabel(L10n.text("Сортировка"))
+            .accessibilityValue(sort.metricTitle + ", " + sort.orderDescription)
+        }.padding(.leading, 18).padding(.trailing, 39)
+    }
+
+    private var searchControls: some View {
+        HStack(spacing: 10) {
+            SessionSearchField(text: $store.sessionList.query, focusRequest: searchFocusRequest, isActive: isExpanded)
+                .frame(minWidth: 100, maxWidth: .infinity).frame(height: 32)
+            Menu {
+                Picker(L10n.text("Модель"), selection: $store.sessionList.model) {
+                    Text(L10n.text("Все модели")).tag("")
+                    ForEach(store.selectedModels, id: \.self) { Text($0).tag($0) }
+                }
+            } label: {
+                Label(store.sessionList.model.isEmpty ? L10n.text("Все модели") : store.sessionList.model,
+                      systemImage: "line.3.horizontal.decrease")
+                    .lineLimit(1).truncationMode(.middle)
+            }
+            .frame(maxWidth: 180)
+            .help(store.sessionList.model.isEmpty ? L10n.text("Все модели") : store.sessionList.model)
+            .accessibilityLabel(L10n.text("Фильтры сессий"))
+            .accessibilityValue(store.sessionList.model.isEmpty ? L10n.text("Все модели") : store.sessionList.model)
+            if !store.sessionList.model.isEmpty {
+                Button { store.sessionList.model = "" } label: { Image(systemName: "xmark.circle.fill") }
+                    .buttonStyle(.plain).foregroundStyle(.secondary)
+                    .help(L10n.text("Сбросить фильтр модели"))
+                    .accessibilityLabel(L10n.text("Сбросить фильтр модели"))
             }
         }
     }
 
-    private var sessionHeader: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            HStack(alignment: .firstTextBaseline, spacing: 14) {
-                Text(UsageFormat.cost(results.value.total))
-                    .font(.system(size: 36, weight: .semibold)).tracking(-1).lineLimit(1).minimumScaleFactor(0.6)
-                Text(L10n.text("Сессии: \(sessions.count) · \(search.isEmpty && model.isEmpty ? L10n.text("За период") : L10n.text("Найдено"))"))
-                    .font(.system(size: 12)).foregroundStyle(.secondary).lineLimit(1)
-                Spacer(minLength: 0)
-            }
-            HStack(spacing: 12) {
-                SessionSearchField(text: $search, focusRequest: searchFocusRequest)
-                    .frame(minWidth: 100, maxWidth: .infinity).frame(height: 32)
-                GlassEffectContainer(spacing: 4) {
-                    HStack(spacing: 12) {
-                        Menu {
-                            Picker(L10n.text("Модель"), selection: $model) {
-                                Text(L10n.text("Все модели")).tag("")
-                                ForEach(store.selectedModels, id: \.self) { Text($0).tag($0) }
-                            }
-                            Picker(L10n.text("Сортировка"), selection: $sort) {
-                                ForEach(SessionSort.allCases) { Text($0.title).tag($0) }
-                            }
-                        } label: { Image(systemName: model.isEmpty ? "line.3.horizontal.decrease" : "line.3.horizontal.decrease.circle.fill") }
-                            .help(L10n.text("Фильтры и сортировка сессий")).accessibilityLabel(L10n.text("Фильтры сессий"))
-                            .glassEffectID("filter", in: filterEffects)
-                        if !model.isEmpty {
-                            Button { withAnimation(reduceMotion ? nil : .smooth) { model = "" } } label: {
-                                Image(systemName: "xmark")
-                            }.help(L10n.text("Сбросить фильтр модели")).accessibilityLabel(L10n.text("Сбросить фильтр модели"))
-                                .glassEffectID("reset", in: filterEffects)
-                        }
-                    }.buttonStyle(.glass).controlSize(.large)
+    /// Keep the scroll view and existing row identities alive while the viewport changes size.
+    private var sessionRows: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(spacing: 0) {
+                    ForEach(visibleSessions) { session in
+                        VStack(spacing: 0) {
+                            if session.id != sessions.first?.id { rowDivider }
+                            sessionRow(session)
+                                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
+                                    guard session.id == sessions.first?.id, height > 0,
+                                          abs(sessionRowHeight - height) > 0.5 else { return }
+                                    // Learn row height in the compact state too, without a second animation.
+                                    var transaction = Transaction(animation: nil)
+                                    transaction.disablesAnimations = true
+                                    withTransaction(transaction) { sessionRowHeight = height }
+                                }
+                        }.id(session.id)
+                    }
                 }
             }
-            if !model.isEmpty {
-                Text(model).font(.system(size: 11)).foregroundStyle(.secondary)
+            .scrollDisabled(!isExpanded)
+            .scrollIndicators(isExpanded ? .automatic : .hidden)
+            .frame(height: listHeight)
+            .onChange(of: isExpanded) { _, expanded in
+                if !expanded, let id = sessions.first?.id {
+                    var transaction = Transaction(animation: nil)
+                    transaction.disablesAnimations = true
+                    withTransaction(transaction) { proxy.scrollTo(id, anchor: .top) }
+                }
+            }
+            .onChange(of: store.selectedSessionID, initial: true) { _, id in
+                if isExpanded, let id { proxy.scrollTo(id) }
+            }
+            .onChange(of: results.completedInput) { old, new in
+                if old?.query != new?.query || old?.model != new?.model || old?.sort != new?.sort || old?.source != new?.source {
+                    if let id = sessions.first?.id { proxy.scrollTo(id, anchor: .top) }
+                }
             }
         }
-        .padding(.horizontal, 22).padding(.top, 22).padding(.bottom, 18)
-        .animation(reduceMotion ? nil : .smooth(duration: 0.25), value: model)
     }
 
-    private func activityLabel(_ session: UsageSession) -> String {
-        guard let date = session.lastActivity else { return "—" }
-        let formatter = DateFormatter()
-        formatter.locale = L10n.locale
-        formatter.timeZone = TimeZone(identifier: store.timezone)
-        formatter.setLocalizedDateFormatFromTemplate(session.activityHasTime ? "j:mm" : "d MMM")
-        return formatter.string(from: date)
+    private var rowDivider: some View {
+        Divider().padding(.leading, 60).padding(.trailing, 18)
     }
+
+    private func sessionRow(_ session: UsageSession) -> some View {
+        SessionSummaryRow(session: session, timezone: store.timezone,
+                          selected: store.selectedSessionID == session.id) {
+            store.selectedSessionID = session.id
+        }
+        .contextMenu {
+            Button(L10n.text("Скопировать ID"), systemImage: "doc.on.doc") { copyID(session.rawID) }
+        }
+    }
+
+    private var sectionFooter: some View {
+        HStack(spacing: 12) {
+            if isCurrent {
+                if isExpanded {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(L10n.text("Сессии: \(sessions.count)"))
+                        Text(L10n.text("Итого: \(UsageFormat.cost(results.value.total))"))
+                    }
+                } else {
+                    Text(L10n.text("Показано \(min(5, sessions.count)) из \(sessions.count)"))
+                }
+            } else {
+                ProgressView().controlSize(.mini)
+                Text(L10n.text("Поиск…"))
+            }
+            Spacer(minLength: 0)
+            Button {
+                withAnimation(reduceMotion ? nil : Self.expansionAnimation) {
+                    store.sessionList.setExpanded(!isExpanded)
+                }
+            } label: {
+                Label(isExpanded ? L10n.text("Свернуть список") : L10n.text("Все сессии"),
+                      systemImage: isExpanded ? "chevron.up" : "chevron.down")
+            }
+            .buttonStyle(.borderless).font(.system(size: 12))
+            .accessibilityValue(isExpanded ? L10n.text("Развёрнуто") : L10n.text("Свёрнуто"))
+        }
+        .font(.system(size: 11)).foregroundStyle(.secondary)
+        .frame(height: 29)
+        .padding(.horizontal, 18).padding(.vertical, 12)
+    }
+
+    private func copyID(_ id: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(id, forType: .string)
+    }
+
 }
 
-/// A native search field scoped to the table column, so it can never extend across the inspector.
+/// A native search field scoped to the session section, so it can never extend across the inspector.
 struct SessionSearchField: NSViewRepresentable {
     @Binding var text: String
     var focusRequest: Int
+    var isActive = true
     var placeholder = L10n.text("Модель, проект или сессия")
 
     func makeCoordinator() -> Coordinator { Coordinator(text: $text) }
@@ -174,10 +254,15 @@ struct SessionSearchField: NSViewRepresentable {
     }
     func updateNSView(_ field: NSSearchField, context: Context) {
         context.coordinator.text = $text
+        field.isEnabled = isActive
+        if !isActive, field.currentEditor() != nil { field.window?.makeFirstResponder(nil) }
         if field.stringValue != text { field.stringValue = text }
-        if context.coordinator.lastFocusRequest != focusRequest {
+        if isActive, context.coordinator.lastFocusRequest != focusRequest {
             context.coordinator.lastFocusRequest = focusRequest
-            field.window?.makeFirstResponder(field)
+            DispatchQueue.main.async { [weak field] in
+                guard let field else { return }
+                field.window?.makeFirstResponder(field)
+            }
         }
     }
     final class Coordinator: NSObject, NSSearchFieldDelegate {
@@ -200,7 +285,58 @@ private struct SessionChatSelection: Identifiable {
     var pricingKey: String?
 }
 
-/// An inspector keeps the selected session's context visible in the dashboard/table.
+/// Identity and the chat action share a row; the two headline metrics share a baseline.
+struct SessionInspectorSummary: View {
+    var session: UsageSession
+    var openChat: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 22) {
+            HStack(spacing: 10) {
+                ProviderLogo(provider: session.modelProvider)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(session.modelLabel).font(.system(size: 15, weight: .semibold))
+                        .lineLimit(2).textSelection(.enabled).help(session.modelLabel)
+                    SourceBadge(source: session.sourceID)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                Button(action: openChat) {
+                    Label(L10n.text("Чат"), systemImage: "text.bubble")
+                        .font(.system(size: 11, weight: .medium))
+                }
+                .buttonStyle(.bordered).controlSize(.small).fixedSize()
+                .help(L10n.text("Сообщения, ответы и действия в этой сессии"))
+                .accessibilityLabel(L10n.text("Просмотреть чат"))
+            }
+            HStack(alignment: .firstTextBaseline, spacing: 16) {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(UsageFormat.cost(session.usage))
+                        .font(.system(size: 32, weight: .semibold)).tracking(-0.8)
+                        .monospacedDigit().lineLimit(1).minimumScaleFactor(0.5)
+                        .help(UsageFormat.cost(session.usage))
+                    Text(L10n.text("Стоимость")).font(.system(size: 11)).foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(L10n.text("Стоимость"))
+                .accessibilityValue(UsageFormat.cost(session.usage))
+                VStack(alignment: .trailing, spacing: 5) {
+                    Text(UsageFormat.tokens(session.usage.total))
+                        .font(.system(size: 24, weight: .medium)).monospacedDigit()
+                        .lineLimit(1).minimumScaleFactor(0.65)
+                        .help(UsageFormat.exact(session.usage.total))
+                    Text(L10n.text("Токены")).font(.system(size: 11)).foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .trailing)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(L10n.text("Токены"))
+                .accessibilityValue(UsageFormat.exact(session.usage.total))
+            }
+        }
+    }
+}
+
+/// An inspector keeps the selected session's context visible in the dashboard.
 struct SessionDetailView: View {
     @ObservedObject var store: UsageStore
     var sessionID: String
@@ -224,21 +360,9 @@ struct SessionDetailView: View {
                         .buttonStyle(.glass).buttonBorderShape(.circle).help(L10n.text("Закрыть подробности")).accessibilityLabel(L10n.text("Закрыть подробности"))
                 }
                 if let session = store.selectedSession {
-                    VStack(alignment: .leading, spacing: 9) {
-                        SourceBadge(source: session.sourceID)
-                        Text(session.modelLabel).font(.system(size: 18, weight: .semibold)).textSelection(.enabled)
-                    }
-                    Button {
+                    SessionInspectorSummary(session: session) {
                         chatSession = .init(session: session, day: store.snapshot?.day ?? store.selectedDay,
                                             policy: store.modelExclusionPolicy, customPath: store.customPath, pricingKey: store.snapshot?.pricingKey)
-                    } label: {
-                        Label(L10n.text("Просмотреть чат"), systemImage: "text.bubble")
-                            .font(.system(size: 12, weight: .medium))
-                    }.buttonStyle(.bordered).controlSize(.regular).fixedSize()
-                        .help(L10n.text("Сообщения, ответы и действия в этой сессии"))
-                    VStack(alignment: .leading, spacing: 5) {
-                        Text(UsageFormat.cost(session.usage)).font(.system(size: 44, weight: .semibold)).tracking(-1.5)
-                        Text(L10n.text("\(UsageFormat.tokens(session.usage.total)) токенов")).font(.callout).foregroundStyle(.secondary)
                     }
                     if session.usage.costIsIncomplete == true {
                         Label(L10n.text("Стоимость неполная: часть данных недоступна."), systemImage: "info.circle")
