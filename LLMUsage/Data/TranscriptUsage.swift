@@ -258,7 +258,9 @@ enum TranscriptUsageParser {
                     cacheCreate: tokens["cache_creation_input_tokens", default: 0], cacheRead: tokens["cache_read_input_tokens", default: 0], costIsIncomplete: true)
                 let messageID = message["id"] as? String
                 let requestID = root["requestId"] as? String
-                let key = messageID.map { "claude|\($0)|\(requestID ?? "\(root["sessionId"] ?? "")|\(root["timestamp"] ?? "")")" }
+                // Stream timestamps change while the API message identity stays
+                // fixed. Older/exported logs can omit the transport request ID.
+                let key = messageID.map { "claude|\($0)|\(requestID ?? "\(record.origin ?? "")|\(root["sessionId"] ?? "")")" }
                 append(model: model, date: date, events: events,
                        billing: .init(tokens: tokens, speed: raw["speed"] as? String, cacheCreation: cache), usage: usage,
                        key: key, sidechain: root["isSidechain"] as? Bool == true,
@@ -295,7 +297,7 @@ enum TranscriptUsageParser {
                 if type == "turn_context" || payload["type"] as? String == "thread_settings_applied" {
                     let settings = TranscriptJSON.object(payload["thread_settings"])
                     if let value = (settings["model"] ?? payload["model"]) as? String { turn.model = value }
-                    if let value = settings["service_tier"] as? String { turn.speed = value }
+                    if let value = (settings["service_tier"] ?? payload["service_tier"]) as? String { turn.speed = value }
                     if turnID == currentTurn { model = turn.model; speed = turn.speed }
                 }
                 if turnID == nil, payload["type"] as? String == "user_message" || payload["role"] as? String == "user" {

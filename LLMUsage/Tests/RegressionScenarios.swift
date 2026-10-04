@@ -1,4 +1,5 @@
 import Foundation
+import SQLite3
 #if SWIFT_PACKAGE
 @testable import LLMUsageCore
 #elseif !PORTABLE_CHECKS
@@ -123,6 +124,8 @@ private final class RegressionSearchGate: @unchecked Sendable {
 /// Shared by XCTest and the CLT harness, so regression coverage does not diverge.
 enum RegressionScenarios {
     @MainActor static func run(check: (String, () async throws -> Void) async -> Void) async {
+        await DeepAuditScenarios.run(check: check)
+        await ExtendedAuditScenarios.run(check: check)
         await check("Statistics: model logos follow model families across agents, namespaces and mixed sessions") {
             let cases: [(String, ModelProvider)] = [
                 ("claude-opus-5-5", .anthropic), (" OpenRouter/Anthropic/Claude-Sonnet-4.6 ", .anthropic),
@@ -775,5 +778,359 @@ enum RegressionScenarios {
                                now: { clock.now }, reloadWidget: {})
         try await action(store, service, clock)
         await store.waitForHistoryBackfill()
+    }
+}
+
+/// Freeze the response at request start and release it explicitly, including failures.
+private actor AuditService: CCUsageServing {
+    var timestamp = ISO8601DateFormatter().date(from: "2026-09-29T12:00:00Z")!
+    var cost = 1.0
+    var counts: [String: Int] = [:]
+    func count(_ day: UsageDay) -> Int { counts[day.cacheKey, default: 0] }
+    var heldDay: UsageDay?
+    var heldFailure = false
+    var release: CheckedContinuation<Void, Never>?
+    var waiting: CheckedContinuation<Void, Never>?
+    func configure(at date: Date, cost: Double, hold day: UsageDay? = nil, fails: Bool = false) {
+        timestamp = date; self.cost = cost; heldDay = day; heldFailure = fails
+    }
+    func waitUntilHeld() async {
+        if release != nil { return }
+        await withCheckedContinuation { waiting = $0 }
+    }
+    func finish() { release?.resume(); release = nil }
+    func fetch(day: UsageDay, customPath: String, mode: UsageUpdateMode) async throws -> UsageSnapshot {
+        counts[day.cacheKey, default: 0] += 1
+        let result = UsageSnapshot(generatedAt: timestamp, day: day,
+            sessions: [.init(id: "s-" + day.key, models: ["test"], usage: .init(input: 10, cost: cost))])
+        if heldDay == day {
+            heldDay = nil
+            let fails = heldFailure
+            await withCheckedContinuation { continuation in
+                release = continuation; waiting?.resume(); waiting = nil
+            }
+            if fails { throw UsageError.timedOut }
+        }
+        return result
+    }
+    func diagnose(customPath: String, forceDetect: Bool) -> CLIDiagnostics { .init(path: "fixture", version: "1") }
+}
+
+@MainActor private enum ExtendedAuditScenarios {
+    static func run(check: (String, () async throws -> Void) async -> Void) async {
+        await check("Audit II: automatic refresh recovers after the wall clock moves backward") {
+            try await DeepAuditScenarios.withStore { store, service, _, clock in
+                await store.refresh(reason: .startup); await store.waitForHistoryBackfill()
+                let today = UsageDay(date: clock.now)
+                clock.now.addTimeInterval(-3600)
+                await service.configure(at: clock.now, cost: 2)
+                await store.refreshAutomaticallyIfDue(); await store.waitForHistoryBackfill()
+                let count = await service.count(today)
+                try requireRegression(count == 2 && store.todaySnapshot?.totals.cost == 2,
+                                      "Automatic refresh waits for the old wall-clock deadline after rollback")
+            }
+        }
+        await check("Audit II: clock correction during a request rebases success and failure deadlines") {
+            let now = ISO8601DateFormatter().date(from: "2026-09-29T12:00:00Z")!
+            let day = UsageDay(date: now)
+            let corrected = now.addingTimeInterval(-3600)
+            for fails in [false, true] {
+                var schedule = RefreshSchedule()
+                schedule.reset(day: day, at: now)
+                schedule.succeeded(cost: 1, reason: .startup, at: now)
+                schedule.prepare(day: day, at: now.addingTimeInterval(1))
+                if fails { schedule.failed(reason: .automatic, at: corrected) }
+                else { schedule.succeeded(cost: 1, reason: .manual, at: corrected) }
+                schedule.prepare(day: day, at: corrected)
+                try requireRegression(schedule.nextRefresh! <= corrected.addingTimeInterval(schedule.interval),
+                    "A request completed after clock correction and preserved a deadline an hour ahead")
+            }
+        }
+        await check("Audit II: legacy OpenCode enforces one byte budget across messages and parts") {
+            let directory = PricingScenarios.directory()
+            defer { try? FileManager.default.removeItem(at: directory) }
+            let messages = directory.appendingPathComponent("storage/message/session-a")
+            let parts = directory.appendingPathComponent("storage/part/m1")
+            try FileManager.default.createDirectory(at: messages, withIntermediateDirectories: true)
+            try FileManager.default.createDirectory(at: parts, withIntermediateDirectories: true)
+            let message = Data(#"{"id":"m1","role":"assistant"}"#.utf8)
+            let part = Data(#"{"type":"text","text":"Part of a long transcript 👋"}"#.utf8)
+            try message.write(to: messages.appendingPathComponent("m1.json"))
+            try part.write(to: parts.appendingPathComponent("p1.json"))
+            try part.write(to: parts.appendingPathComponent("p2.json"))
+            let bytes = message.count + part.count * 2
+            let session = UsageSession(id: "session-a", models: [], usage: .zero, agent: "opencode")
+            let service = TranscriptService(home: directory, environment: ["OPENCODE_DATA_DIR": directory.path], byteLimit: bytes)
+            let exact = try await service.load(session: session)
+            try requireRegression(exact.events.contains { $0.text.contains("Part of a long transcript") }, "Exact byte boundary rejected a valid transcript")
+            var limited = service; limited.byteLimit -= 1
+            do {
+                _ = try await limited.load(session: session)
+                throw RegressionFailure(description: "OpenCode bypassed the total transcript size limit")
+            } catch TranscriptError.tooLarge { }
+        }
+        await check("Audit II: clock rollback invalidates future-dated completed history") {
+            let now = ISO8601DateFormatter().date(from: "2026-09-29T12:00:00Z")!
+            let today = UsageDay(date: now, timezone: "UTC")
+            let context = UsageDataContext(timezone: "UTC", customPath: "")
+            var snapshot = UsageSnapshot(generatedAt: now.addingTimeInterval(3600), day: today.adding(days: -1), sessions: [])
+            snapshot.dataContext = context
+            let history = UsageHistory(context: context, days: [.init(snapshot: snapshot)])
+            try requireRegression(history.missingCompletedDays(ending: today, now: now).contains(snapshot.day),
+                                  "A report captured before clock rollback remains fresh in the future")
+        }
+        await check("Audit II: manual history refresh after clock rollback replaces future cache") {
+            try await DeepAuditScenarios.withStore { store, service, _, clock in
+                await service.configure(at: clock.now, cost: 1)
+                await store.refresh(reason: .startup); await store.waitForHistoryBackfill()
+                clock.now.addTimeInterval(-3600)
+                await service.configure(at: clock.now, cost: 2)
+                store.period = .yesterday
+                await store.refresh(); await store.waitForHistoryBackfill()
+                let yesterday = UsageDay(date: clock.now).adding(days: -1)
+                try requireRegression(store.previousSnapshot?.totals.cost == 2
+                    && store.history?.days.first(where: { $0.day == yesterday })?.usage.cost == 2,
+                    "Clock rollback made refreshed report and weekly history disagree")
+            }
+        }
+        await check("Audit II: a damaged tariff receipt is repaired by the next identical report") {
+            let directory = PricingScenarios.directory()
+            defer { try? FileManager.default.removeItem(at: directory) }
+            let archive = TranscriptPricingArchive(directory: directory)
+            let config = Data(#"{"defaults":{"pricingOverrides":{"claude-test":{"inputCostPerToken":0.01}}}}"#.utf8)
+            let key = try archive.save(configuration: config)
+            let expected = try archive.configuration(key: key, source: "claude")
+            try Data("damaged".utf8).write(to: directory.appendingPathComponent(key + ".json"))
+            let repeated = try archive.save(configuration: config)
+            let repaired = try archive.configuration(key: repeated, source: "claude")
+            try requireRegression(key == repeated && expected == repaired, "Repeated report reused an unreadable receipt")
+        }
+        await check("Audit II: a malformed JSON array item preserves adjacent messages and marks usage uncertain") {
+            let directory = PricingScenarios.directory()
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            defer { try? FileManager.default.removeItem(at: directory) }
+            let file = directory.appendingPathComponent("session.json")
+            let messages: [Any] = [
+                ["type": "user", "message": ["role": "user", "content": "Привет"]], NSNull(),
+                ["type": "assistant", "message": ["id": "m", "role": "assistant", "content": "Ответ",
+                    "model": "claude-test", "usage": ["input_tokens": 10, "output_tokens": 2]]]]
+            for json: Any in [messages, ["sessionId": "test", "messages": messages],
+                              ["chatMessages": messages], ["events": messages]] {
+                try JSONSerialization.data(withJSONObject: json).write(to: file)
+                let session = UsageSession(id: "test", models: [], usage: .zero, agent: "claude")
+                let value = try await TranscriptService(home: directory, environment: [:]).load(session: session, file: file)
+                try requireRegression(value.events.filter(\.isMessage).map(\.text) == ["Привет", "Ответ"]
+                    && value.requests.count == 1 && value.requests[0].usage.total == 12 && value.usageUncertain,
+                    "One malformed item discarded valid messages, tokens or the incompleteness warning")
+            }
+            // A plain record array is not an OpenCode export: preserve incidental info fields.
+            let row: [String: Any] = ["role": "assistant", "content": "Answer", "info": ["metadata": "keep"]]
+            try JSONSerialization.data(withJSONObject: [row]).write(to: file)
+            let parsed = try TranscriptService.records(at: file)
+            try requireRegression(parsed.records.first?["role"] as? String == "assistant"
+                && TranscriptJSON.object(parsed.records.first?["info"])["metadata"] as? String == "keep",
+                "Plain array records were incorrectly treated as wrapped exports")
+        }
+        await check("Audit II: SQLite text and session identities preserve embedded NUL and UTF-8") {
+            let directory = PricingScenarios.directory()
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            defer { try? FileManager.default.removeItem(at: directory) }
+            let file = directory.appendingPathComponent("sessions.db")
+            var db: OpaquePointer?
+            guard sqlite3_open(file.path, &db) == SQLITE_OK else { throw RegressionFailure(description: "Cannot create fixture") }
+            defer { sqlite3_close(db) }
+            let sql = """
+            CREATE TABLE messages (id TEXT, session_id TEXT, role TEXT, content TEXT);
+            INSERT INTO messages VALUES ('1', 'same', 'assistant', 'wrong session');
+            INSERT INTO messages VALUES ('2', 'same' || char(0) || 'suffix', 'assistant', 'Привет' || char(0) || '👋');
+            INSERT INTO messages VALUES ('3', 'ordinary', 'assistant', 'Привет' || char(0) || '👋');
+            """
+            guard sqlite3_exec(db, sql, nil, nil, nil) == SQLITE_OK else { throw RegressionFailure(description: "Cannot populate fixture") }
+            let selected = try TranscriptDatabase.read(file, sessionID: "same\0suffix")
+            let ordinary = try TranscriptDatabase.read(file, sessionID: "ordinary")
+            try requireRegression(selected.count == 1 && selected[0]["id"] as? String == "2",
+                                  "Session identity was truncated and another chat was selected")
+            try requireRegression(selected[0]["content"] as? String == "Привет\0👋"
+                && ordinary.first?["content"] as? String == "Привет\0👋", "SQLite text was silently truncated")
+        }
+    }
+}
+
+@MainActor private enum DeepAuditScenarios {
+    static func withStore(_ action: (UsageStore, AuditService, RegressionRepository, RegressionClock) async throws -> Void) async throws {
+        let suite = "LLMUsage.DeepAudit.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let clock = RegressionClock(), service = AuditService(), repository = RegressionRepository()
+        let store = UsageStore(service: service, repository: repository, defaults: defaults, now: { clock.now }, reloadWidget: {})
+        do { try await action(store, service, repository, clock) }
+        catch { await service.finish(); await store.waitForHistoryBackfill(); throw error }
+        await service.finish(); await store.waitForHistoryBackfill()
+    }
+
+    static func run(check: (String, () async throws -> Void) async -> Void) async {
+        await check("Audit: timeout and cancellation kill descendants that ignore graceful termination") {
+            let directory = PricingScenarios.directory()
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            defer { try? FileManager.default.removeItem(at: directory) }
+            for cancel in [false, true] {
+                let file = directory.appendingPathComponent(cancel ? "cancel-child" : "timeout-child")
+                let task = Task {
+                    try await ProcessRunner(timeout: cancel ? 5 : 0.3).run(executable: URL(fileURLWithPath: "/bin/sh"),
+                        arguments: ["-c", "trap '' TERM; /bin/sleep 30 & printf '%s' \"$!\" > \"$1\"; wait", "fixture", file.path])
+                }
+                defer { task.cancel() }
+                if cancel {
+                    let deadline = ContinuousClock.now.advanced(by: .seconds(3))
+                    while !FileManager.default.fileExists(atPath: file.path), ContinuousClock.now < deadline {
+                        try await Task.sleep(for: .milliseconds(10))
+                    }
+                    task.cancel()
+                }
+                do {
+                    _ = try await task.value
+                    throw RegressionFailure(description: "Unresponsive process completed without cancellation/timeout")
+                } catch UsageError.timedOut where !cancel { }
+                catch is CancellationError where cancel { }
+                let pid = try Int32(String(contentsOf: file, encoding: .utf8))!
+                defer { kill(pid, SIGKILL) } // Clean up the deliberately failing pre-fix scenario.
+                let deadline = ContinuousClock.now.advanced(by: .seconds(1))
+                while kill(pid, 0) == 0 && ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(10)) }
+                try requireRegression(kill(pid, 0) != 0, "Timeout/cancellation left the wrapper's child running")
+            }
+        }
+        await check("Audit: historical browsing has a bounded cache while recent dates remain reusable") {
+            try await withStore { store, service, _, clock in
+                await store.refresh(reason: .startup); await store.waitForHistoryBackfill()
+                let first = UsageDay(date: clock.now).adding(days: -10)
+                for offset in 0..<40 {
+                    store.period = .custom; store.customDate = first.adding(days: -offset).date
+                    clock.now.addTimeInterval(1)
+                    await service.configure(at: clock.now, cost: 1)
+                    await store.selectPeriod()
+                }
+                let recent = store.selectedDay
+                await store.selectPeriod()
+                let recentCount = await service.count(recent)
+                store.customDate = first.date
+                await store.selectPeriod()
+                let oldCount = await service.count(first)
+                try requireRegression(recentCount == 1 && oldCount == 2,
+                    "Browsing retains every full report indefinitely, or immediately discards the current report")
+            }
+        }
+        await check("Audit: model allocation completeness compares each token bucket") {
+            let raw = UsageSnapshot(generatedAt: Date(), day: .init(), sessions: [
+                .init(id: "mixed", models: ["paid", "glm-5"], usage: .init(input: 100, output: 20, cost: 2),
+                    modelBreakdowns: [.init(id: "paid", usage: .init(input: 20, output: 80, cost: 1)),
+                                      .init(id: "glm-5", usage: .init(input: 20, cost: 1))])
+            ])
+            let adjusted = raw.applyingExclusions(.init())
+            try requireRegression(adjusted.totals.total == 0 && adjusted.totals.cost == 0,
+                                  "An inconsistent breakdown was used to allocate included tokens")
+            let reference = raw.reportedModelSummaries(applying: .init())
+            try requireRegression(reference.count == 1 && reference[0].usage.input == 100,
+                                  "Reference rows claim model attribution despite mismatched buckets")
+            try requireRegression(raw.modelSummaries.count == 1 && raw.modelSummaries[0].usage.input == 100,
+                                  "Model summary silently moved tokens between categories")
+        }
+        await check("Audit: manual yesterday refresh updates comparison, widget file and restart cache") {
+            try await withStore { store, service, repository, clock in
+                await store.refresh(reason: .startup); await store.waitForHistoryBackfill()
+                clock.now.addTimeInterval(60)
+                await service.configure(at: clock.now, cost: 2)
+                store.period = .yesterday
+                await store.refresh(); await store.waitForHistoryBackfill()
+                let saved = await repository.read(.yesterday)
+                try requireRegression(store.snapshot?.totals.cost == 2 && store.previousSnapshot?.totals.cost == 2
+                    && saved?.totals.cost == 2, "Yesterday differs between dashboard, comparison and persisted widget snapshot")
+                let suite = "LLMUsage.DeepAudit.Restart.\(UUID().uuidString)"
+                let defaults = UserDefaults(suiteName: suite)!
+                defer { defaults.removePersistentDomain(forName: suite) }
+                let restarted = UsageStore(service: AuditService(), repository: repository, defaults: defaults,
+                                           now: { clock.now }, reloadWidget: {})
+                restarted.period = .yesterday
+                await restarted.refresh(reason: .startup); await restarted.waitForHistoryBackfill()
+                try requireRegression(restarted.previousSnapshot?.totals.cost == 2 && restarted.snapshot?.totals.cost == 2,
+                                      "Restart restored an older yesterday report")
+            }
+        }
+        await check("Audit: late history response cannot roll back a newer manual report") {
+            try await withStore { store, service, repository, clock in
+                let yesterday = UsageDay(date: clock.now).adding(days: -1)
+                await service.configure(at: clock.now, cost: 1, hold: yesterday)
+                await store.refresh(reason: .startup)
+                await service.waitUntilHeld()
+                clock.now.addTimeInterval(10)
+                await service.configure(at: clock.now, cost: 2)
+                store.period = .yesterday
+                await store.refresh()
+                await service.finish(); await store.waitForHistoryBackfill()
+                let saved = await repository.read(.yesterday)
+                try requireRegression(store.snapshot?.totals.cost == 2 && store.previousSnapshot?.totals.cost == 2
+                    && saved?.totals.cost == 2 && store.history?.days.first(where: { $0.day == yesterday })?.usage.cost == 2,
+                    "A late background response rolled back current data or disagrees with history")
+            }
+        }
+        await check("Audit: failure for an abandoned date does not swallow the latest selection") {
+            try await withStore { store, service, _, clock in
+                await store.refresh(reason: .startup); await store.waitForHistoryBackfill()
+                let first = UsageDay(date: clock.now).adding(days: -10), latest = first.adding(days: -1)
+                store.period = .custom; store.customDate = first.date
+                await service.configure(at: clock.now, cost: 1, hold: first, fails: true)
+                let task = Task { await store.refresh(reason: .selection) }
+                await service.waitUntilHeld()
+                store.customDate = latest.date
+                await store.selectPeriod()
+                await service.finish(); await task.value
+                try requireRegression(store.snapshot?.day == latest && store.state == .loaded && store.error == nil,
+                    "Obsolete date failure prevented loading the user's current date")
+            }
+        }
+        await check("Audit: snapshot validation covers raw reversible amounts and model allocations") {
+            let directory = PricingScenarios.directory()
+            defer { try? FileManager.default.removeItem(at: directory) }
+            var raw = SampleData.snapshot()
+            raw.sessions[0].usage.reportedAmounts = ReportedUsageAmounts(.init(input: -1, cost: -5))
+            var breakdown = SampleData.snapshot()
+            breakdown.sessions[0].modelBreakdowns = [.init(id: "bad", usage: .init(input: Int64.max))]
+            for invalid in [raw, breakdown] {
+                try SnapshotFiles.write(invalid, name: SnapshotSlot.today.rawValue, directory: directory)
+                do {
+                    _ = try SnapshotFiles.read(.today, directory: directory)
+                    throw RegressionFailure(description: "Unsafe nested snapshot values reached exclusion/aggregation code")
+                } catch is UsageError { }
+            }
+        }
+        await check("Audit: history validation covers raw amounts, model components and safe weekly sums") {
+            let directory = PricingScenarios.directory()
+            defer { try? FileManager.default.removeItem(at: directory) }
+            var raw = SampleData.history()
+            raw.days[0].reportedUsage = .init(input: Int64.max)
+            var components = SampleData.history()
+            components.days[0].usageComponents = [.init(models: ["bad"], usage: .init(input: -1))]
+            var oversized = SampleData.history()
+            oversized.days[0].usage = .init(input: 500_000_000_000_000_000, output: 500_000_000_000_000_000)
+            for invalid in [raw, components, oversized] {
+                try SnapshotFiles.write(invalid, name: "daily-history-v1.json", directory: directory)
+                do {
+                    _ = try SnapshotFiles.history(directory: directory)
+                    throw RegressionFailure(description: "Unsafe history survived validation before policy/weekly aggregation")
+                } catch is UsageError { }
+            }
+        }
+        await check("Audit: Codex turn_context alone preserves priority and standard pricing tiers") {
+            let lines = TranscriptUsageScenarios.codex.split(separator: "\n")
+                .filter { !$0.contains("thread_settings_applied") }.joined(separator: "\n")
+            let transcript = try TranscriptUsageScenarios.decode("codex", lines)
+            try requireRegression(transcript.requests.map(\.billing.speed) == ["priority", "standard"],
+                                  "Turn-context pricing tier lost without a redundant settings event")
+        }
+        await check("Audit: requestless Claude stream chunks share one charge across timestamps") {
+            let text = TranscriptUsageScenarios.claude.replacingOccurrences(of: "\"requestId\":\"a\",", with: "")
+            let transcript = try TranscriptUsageScenarios.decode("claude", text)
+            try requireRegression(transcript.requests.count == 1 && transcript.requests[0].usage.total == 190,
+                                  "A single message was billed once for each streamed record")
+        }
     }
 }

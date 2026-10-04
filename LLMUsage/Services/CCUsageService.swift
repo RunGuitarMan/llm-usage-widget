@@ -49,6 +49,9 @@ struct ProcessRunner: Sendable {
         process.standardError = error
         do { try process.run() }
         catch { throw UsageError.processFailed(-1, error.localizedDescription) }
+        // Foundation normally gives the command its own process group. Retain
+        // that identity while it is alive; never signal the app's process group.
+        let processGroup = getpgid(process.processIdentifier) == process.processIdentifier ? process.processIdentifier : nil
         let start = ProcessInfo.processInfo.systemUptime
         var failure: Error?
         while process.isRunning {
@@ -63,7 +66,11 @@ struct ProcessRunner: Sendable {
             if process.isRunning { process.terminate() }
             let deadline = ProcessInfo.processInfo.systemUptime + 0.5
             while process.isRunning && ProcessInfo.processInfo.systemUptime < deadline { Thread.sleep(forTimeInterval: 0.01) }
-            if process.isRunning { kill(process.processIdentifier, SIGKILL) }
+            // terminate() signals the group, but a wrapper or child can ignore
+            // SIGTERM. Escalate the same isolated group, including descendants
+            // left behind by a wrapper that has already exited.
+            if let processGroup { kill(-processGroup, SIGKILL) }
+            else if process.isRunning { kill(process.processIdentifier, SIGKILL) }
             process.waitUntilExit()
             throw failure
         }

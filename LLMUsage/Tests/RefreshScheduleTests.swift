@@ -36,7 +36,7 @@ final class RefreshScheduleTests: XCTestCase {
         XCTAssertEqual(schedule.nextRefresh, at(600))
     }
 
-    func testManualRefreshSkipsOneSlotAndDoesNotConsumeAutomaticCostChange() {
+    func testManualRefreshSkipsOneSlotAndStartsQuietWindowAtManualChange() {
         var schedule = startingSchedule()
         schedule.succeeded(cost: 2, reason: .automatic, at: at(180))
         schedule.manualRefreshStarted()
@@ -47,26 +47,77 @@ final class RefreshScheduleTests: XCTestCase {
         XCTAssertEqual(schedule.nextRefresh, at(190))
         XCTAssertFalse(schedule.consumeSkippedRefresh(at: at(190)))
         schedule.succeeded(cost: 3, reason: .automatic, at: at(190))
-        schedule.succeeded(cost: 3, reason: .automatic, at: at(245))
+        schedule.succeeded(cost: 3, reason: .automatic, at: at(240))
         XCTAssertEqual(schedule.mode, .fast)
-        schedule.succeeded(cost: 3, reason: .automatic, at: at(250))
+        schedule.succeeded(cost: 3, reason: .automatic, at: at(245))
         XCTAssertEqual(schedule.mode, .medium)
     }
 
-    func testManualRefreshLeavesSlowAndMediumDeadlinesAlone() {
+    func testManualCostChangesAccelerateFromSlowAndMediumWithoutSkippingFirstFastSlot() {
+        for medium in [false, true] {
+            for cost in [0.5, 3.0] {
+                var schedule = startingSchedule()
+                if medium {
+                    schedule.succeeded(cost: 2, reason: .automatic, at: at(180))
+                    schedule.succeeded(cost: 2, reason: .automatic, at: at(240))
+                }
+                let completion = medium ? 260.0 : 100.0
+                schedule.manualRefreshStarted()
+                schedule.succeeded(cost: cost, reason: .manual, at: at(completion))
+                XCTAssertEqual(schedule.mode, .fast)
+                XCTAssertEqual(schedule.nextRefresh, at(completion + 5))
+                XCTAssertFalse(schedule.consumeSkippedRefresh(at: at(completion + 5)))
+            }
+        }
+    }
+
+    func testUnchangedManualRefreshPreservesSlowAndMediumDeadlines() {
+        for medium in [false, true] {
+            var schedule = startingSchedule()
+            if medium {
+                schedule.succeeded(cost: 2, reason: .automatic, at: at(180))
+                schedule.succeeded(cost: 2, reason: .automatic, at: at(240))
+            }
+            let mode = schedule.mode, deadline = schedule.nextRefresh
+            schedule.manualRefreshStarted()
+            schedule.succeeded(cost: medium ? 2 : 1, reason: .manual, at: at(medium ? 260 : 100))
+            XCTAssertEqual(schedule.mode, mode)
+            XCTAssertEqual(schedule.nextRefresh, deadline)
+            XCTAssertFalse(schedule.consumeSkippedRefresh(at: deadline!))
+        }
+    }
+
+    func testManualRefreshUsesSameInactivityTransitionsAsAutomatic() {
         var schedule = startingSchedule()
+        schedule.succeeded(cost: 2, reason: .manual, at: at(100))
         schedule.manualRefreshStarted()
-        schedule.succeeded(cost: 2, reason: .manual, at: at(170))
+        schedule.succeeded(cost: 2, reason: .manual, at: at(160))
+        XCTAssertEqual(schedule.mode, .medium)
+        XCTAssertEqual(schedule.nextRefresh, at(220))
+        schedule.succeeded(cost: 2, reason: .manual, at: at(340))
+        XCTAssertEqual(schedule.mode, .slow)
+        XCTAssertEqual(schedule.nextRefresh, at(520))
+    }
+
+    func testFirstManualResultSeedsBaselineWithoutAccelerating() {
+        var schedule = RefreshSchedule()
+        schedule.reset(day: UsageDay(date: origin), at: origin)
+        schedule.succeeded(cost: 10, reason: .manual, at: at(5))
+        XCTAssertEqual(schedule.mode, .slow)
+        XCTAssertEqual(schedule.nextRefresh, at(185))
+        schedule.succeeded(cost: 11, reason: .manual, at: at(10))
+        XCTAssertEqual(schedule.mode, .fast)
+        XCTAssertEqual(schedule.nextRefresh, at(15))
+    }
+
+    func testSelectionDoesNotConsumeCostChange() {
+        var schedule = startingSchedule()
+        schedule.succeeded(cost: 2, reason: .selection, at: at(100))
         XCTAssertEqual(schedule.mode, .slow)
         XCTAssertEqual(schedule.nextRefresh, at(180))
-        schedule.succeeded(cost: 2, reason: .automatic, at: at(180))
-        schedule.succeeded(cost: 2, reason: .automatic, at: at(240))
-        schedule.manualRefreshStarted()
-        schedule.succeeded(cost: 3, reason: .manual, at: at(260))
-        XCTAssertEqual(schedule.mode, .medium)
-        XCTAssertEqual(schedule.nextRefresh, at(300))
-        schedule.succeeded(cost: 3, reason: .automatic, at: at(300))
+        schedule.succeeded(cost: 2, reason: .manual, at: at(110))
         XCTAssertEqual(schedule.mode, .fast)
+        XCTAssertEqual(schedule.nextRefresh, at(115))
     }
 
     func testFailureRestartsEvidenceOfInactivityAndLongQueriesDoNotQueue() {

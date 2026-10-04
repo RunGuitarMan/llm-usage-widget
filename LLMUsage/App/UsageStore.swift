@@ -72,6 +72,8 @@ final class UsageStore: ObservableObject {
     private let now: () -> Date
     private var schedule: RefreshSchedule
     private var cache: [String: UsageSnapshot] = [:]
+    private var historicalRequest = 0
+    private var acceptedHistoricalRequests: [String: Int] = [:]
     private var refreshLoop: Task<Void, Never>?
     private var wakeObserver: AnyCancellable?
     private var started = false
@@ -114,7 +116,7 @@ final class UsageStore: ObservableObject {
             history?.record(data, today: data.day)
             snapshot = data
             todaySnapshot = data
-            cache[data.day.cacheKey] = data
+            cacheSnapshot(data)
             state = .loaded
         }
     }
@@ -243,7 +245,7 @@ final class UsageStore: ObservableObject {
                 guard context == dataContext else { return }
                 guard let raw = saved, raw.dataContext == context else { continue }
                 let data = raw.applyingExclusions(modelExclusionPolicy)
-                cache[data.day.cacheKey] = data
+                cacheSnapshot(data)
                 if slot == .today {
                     todaySnapshot = data
                     if data.day == selectedDay { snapshot = data; state = data.isStale(now: now(), interval: refreshInterval) ? .stale : .loaded }
@@ -277,6 +279,7 @@ final class UsageStore: ObservableObject {
         isLoadingHistory = false
         historyRetryAfter.removeAll()
         cache.removeAll()
+        acceptedHistoricalRequests.removeAll()
         snapshot = nil
         todaySnapshot = nil
         previousSnapshot = nil
@@ -358,7 +361,7 @@ final class UsageStore: ObservableObject {
             data = data.applyingExclusions(modelExclusionPolicy)
             data.dataContext = context
             todaySnapshot = data
-            cache[today.cacheKey] = data
+            cacheSnapshot(data)
             if selectedDay == today { snapshot = data }
             recordHistory(data)
             // Publish the fresh snapshot before any historical scan starts.
@@ -375,19 +378,19 @@ final class UsageStore: ObservableObject {
             repeat {
                 let requested = selectedDay
                 if requested == today { snapshot = todaySnapshot; break }
-                var historical = cache[requested.cacheKey]
-                if reason == .manual || historical?.canReuse(for: requested, now: now(), liveInterval: refreshInterval) != true {
-                    historical = try await service.fetch(day: requested, customPath: context.customPath, mode: context.updateMode ?? .claudeOnly)
+                do {
+                    _ = try await loadHistorical(requested, context: context, revision: revision, force: reason == .manual)
+                } catch is CancellationError { throw CancellationError() }
+                catch {
+                    // A date picked during this request still needs servicing,
+                    // even if the abandoned request failed instead of succeeding.
+                    guard revision == generation else { return }
+                    if requested != selectedDay { continue }
+                    throw error
                 }
                 try Task.checkCancellation()
-                guard revision == generation, var historical else { return }
-                historical = historical.applyingExclusions(modelExclusionPolicy)
-                historical.dataContext = context
-                cache[requested.cacheKey] = historical
-                recordHistory(historical)
-                await persistHistory(revision: revision)
                 guard revision == generation else { return }
-                if requested == selectedDay { snapshot = historical.applyingExclusions(modelExclusionPolicy); break }
+                if requested == selectedDay { snapshot = cache[requested.cacheKey]; break }
             } while !Task.isCancelled
             state = .loaded
         } catch is CancellationError {
@@ -410,8 +413,55 @@ final class UsageStore: ObservableObject {
 
     private func recordHistory(_ data: UsageSnapshot) {
         var updated = history ?? UsageHistory(context: dataContext)
-        updated.record(data, today: UsageDay(date: now(), timezone: timezone))
+        let timestamp = now()
+        updated.record(data, today: UsageDay(date: timestamp, timezone: timezone), now: timestamp)
         history = updated
+    }
+
+    private func cacheSnapshot(_ data: UsageSnapshot) {
+        cache[data.day.cacheKey] = data
+        // Browsing arbitrary dates must not retain every full session report for
+        // the lifetime of the menu-bar app. Keep the week and the active date.
+        let today = UsageDay(date: now(), timezone: timezone)
+        let protected = Set((-6...0).map { today.adding(days: $0).cacheKey } + [selectedDay.cacheKey])
+        let removable = cache.values.filter { !protected.contains($0.day.cacheKey) }.sorted {
+            $0.generatedAt == $1.generatedAt ? $0.day.cacheKey < $1.day.cacheKey : $0.generatedAt < $1.generatedAt
+        }
+        for entry in removable.prefix(max(0, cache.count - 32)) {
+            cache.removeValue(forKey: entry.day.cacheKey)
+            acceptedHistoricalRequests.removeValue(forKey: entry.day.cacheKey)
+        }
+    }
+
+    /// Foreground and backfill results share publication and persistence. Request
+    /// order, not completion order, decides which successful response is current.
+    private func loadHistorical(_ day: UsageDay, context: UsageDataContext, revision: Int, force: Bool) async throws -> UsageSnapshot? {
+        var data = cache[day.cacheKey]
+        if force || data?.canReuse(for: day, now: now(), liveInterval: refreshInterval) != true {
+            historicalRequest += 1
+            let request = historicalRequest
+            let fetched = try await service.fetch(day: day, customPath: context.customPath, mode: context.updateMode ?? .claudeOnly)
+            try Task.checkCancellation()
+            guard revision == generation else { return nil }
+            guard request >= acceptedHistoricalRequests[day.cacheKey, default: 0] else { return cache[day.cacheKey] }
+            acceptedHistoricalRequests[day.cacheKey] = request
+            data = fetched
+        }
+        guard revision == generation, var data else { return nil }
+        data = data.applyingExclusions(modelExclusionPolicy)
+        data.dataContext = context
+        cacheSnapshot(data)
+        recordHistory(data)
+        if selectedDay == day { snapshot = data }
+        if day == UsageDay(date: now(), timezone: context.timezone).adding(days: -1) {
+            previousSnapshot = data
+            await persist(data, slot: .yesterday, revision: revision)
+        }
+        guard revision == generation else { return nil }
+        await persistHistory(revision: revision)
+        guard revision == generation else { return nil }
+        reloadWidget()
+        return cache[day.cacheKey]
     }
 
     private func scheduleHistoryBackfill() {
@@ -434,22 +484,8 @@ final class UsageStore: ObservableObject {
                 // Another successful dated query may have filled the gap meanwhile.
                 if self.history?.missingCompletedDays(ending: today, now: self.now()).contains(day) == false { continue }
                 do {
-                    var data = try await self.service.fetch(day: day, customPath: context.customPath, mode: context.updateMode ?? .claudeOnly)
-                    try Task.checkCancellation()
+                    _ = try await self.loadHistorical(day, context: context, revision: revision, force: true)
                     guard revision == self.generation else { return }
-                    data = data.applyingExclusions(self.modelExclusionPolicy)
-                    data.dataContext = context
-                    self.recordHistory(data)
-                    self.cache[day.cacheKey] = data
-                    if self.selectedDay == day { self.snapshot = data }
-                    if day == today.adding(days: -1) {
-                        self.previousSnapshot = data
-                        await self.persist(data, slot: .yesterday, revision: revision)
-                    }
-                    guard revision == self.generation else { return }
-                    await self.persistHistory(revision: revision)
-                    guard revision == self.generation else { return }
-                    self.reloadWidget()
                 } catch is CancellationError { return }
                 catch {
                     guard revision == self.generation else { return }

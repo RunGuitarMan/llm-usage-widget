@@ -37,7 +37,11 @@ struct TranscriptPricingArchive: Sendable {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true,
                                                 attributes: [.posixPermissions: 0o700])
         let file = directory.appendingPathComponent(key + ".json")
-        if !FileManager.default.fileExists(atPath: file.path) { try data.write(to: file, options: .atomic) }
+        // Existence alone cannot guarantee that a content-addressed receipt is intact.
+        if (try? file.resourceValues(forKeys: [.fileSizeKey]).fileSize) != data.count
+            || (try? Data(contentsOf: file)) != data {
+            try data.write(to: file, options: .atomic)
+        }
         return key
     }
 

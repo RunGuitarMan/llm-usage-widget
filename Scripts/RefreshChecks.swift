@@ -115,33 +115,78 @@ enum RefreshChecks {
             try requireRefresh(schedule.nextRefresh == at(190), "Cadence shifted to manual completion")
             try requireRefresh(!schedule.consumeSkippedRefresh(at: at(190)), "Multiple clicks skipped extra slots")
             schedule.succeeded(cost: 3, reason: .automatic, at: at(190))
+            schedule.succeeded(cost: 3, reason: .automatic, at: at(240))
+            try requireRefresh(schedule.mode == .fast, "Manual change did not restart quiet window")
             schedule.succeeded(cost: 3, reason: .automatic, at: at(245))
-            try requireRefresh(schedule.mode == .fast, "Manual result hid a change from automatic comparison")
-            schedule.succeeded(cost: 3, reason: .automatic, at: at(250))
-            try requireRefresh(schedule.mode == .medium, "Automatic change did not restart quiet window")
+            try requireRefresh(schedule.mode == .medium, "Automatic result rediscovered the manual change")
         }
-        await check("Refresh: manual requests do not restart fast inactivity") {
+        await check("Refresh: unchanged manual requests do not restart fast inactivity") {
             var schedule = fastSchedule()
             schedule.manualRefreshStarted()
-            schedule.succeeded(cost: 99, reason: .manual, at: at(232))
-            _ = schedule.consumeSkippedRefresh(at: at(235))
+            schedule.succeeded(cost: 2, reason: .manual, at: at(232))
+            try requireRefresh(schedule.consumeSkippedRefresh(at: at(235)), "Manual completion cleared the fast skip")
             schedule.succeeded(cost: 2, reason: .automatic, at: at(240))
-            try requireRefresh(schedule.mode == .medium, "Manual request changed the quiet window")
+            try requireRefresh(schedule.mode == .medium, "Unchanged manual request restarted the quiet window")
         }
-        await check("Refresh: manual and selection results leave medium/slow schedules untouched") {
+        await check("Refresh: manual cost changes restart fast inactivity") {
+            var schedule = fastSchedule()
+            schedule.manualRefreshStarted()
+            schedule.succeeded(cost: 3, reason: .manual, at: at(232))
+            _ = schedule.consumeSkippedRefresh(at: at(235))
+            schedule.succeeded(cost: 3, reason: .automatic, at: at(240))
+            schedule.succeeded(cost: 3, reason: .automatic, at: at(295))
+            try requireRefresh(schedule.mode == .medium, "Quiet window must start at the manual cost change")
+        }
+        await check("Refresh: unchanged manual and selection results preserve medium/slow cadence") {
             for medium in [false, true] {
                 var schedule = medium ? fastSchedule() : initialSchedule()
                 if medium { schedule.succeeded(cost: 2, reason: .automatic, at: at(240)) }
                 let deadline = schedule.nextRefresh
                 let mode = schedule.mode
                 schedule.manualRefreshStarted()
-                schedule.succeeded(cost: 100, reason: .manual, at: at(medium ? 260 : 100))
+                schedule.succeeded(cost: medium ? 2 : 1, reason: .manual, at: at(medium ? 260 : 100))
                 schedule.succeeded(cost: 101, reason: .selection, at: at(medium ? 270 : 110))
                 try requireRefresh(schedule.mode == mode && schedule.nextRefresh == deadline, "Manual/selection changed schedule")
                 try requireRefresh(!schedule.consumeSkippedRefresh(at: deadline!), "Non-fast slot skipped")
                 schedule.succeeded(cost: 101, reason: .automatic, at: deadline!)
-                try requireRefresh(schedule.mode == .fast, "Manual result hid cost changes")
+                try requireRefresh(schedule.mode == .fast, "Selection result hid cost changes")
             }
+        }
+        await check("Refresh: manual increases and decreases accelerate from slow and medium") {
+            for medium in [false, true] {
+                for cost in [0.5, 3.0] {
+                    var schedule = medium ? fastSchedule() : initialSchedule()
+                    if medium { schedule.succeeded(cost: 2, reason: .automatic, at: at(240)) }
+                    let completion = medium ? 260.0 : 100.0
+                    schedule.manualRefreshStarted()
+                    schedule.succeeded(cost: cost, reason: .manual, at: at(completion))
+                    try requireRefresh(schedule.mode == .fast && schedule.nextRefresh == at(completion + 5), "Manual change did not accelerate immediately")
+                    try requireRefresh(!schedule.consumeSkippedRefresh(at: at(completion + 5)), "First fast slot was skipped")
+                }
+            }
+        }
+        await check("Refresh: manual results seed the baseline and share inactivity transitions") {
+            var schedule = RefreshSchedule()
+            schedule.reset(day: UsageDay(date: origin), at: origin)
+            schedule.succeeded(cost: 1, reason: .manual, at: at(5))
+            try requireRefresh(schedule.mode == .slow && schedule.nextRefresh == at(185), "Initial manual result must seed a slow baseline")
+            schedule.succeeded(cost: 2, reason: .manual, at: at(100))
+            schedule.manualRefreshStarted()
+            schedule.succeeded(cost: 2, reason: .manual, at: at(160))
+            try requireRefresh(schedule.mode == .medium && schedule.nextRefresh == at(220), "Manual result did not complete the fast quiet window")
+            schedule.succeeded(cost: 2, reason: .manual, at: at(340))
+            try requireRefresh(schedule.mode == .slow && schedule.nextRefresh == at(520), "Manual result did not complete the medium quiet window")
+        }
+        await check("Refresh: manual failures preserve deadlines and cannot prove inactivity") {
+            var schedule = fastSchedule()
+            schedule.manualRefreshStarted()
+            schedule.failed(reason: .manual, at: at(235))
+            try requireRefresh(schedule.nextRefresh == at(185), "Manual failure shifted the fast deadline")
+            try requireRefresh(schedule.consumeSkippedRefresh(at: at(235)), "Manual failure lost its fast skip")
+            schedule.succeeded(cost: 2, reason: .automatic, at: at(240))
+            try requireRefresh(schedule.mode == .fast, "Manual failure counted as a quiet minute")
+            schedule.succeeded(cost: 2, reason: .automatic, at: at(300))
+            try requireRefresh(schedule.mode == .medium, "Quiet window did not resume after recovery")
         }
         await check("Refresh: failed queries cannot prove inactivity") {
             var schedule = fastSchedule()
@@ -162,9 +207,9 @@ enum RefreshChecks {
         }
         await check("Refresh: sub-cent changes count but floating-point noise does not") {
             var schedule = initialSchedule()
-            schedule.succeeded(cost: 1 + 1e-12, reason: .automatic, at: at(180))
+            schedule.succeeded(cost: 1 + 1e-12, reason: .manual, at: at(100))
             try requireRefresh(schedule.mode == .slow, "Floating-point noise accelerated polling")
-            schedule.succeeded(cost: 1.0001, reason: .automatic, at: at(360))
+            schedule.succeeded(cost: 1.0001, reason: .manual, at: at(110))
             try requireRefresh(schedule.mode == .fast, "Displayed cents hid a real cost change")
         }
         await check("Refresh: day/context reset and configuration changes") {
@@ -217,17 +262,21 @@ enum RefreshChecks {
             await service.configure(cost: 2)
             clock.advance(100)
             await store.refresh()
-            try requireRefresh(store.refreshMode == .slow && store.nextAutomaticRefresh == at(180), "Manual changed slow cadence")
-            clock.advance(80)
+            try requireRefresh(store.refreshMode == .fast && store.nextAutomaticRefresh == at(105), "Manual change did not accelerate, or filtered amount used")
+            let manualStatus = await repository.readStatus()
+            try requireRefresh(manualStatus?.refreshInterval == 5, "Manual change did not publish fast widget interval")
+            let manualCount = await service.requestCount()
+            clock.advance(5)
             await store.refreshAutomaticallyIfDue()
-            try requireRefresh(store.refreshMode == .fast && store.nextAutomaticRefresh == at(185), "Manual hid change, or filtered amount used")
+            let automaticCount = await service.requestCount()
+            try requireRefresh(automaticCount == manualCount + 1 && store.nextAutomaticRefresh == at(110), "First fast automatic request was skipped")
             clock.advance(3)
             await store.refresh()
             let count = await service.requestCount()
             clock.advance(2)
             await store.refreshAutomaticallyIfDue()
             let skippedCount = await service.requestCount()
-            try requireRefresh(count == skippedCount && store.nextAutomaticRefresh == at(190), "Fast slot was not skipped")
+            try requireRefresh(count == skippedCount && store.nextAutomaticRefresh == at(115), "Fast slot was not skipped")
             clock.advance(5)
             await store.refreshAutomaticallyIfDue()
             let resumedCount = await service.requestCount()
@@ -296,8 +345,8 @@ enum RefreshChecks {
             try requireRefresh(startupCount == 1 && !store.isRefreshing, "Duplicate/missing initial refresh")
             await store.waitForHistoryBackfill()
             await service.configure(cost: 2)
-            await store.refresh(reason: .automatic)
-            try requireRefresh(store.refreshMode == .fast, "Timer fixture did not accelerate")
+            await store.refresh()
+            try requireRefresh(store.refreshMode == .fast, "Manual change did not rearm the actual timer")
             await store.refresh()
             let manualCount = await service.requestCount()
             try await Task.sleep(for: .milliseconds(2300))

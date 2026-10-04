@@ -101,7 +101,7 @@ Use bundle identifiers available to your team. Xcode builds share data through t
 
 ## Working on the repository
 
-Changes go through pull requests to protected `main`. Each PR runs the **Tests** check; after merge and successful checks, GitHub Actions automatically publishes the next release in the **v1.2** line (**v1.2.0**, **v1.2.1**, etc.). See [CI and releases](Documentation/Releases.md) for versioning, artifacts and retry instructions.
+Changes go through pull requests to protected `main`. Each PR runs the **Tests** check; after merge and successful checks, GitHub Actions automatically publishes the next release in the **v1.3** line (**v1.3.1**, **v1.3.2**, etc.). See [CI and releases](Documentation/Releases.md) for versioning, artifacts and retry instructions.
 
 - `LLMUsage/`: app screens, shared models, data services, widget, resources and tests.
 - `Scripts/`: build, install, validation and asset-generation tools.

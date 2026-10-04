@@ -112,7 +112,8 @@ struct UsageSession: Codable, Equatable, Identifiable, Sendable {
 
     var usageComponents: [ModelUsageComponent] {
         let total = modelBreakdowns.reduce(TokenUsage.zero) { $0 + $1.usage.reported }
-        if !modelBreakdowns.isEmpty, total.total == usage.reported.total,
+        if !modelBreakdowns.isEmpty,
+           TokenCategory.allCases.allSatisfy({ total.value(for: $0) == usage.reported.value(for: $0) }),
            abs(total.cost - usage.reported.cost) < 0.001 {
             return modelBreakdowns.map {
                 .init(models: $0.id.isEmpty ? models : [$0.id], usage: $0.usage.reported)
@@ -314,7 +315,8 @@ struct UsageSnapshot: Codable, Equatable, Sendable {
             // Never attribute all session tokens to EACH model of a mixed session.
             // Incomplete breakdowns stay together, with an explicit composite label.
             let breakdownTotal = session.modelBreakdowns.reduce(TokenUsage.zero) { $0 + $1.usage }
-            let complete = !session.modelBreakdowns.isEmpty && breakdownTotal.total == session.usage.total
+            let complete = !session.modelBreakdowns.isEmpty
+                && TokenCategory.allCases.allSatisfy { breakdownTotal.value(for: $0) == session.usage.value(for: $0) }
                 && abs(breakdownTotal.cost - session.usage.cost) < 0.001
             let parts = complete ? session.modelBreakdowns : [ModelUsage(id: session.modelLabel, usage: session.usage)]
             for part in parts {

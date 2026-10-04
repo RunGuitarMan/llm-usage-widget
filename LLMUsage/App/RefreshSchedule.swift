@@ -16,7 +16,7 @@ enum RefreshReason {
     case startup, automatic, manual, selection, configuration
 
     var updatesSchedule: Bool {
-        self == .startup || self == .automatic || self == .configuration
+        self == .startup || self == .automatic || self == .manual || self == .configuration
     }
 }
 
@@ -59,8 +59,8 @@ struct RefreshIntervals: Equatable, Sendable {
 }
 
 /// Pure scheduling policy. Dates are supplied by the caller so boundary cases do
-/// not need real sleeps or CLI requests. Only automatic/configuration results
-/// update the cost baseline; manual/selection results cannot hide an increase.
+/// not need real sleeps or CLI requests. Manual and automatic results share the
+/// cost baseline and quiet windows; selection-only results leave them untouched.
 struct RefreshSchedule {
     private(set) var intervals: RefreshIntervals
     private(set) var mode: RefreshMode = .slow
@@ -69,6 +69,7 @@ struct RefreshSchedule {
     private var baseline: Double?
     private var unchangedSince: Date?
     private var skipNextFastRefresh = false
+    private var lastObservedTime: Date?
 
     init(intervals: RefreshIntervals = .standard) { self.intervals = intervals }
 
@@ -78,14 +79,24 @@ struct RefreshSchedule {
         self = Self(intervals: intervals)
         self.day = day
         nextRefresh = now
+        lastObservedTime = now
     }
 
     mutating func prepare(day: UsageDay, at now: Date) {
         if self.day != day { reset(day: day, at: now) }
+        observeTime(at: now)
+    }
+
+    private mutating func observeTime(at now: Date) {
+        // Sleep uses a monotonic clock, while deadlines and quiet windows use
+        // wall time. Rebase them after a backward correction, even within a day.
+        if let day, lastObservedTime.map({ now < $0 }) == true { reset(day: day, at: now) }
+        lastObservedTime = now
     }
 
     mutating func configure(_ intervals: RefreshIntervals, at now: Date) {
         guard intervals.isValid, intervals != self.intervals else { return }
+        observeTime(at: now)
         let previousInterval = interval
         self.intervals = intervals
         if interval != previousInterval {
@@ -108,6 +119,7 @@ struct RefreshSchedule {
 
     mutating func succeeded(cost: Double, reason: RefreshReason, at now: Date) {
         guard reason.updatesSchedule else { return }
+        observeTime(at: now)
         let previousMode = mode
         let hadBaseline = baseline != nil
         if let baseline {
@@ -131,6 +143,10 @@ struct RefreshSchedule {
         } else {
             baseline = cost
         }
+        // A manual result updates the policy immediately, but keeps the existing
+        // cadence (and pending fast-slot skip) while the mode stays the same.
+        // A mode change or first baseline must arm the corresponding interval.
+        if reason == .manual, mode == previousMode, hadBaseline { return }
         skipNextFastRefresh = false
         if mode != previousMode || !hadBaseline {
             nextRefresh = now.addingTimeInterval(interval)
@@ -141,10 +157,11 @@ struct RefreshSchedule {
 
     mutating func failed(reason: RefreshReason, at now: Date) {
         guard reason.updatesSchedule else { return }
+        observeTime(at: now)
         // A failed query is not evidence of inactivity. Start a fresh quiet
         // window on the next successful comparison, retaining the last cost.
         unchangedSince = nil
-        advanceDeadline(past: now)
+        if reason != .manual { advanceDeadline(past: now) }
     }
 
     private mutating func advanceDeadline(past now: Date) {

@@ -40,6 +40,7 @@ struct TranscriptService: Sendable {
     var home = FileManager.default.homeDirectoryForCurrentUser
     var environment = ProcessInfo.processInfo.environment
     static let maximumBytes = 256 * 1024 * 1024
+    var byteLimit = Self.maximumBytes
 
     func load(session: UsageSession, file: URL? = nil) async throws -> SessionTranscript {
         let task = Task.detached(priority: .userInitiated) {
@@ -150,19 +151,29 @@ struct TranscriptService: Sendable {
         if session.sourceID == "opencode", let first = matched.first,
            first.path.contains("/storage/message/") {
             var records: [[String: Any]] = []
+            var bytes = 0
+            var invalid = 0
+            func readPart(_ url: URL) throws -> [[String: Any]] {
+                try Task.checkCancellation()
+                let parsed = try Self.records(at: url, byteLimit: byteLimit - bytes)
+                bytes += parsed.bytes
+                invalid += parsed.invalid
+                return parsed.records
+            }
             let messageFiles = matched.filter { $0.path.contains("/storage/message/") }
             for url in messageFiles {
-                var message = try Self.records(at: url).records.first ?? [:]
+                var message = try readPart(url).first ?? [:]
                 let partsRoot = url.deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
                     .appendingPathComponent("part").appendingPathComponent(url.deletingPathExtension().lastPathComponent)
                 let parts = (try? fm.contentsOfDirectory(at: partsRoot, includingPropertiesForKeys: nil)) ?? []
                 message["parts"] = try parts.filter { $0.pathExtension == "json" }.sorted { $0.path < $1.path }
-                    .flatMap { try Self.records(at: $0).records }
+                    .flatMap { try readPart($0) }
                 records.append(message)
             }
             var decoder = TranscriptDecoder(source: session.sourceID)
-            for record in records { decoder.append(record) }
-            return .init(events: decoder.finish(), files: messageFiles)
+            for record in records { try Task.checkCancellation(); decoder.append(record) }
+            let notices = invalid > 0 ? [L10n.text("Не удалось разобрать строк: \(invalid). Они сохранены в служебных событиях; история может быть неполной.")] : []
+            return .init(events: decoder.finish(), files: messageFiles, notices: notices, usageUncertain: invalid > 0)
         }
         // A sidecar and a wire log may describe the same session. Prefer the complete
         // conversation, never concatenate backups into a misleading mixed timeline.
@@ -209,7 +220,7 @@ struct TranscriptService: Sendable {
         let handle = try FileHandle(forReadingFrom: url)
         defer { try? handle.close() }
         let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
-        if size > Self.maximumBytes { return false }
+        if size > byteLimit { return false }
         let data = try handle.read(upToCount: url.pathExtension == "json" ? size : 128 * 1024) ?? Data()
         // Inspect only identities, not arbitrary occurrences of an ID in chat text.
         let candidates: [Data] = ["jsonl", "ndjson"].contains(url.pathExtension)
@@ -229,11 +240,10 @@ struct TranscriptService: Sendable {
         var totalBytes = 0
         for (index, url) in files.enumerated() {
             try Task.checkCancellation()
-            totalBytes += try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
-            guard totalBytes <= Self.maximumBytes else { throw TranscriptError.tooLarge }
             // Identity uses the full path; the UI displays just the filename.
             decoder.origin = index == 0 ? nil : url.path
-            let parsed = try Self.records(at: url)
+            let parsed = try Self.records(at: url, byteLimit: byteLimit - totalBytes)
+            totalBytes += parsed.bytes
             uncertain = uncertain || parsed.invalid > 0
             if parsed.invalid > 0 { notices.append(L10n.text("Не удалось разобрать строк: \(parsed.invalid). Они сохранены в служебных событиях; история может быть неполной.")) }
             for record in parsed.records { try Task.checkCancellation(); decoder.append(record) }
@@ -244,27 +254,44 @@ struct TranscriptService: Sendable {
         return .init(events: events, files: files, notices: notices, usageUncertain: uncertain)
     }
 
-    static func records(at url: URL) throws -> (records: [[String: Any]], invalid: Int) {
+    static func records(at url: URL, byteLimit: Int = maximumBytes) throws -> (records: [[String: Any]], invalid: Int, bytes: Int) {
         let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
-        guard size <= maximumBytes else { throw TranscriptError.tooLarge }
+        guard size <= byteLimit else { throw TranscriptError.tooLarge }
         let data = try Data(contentsOf: url, options: .mappedIfSafe)
-        guard data.count <= maximumBytes else { throw TranscriptError.tooLarge }
+        guard data.count <= byteLimit else { throw TranscriptError.tooLarge }
+        func arrayRecords(_ items: [Any], unwrapExport: Bool = false) throws -> (records: [[String: Any]], invalid: Int) {
+            var records: [[String: Any]] = []
+            var invalid = 0
+            for item in items {
+                try Task.checkCancellation()
+                if let row = item as? [String: Any] {
+                    // OpenCode's export wraps each message in {info, parts}.
+                    if unwrapExport, var info = row["info"] as? [String: Any] { info["parts"] = row["parts"]; records.append(info) }
+                    else { records.append(row) }
+                } else {
+                    invalid += 1
+                    let raw = try JSONSerialization.data(withJSONObject: item, options: [.fragmentsAllowed, .sortedKeys])
+                    records.append(["type": "unparsed", "original_line": String(decoding: raw, as: UTF8.self)])
+                }
+            }
+            return (records, invalid)
+        }
         if let json = try? JSONSerialization.jsonObject(with: data) {
-            if let records = json as? [[String: Any]] { return (records, 0) }
+            if let records = json as? [Any] {
+                let parsed = try arrayRecords(records)
+                return (parsed.records, parsed.invalid, data.count)
+            }
             if let record = json as? [String: Any] {
                 for key in ["messages", "chatMessages", "events"] {
-                    if let records = record[key] as? [[String: Any]] {
-                        // OpenCode's export wraps each message in {info, parts}.
+                    if let records = record[key] as? [Any] {
                         var metadata = record
                         metadata.removeValue(forKey: key)
                         metadata["type"] = "session_metadata"
-                        return ([metadata] + records.map { row in
-                            if var info = row["info"] as? [String: Any] { info["parts"] = row["parts"]; return info }
-                            return row
-                        }, 0)
+                        let parsed = try arrayRecords(records, unwrapExport: true)
+                        return ([metadata] + parsed.records, parsed.invalid, data.count)
                     }
                 }
-                return ([record], 0)
+                return ([record], 0, data.count)
             }
         }
         var records: [[String: Any]] = []
@@ -278,7 +305,7 @@ struct TranscriptService: Sendable {
                 records.append(["type": "unparsed", "original_line": String(decoding: line, as: UTF8.self)])
             }
         }
-        return (records, invalid)
+        return (records, invalid, data.count)
     }
 }
 
@@ -346,7 +373,11 @@ enum TranscriptDatabase {
         guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else { throw TranscriptError.unreadable(L10n.text("Формат базы истории не удалось прочитать.")) }
         defer { sqlite3_finalize(statement) }
         for (index, value) in values.enumerated() {
-            _ = value.withCString { sqlite3_bind_text(statement, Int32(index + 1), $0, -1, unsafeBitCast(-1, to: sqlite3_destructor_type.self)) }
+            guard let count = Int32(exactly: value.utf8.count) else { throw TranscriptError.tooLarge }
+            let status = value.withCString {
+                sqlite3_bind_text(statement, Int32(index + 1), $0, count, unsafeBitCast(-1, to: sqlite3_destructor_type.self))
+            }
+            guard status == SQLITE_OK else { throw TranscriptError.unreadable(L10n.text("Формат базы истории не удалось прочитать.")) }
         }
         var rows: [[String: Any]] = []
         var bytes = 0
@@ -364,7 +395,8 @@ enum TranscriptDatabase {
                 switch sqlite3_column_type(statement, index) {
                 case SQLITE_INTEGER: row[name] = sqlite3_column_int64(statement, index)
                 case SQLITE_FLOAT: row[name] = sqlite3_column_double(statement, index)
-                case SQLITE_TEXT: row[name] = String(cString: sqlite3_column_text(statement, index))
+                case SQLITE_TEXT:
+                    row[name] = String(decoding: UnsafeBufferPointer(start: sqlite3_column_text(statement, index), count: count), as: UTF8.self)
                 case SQLITE_BLOB: row[name] = "[Бинарные данные: \(count) байт]"
                 default: break
                 }

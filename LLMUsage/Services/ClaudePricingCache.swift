@@ -84,7 +84,7 @@ actor ClaudePricingCache: ClaudePricingProviding {
         catch { return saved?.prices ?? [:] }
         if response.status == 304, var value = saved {
             value.refreshedAt = Date()
-            try persist(value)
+            persist(value)
             return value.prices
         }
         guard response.status == 200, let fresh = try? Self.parse(response.data, includeTranscriptModels: includeTranscriptModels), !fresh.isEmpty else {
@@ -93,13 +93,15 @@ actor ClaudePricingCache: ClaudePricingProviding {
         // A removed or malformed entry must not erase a previously usable tariff.
         let prices = (saved?.prices ?? [:]).merging(fresh) { _, new in new }
         let value = Saved(refreshedAt: Date(), etag: response.etag, prices: prices)
-        try persist(value)
+        persist(value)
         return prices
     }
 
-    private func persist(_ value: Saved) throws {
-        try SnapshotFiles.write(value, name: cacheFilename, directory: directory)
+    private func persist(_ value: Saved) {
+        // A failed optional cache write must not discard usable network prices.
+        // Keep them in memory and retry persistence on the next revalidation.
         saved = value
+        try? SnapshotFiles.write(value, name: cacheFilename, directory: directory)
     }
 
     static func download(etag: String?) async throws -> PricingResponse {
