@@ -5,10 +5,10 @@ struct DashboardSessionsSection: View {
     static let expansionAnimation = Animation.easeInOut(duration: 0.22)
 
     @ObservedObject var store: UsageStore
+    private let scrollToSession: (String) -> Void
     private let revealSearch: () -> Void
     @StateObject private var results: SearchResults<SessionSearchRequest, SessionSearchResult>
     @State private var searchFocusRequest = 0
-    @State private var sessionRowHeight: CGFloat = 76
     @State private var pendingSessionID: String?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -17,8 +17,10 @@ struct DashboardSessionsSection: View {
         var navigationID: UUID
     }
 
-    init(store: UsageStore, revealSearch: @escaping () -> Void = {}) {
+    init(store: UsageStore, scrollToSession: @escaping (String) -> Void = { _ in },
+         revealSearch: @escaping () -> Void = {}) {
         self.store = store
+        self.scrollToSession = scrollToSession
         self.revealSearch = revealSearch
         let state = store.sessionList
         let request = SessionSearchRequest(sessions: store.snapshot?.sessions ?? [], source: store.sourceFilter,
@@ -37,13 +39,6 @@ struct DashboardSessionsSection: View {
     private var isExpanded: Bool { store.sessionList.isExpanded }
     private var sort: SessionSort { store.sessionList.sort }
     private var visibleSessions: [UsageSession] { isExpanded ? sessions : Array(sessions.prefix(SessionSort.compactLimit)) }
-    private var listHeight: CGFloat {
-        let compactCount = min(SessionSort.compactLimit, sessions.count)
-        let compactHeight = sessionRowHeight * CGFloat(compactCount) + CGFloat(max(0, compactCount - 1))
-        let fullHeight = sessionRowHeight * CGFloat(sessions.count) + CGFloat(max(0, sessions.count - 1))
-        // Expanding must never make the viewport shorter than its compact preview.
-        return isExpanded ? min(fullHeight, max(360, compactHeight)) : compactHeight
-    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -110,11 +105,11 @@ struct DashboardSessionsSection: View {
             } label: {
                 Label(sort.metricTitle, systemImage: "arrow.down").font(.system(size: 12)).fixedSize()
             }
-            .menuStyle(.borderlessButton).fixedSize()
+            .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
             .help(L10n.text("Сортировка: \(sort.metricTitle) · \(sort.orderDescription)"))
             .accessibilityLabel(L10n.text("Сортировка"))
             .accessibilityValue(sort.metricTitle + ", " + sort.orderDescription)
-        }.padding(.leading, 18).padding(.trailing, 39)
+        }.padding(.horizontal, 18)
     }
 
     private var searchControls: some View {
@@ -144,56 +139,34 @@ struct DashboardSessionsSection: View {
         }
     }
 
-    /// Keep the scroll view and existing row identities alive while the viewport changes size.
+    /// Rows grow with their content; the dashboard owns the only scrolling viewport.
     private var sessionRows: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                LazyVStack(spacing: 0) {
-                    ForEach(visibleSessions) { session in
-                        VStack(spacing: 0) {
-                            if session.id != sessions.first?.id { rowDivider }
-                            sessionRow(session)
-                                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
-                                    guard session.id == sessions.first?.id, height > 0,
-                                          abs(sessionRowHeight - height) > 0.5 else { return }
-                                    // Learn row height in the compact state too, without a second animation.
-                                    var transaction = Transaction(animation: nil)
-                                    transaction.disablesAnimations = true
-                                    withTransaction(transaction) { sessionRowHeight = height }
-                                }
-                        }.id(session.id)
-                    }
-                }
+        LazyVStack(spacing: 0) {
+            ForEach(visibleSessions) { session in
+                VStack(spacing: 0) {
+                    if session.id != sessions.first?.id { rowDivider }
+                    sessionRow(session)
+                }.id(session.id)
             }
-            .scrollDisabled(!isExpanded)
-            .scrollIndicators(isExpanded ? .automatic : .hidden)
-            .frame(height: listHeight)
-            .onChange(of: isExpanded) { _, expanded in
-                if !expanded, let id = sessions.first?.id {
-                    var transaction = Transaction(animation: nil)
-                    transaction.disablesAnimations = true
-                    withTransaction(transaction) { proxy.scrollTo(id, anchor: .top) }
-                }
-            }
-            .onChange(of: ScrollSelection(id: store.selectedSessionID, navigationID: store.sessionNavigationID), initial: true) { _, selection in
-                pendingSessionID = selection.id
-                _ = revealPendingSession(using: proxy)
-            }
-            .onChange(of: results.completedInput) { old, new in
-                guard isCurrent, !revealPendingSession(using: proxy) else { return }
-                if old?.query != new?.query || old?.model != new?.model || old?.sort != new?.sort || old?.source != new?.source {
-                    if let id = sessions.first?.id { proxy.scrollTo(id, anchor: .top) }
-                }
+        }
+        .onChange(of: ScrollSelection(id: store.selectedSessionID, navigationID: store.sessionNavigationID), initial: true) { _, selection in
+            pendingSessionID = selection.id
+            _ = revealPendingSession()
+        }
+        .onChange(of: results.completedInput) { old, new in
+            guard isExpanded, isCurrent, !revealPendingSession() else { return }
+            if old?.query != new?.query || old?.model != new?.model || old?.sort != new?.sort || old?.source != new?.source {
+                revealSearch()
             }
         }
     }
 
-    private func revealPendingSession(using proxy: ScrollViewProxy) -> Bool {
+    private func revealPendingSession() -> Bool {
         guard isExpanded, isCurrent, let pendingSessionID,
               let session = sessions.first(where: {
                   $0.id == pendingSessionID || ($0.sourceID == "claude" && $0.rawID == pendingSessionID)
               }) else { return false }
-        proxy.scrollTo(session.id)
+        scrollToSession(session.id)
         self.pendingSessionID = nil
         return true
     }
@@ -311,7 +284,7 @@ struct SessionInspectorSummary: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 22) {
             HStack(spacing: 10) {
-                ProviderLogo(provider: session.modelProvider)
+                ProviderLogos(models: session.models + session.modelBreakdowns.map(\.id), sources: [session.sourceID])
                 VStack(alignment: .leading, spacing: 4) {
                     Text(session.modelLabel).font(.system(size: 15, weight: .semibold))
                         .lineLimit(2).textSelection(.enabled).help(session.modelLabel)
@@ -379,8 +352,7 @@ struct SessionDetailView: View {
                 }
                 if let session = store.selectedSession {
                     SessionInspectorSummary(session: session) {
-                        chatSession = .init(session: session, day: store.snapshot?.day ?? store.selectedDay,
-                                            policy: store.modelExclusionPolicy, customPath: store.customPath, pricingKey: store.snapshot?.pricingKey)
+                        openChat(session)
                     }
                     if session.usage.costIsIncomplete == true {
                         Label(L10n.text("Стоимость неполная: часть данных недоступна."), systemImage: "info.circle")
@@ -436,11 +408,22 @@ struct SessionDetailView: View {
             guard copied else { return }
             do { try await Task.sleep(for: .seconds(2)); copied = false } catch { }
         }
+        #if MANUAL_REVIEW
+        .task(id: store.reviewChatRevision) {
+            if store.reviewChatPresented, let session = store.selectedSession { openChat(session) }
+            else { chatSession = nil }
+        }
+        #endif
         .sheet(item: $chatSession) { selection in
             SessionChatView(session: selection.session, timezone: selection.day.timezone, isDemo: store.isDemo,
                             day: selection.day, policy: selection.policy,
                             customPath: selection.customPath, pricingKey: selection.pricingKey)
         }
+    }
+
+    private func openChat(_ session: UsageSession) {
+        chatSession = .init(session: session, day: store.snapshot?.day ?? store.selectedDay,
+                            policy: store.modelExclusionPolicy, customPath: store.customPath, pricingKey: store.snapshot?.pricingKey)
     }
 
     private func metadata(_ title: String, value: String, monospaced: Bool = false) -> some View {

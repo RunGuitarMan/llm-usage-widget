@@ -13,7 +13,7 @@ private struct NavigationFixtureService: CCUsageServing {
     }
 }
 
-/// Exercise the asynchronous search and the actual native session viewport.
+/// Exercise session expansion and navigation in the dashboard's shared native viewport.
 @main struct SessionNavigationChecks {
     @MainActor static func main() async throws {
         setbuf(stdout, nil)
@@ -31,33 +31,52 @@ private struct NavigationFixtureService: CCUsageServing {
         for language in [InterfaceLanguage.english, .russian] {
             store.interfaceLanguage = language
             store.selectedSessionID = nil
-            store.sessionList = .init(isExpanded: true, query: "claude-navigation-0")
-            let host = NSHostingView(rootView: DashboardSessionsSection(store: store)
-                .padding(20).frame(width: 850).transaction { $0.disablesAnimations = true })
+            store.sessionList = .init()
+            let host = NSHostingView(rootView: DashboardView(store: store).contentPreview
+                .transaction { $0.disablesAnimations = true })
             let window = NSWindow(contentRect: .init(x: -8000, y: -8000, width: 850, height: 700),
                                   styleMask: [.titled], backing: .buffered, defer: false)
             window.contentView = host
             window.orderFront(nil)
             defer { window.orderOut(nil); window.contentView = nil }
-            try await wait("Filtered session viewport did not appear") {
-                guard let scroll = scrollView(in: host) else { return false }
+            try await wait("Statistics viewport did not appear") {
+                guard let scroll = scrollViews(in: host).first else { return false }
                 guard let document = scroll.documentView, document.frame.height > 1 else { return false }
-                return document.frame.height - scroll.contentView.bounds.height < 1
+                return scrollViews(in: host).count == 1
             }
+            let scroll = scrollViews(in: host).first!
+            let compactHeight = scroll.documentView!.frame.height
+            store.sessionList.setExpanded(true)
+            try await wait("Expanding sessions did not grow the main scroll content") {
+                scroll.documentView!.frame.height > compactHeight + 1000
+                    && scrollViews(in: host).count == 1 && scrollViews(in: host).first === scroll
+            }
+            store.sessionList.setExpanded(false)
+            try await wait("Collapsing sessions did not restore the compact content height") {
+                abs(scroll.documentView!.frame.height - compactHeight) < 1 && scrollViews(in: host).count == 1
+            }
+            store.sessionList = .init(isExpanded: true, query: "claude-navigation-0")
+            try await wait("Filtered session viewport did not appear") {
+                scroll.documentView!.frame.height < compactHeight
+            }
+            print("PASS Session expansion uses only the main Statistics scroll view in \(language.rawValue)")
             store.navigate(.session("navigation-19"))
             try await wait("Deep link failed to reveal its session after clearing search in \(language)") {
                 store.selectedSessionID == "navigation-19" && atBottom(host)
             }
-            let scroll = scrollView(in: host)!
             scroll.contentView.scroll(to: .zero)
             scroll.reflectScrolledClipView(scroll.contentView)
             store.navigate(.session("navigation-19"))
             try await wait("Repeated link to the same session failed to reveal it") { atBottom(host) }
 
-            // Normal search changes still start at the top; excluded selections are cleared.
+            // Normal search changes reveal the first result below the dashboard summary.
+            let expandedHeight = scroll.documentView!.frame.height
+            let selectedOffset = scroll.contentView.bounds.origin.y
             store.sessionList.query = "claude-navigation-1"
-            try await wait("Search failed to reset the viewport to the top") {
-                scrollView(in: host)?.contentView.bounds.origin.y == 0
+            try await wait("Search failed to reveal the start of its results") {
+                scroll.documentView!.frame.height < expandedHeight
+                    && scroll.contentView.bounds.origin.y < selectedOffset - 300
+                    && !atBottom(host)
             }
             store.sessionList.model = "claude-navigation-0"
             store.sessionList.query = ""
@@ -66,13 +85,14 @@ private struct NavigationFixtureService: CCUsageServing {
         }
     }
 
-    @MainActor private static func scrollView(in view: NSView) -> NSScrollView? {
-        (view as? NSScrollView) ?? view.subviews.lazy.compactMap { scrollView(in: $0) }.first
+    @MainActor private static func scrollViews(in view: NSView) -> [NSScrollView] {
+        ((view as? NSScrollView).map { [$0] } ?? []) + view.subviews.flatMap { scrollViews(in: $0) }
     }
     @MainActor private static func atBottom(_ host: NSView) -> Bool {
-        guard let scroll = scrollView(in: host), let document = scroll.documentView,
+        guard let scroll = scrollViews(in: host).first, let document = scroll.documentView,
               document.frame.height > scroll.contentView.bounds.height * 2 else { return false }
-        return scroll.contentView.bounds.origin.y > 0 && document.frame.height - scroll.contentView.bounds.maxY < 12
+        // The last row is followed by the session footer and the dashboard's bottom padding.
+        return scroll.contentView.bounds.origin.y > 0 && document.frame.height - scroll.contentView.bounds.maxY < 100
     }
     @MainActor private static func wait(_ message: String, until condition: () -> Bool) async throws {
         let deadline = ContinuousClock.now.advanced(by: .seconds(5))

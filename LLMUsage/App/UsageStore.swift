@@ -65,6 +65,11 @@ final class UsageStore: ObservableObject {
     var dataContext: UsageDataContext { .init(timezone: timezone, customPath: customPath, updateMode: updateMode) }
 
     let isDemo: Bool
+    #if MANUAL_REVIEW
+    var isManualReview = false
+    @Published private(set) var reviewChatRevision = 0
+    private(set) var reviewChatPresented = false
+    #endif
     private let service: any CCUsageServing
     private let repository: any SnapshotPersisting
     private let defaults: UserDefaults
@@ -77,6 +82,8 @@ final class UsageStore: ObservableObject {
     private var refreshLoop: Task<Void, Never>?
     private var wakeObserver: AnyCancellable?
     private var started = false
+    private var startupTask: Task<Void, Never>?
+    private var refreshIdentity = UUID()
     private var generation = 0
     private var historyTask: Task<Void, Never>?
     private var historyRetryAfter: [String: Date] = [:]
@@ -173,7 +180,7 @@ final class UsageStore: ObservableObject {
             .sink { [weak self] _ in
                 Task { @MainActor [weak self] in await self?.refreshAutomaticallyIfDue() }
             }
-        Task { [weak self] in await self?.refresh(reason: .startup) }
+        startupTask = Task { [weak self] in await self?.refresh(reason: .startup) }
     }
 
     /// The timer task only owns the sleep. Rescheduling it never cancels a CLI
@@ -330,12 +337,16 @@ final class UsageStore: ObservableObject {
         let revision = generation
         let context = dataContext
         var todaySucceeded = false
+        let identity = UUID()
+        refreshIdentity = identity
         defer {
-            isRefreshing = false
-            if revision != generation { Task { await self.refresh(reason: .configuration) } }
-            else {
-                scheduleAutomaticRefresh()
-                if todaySucceeded && !Task.isCancelled { scheduleHistoryBackfill() }
+            if refreshIdentity == identity {
+                isRefreshing = false
+                if revision != generation { Task { await self.refresh(reason: .configuration) } }
+                else {
+                    scheduleAutomaticRefresh()
+                    if todaySucceeded && !Task.isCancelled { scheduleHistoryBackfill() }
+                }
             }
         }
         await restore()
@@ -565,3 +576,30 @@ final class UsageStore: ObservableObject {
         error as? UsageError ?? .processFailed(-1, error.localizedDescription)
     }
 }
+
+#if MANUAL_REVIEW
+extension UsageStore {
+    func requestReviewChat(_ presented: Bool) {
+        reviewChatPresented = presented
+        reviewChatRevision += 1
+    }
+
+    /// Reset between scenarios; all loading/error transitions still go through refresh and restore.
+    func resetForManualReview() {
+        precondition(isManualReview)
+        startupTask?.cancel()
+        refreshLoop?.cancel()
+        historyTask?.cancel()
+        historyTask = nil
+        refreshIdentity = UUID()
+        configurationChanged()
+        refreshLoop?.cancel()
+        restored = false
+        isRefreshing = false
+        storageError = nil
+        diagnostics = nil
+        diagnosticError = nil
+        lastAttempt = nil
+    }
+}
+#endif

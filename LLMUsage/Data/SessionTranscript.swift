@@ -3,6 +3,29 @@ import CoreFoundation
 
 enum TranscriptKind: String, Sendable { case user, assistant, tool, context }
 
+/// Bound both characters and paragraphs in the timeline. Full text remains in
+/// the transcript and opens in the native, virtualized reader.
+struct TranscriptTextPreview {
+    let text: String
+    let isTruncated: Bool
+
+    init(_ source: String) {
+        var end = source.startIndex
+        var characters = 0
+        var lines = 1
+        while end < source.endIndex, characters < 600 {
+            if source[end].isNewline {
+                if lines == 12 { break }
+                lines += 1
+            }
+            characters += 1
+            end = source.index(after: end)
+        }
+        text = String(source[..<end])
+        isTruncated = end < source.endIndex
+    }
+}
+
 /// Events share immutable source records. A parallel tool response must not be
 /// copied into a new, concatenated string for every tool in that response.
 struct TranscriptRecord: Identifiable, Sendable {

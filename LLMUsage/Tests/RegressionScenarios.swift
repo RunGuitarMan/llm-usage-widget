@@ -126,6 +126,32 @@ enum RegressionScenarios {
     @MainActor static func run(check: (String, () async throws -> Void) async -> Void) async {
         await DeepAuditScenarios.run(check: check)
         await ExtendedAuditScenarios.run(check: check)
+        await check("Review fixes: calendar locale, leap day, DST and future dates") {
+            let date = ISO8601DateFormatter().date(from: "2024-02-29T23:30:00Z")!
+            let ru = UsageCalendarMonth(containing: date, timezone: "Europe/Moscow", locale: Locale(identifier: "ru_RU"))
+            try requireRegression(ru.calendar.component(.month, from: ru.start) == 3, "Calendar ignored report timezone")
+            try requireRegression(ru.calendar.component(.weekday, from: ru.days[0]) == 2, "RU week must start on Monday")
+            let feb = UsageCalendarMonth(containing: ru.moving(-1), timezone: "Europe/Moscow", locale: Locale(identifier: "ru_RU"))
+            try requireRegression(feb.days.filter(feb.contains).count == 29, "Leap day missing")
+            let us = UsageCalendarMonth(containing: ru.start, timezone: "America/New_York", locale: Locale(identifier: "en_US"))
+            try requireRegression(us.calendar.component(.weekday, from: us.days[0]) == 1, "US week must start on Sunday")
+            let march = UsageCalendarMonth(containing: date.addingTimeInterval(86400), timezone: "America/New_York", locale: Locale(identifier: "en_US"))
+            try requireRegression(Set(march.days.map { UsageDay(date: $0, timezone: "America/New_York").key }).count == 42,
+                                  "DST duplicated/skipped calendar dates")
+            try requireRegression(ru.isSelectable(ru.start, now: date) && !ru.isSelectable(ru.calendar.date(byAdding: .day, value: 1, to: ru.start)!, now: date),
+                                  "Future date enabled or current local date disabled")
+        }
+        await check("Review fixes: long message previews are bounded and preserve complete source") {
+            let source = String(repeating: "## Длинный ответ\n\nПроверка **выделения** и `кода`.\n\n", count: 180)
+            let preview = TranscriptTextPreview(source)
+            try requireRegression(preview.isTruncated && preview.text.count <= 600
+                && preview.text.filter(\.isNewline).count < 12 && source.hasPrefix(preview.text), "Unbounded multiline preview")
+            let emoji = String(repeating: "👩🏽‍💻", count: 2000)
+            try requireRegression(TranscriptTextPreview(emoji).text.count == 600, "Preview split grapheme clusters")
+            let short = "A short message\nwith another line"
+            try requireRegression(!TranscriptTextPreview(short).isTruncated && TranscriptTextPreview(short).text == short,
+                                  "Short message truncated")
+        }
         await check("Statistics: model logos follow model families across agents, namespaces and mixed sessions") {
             let cases: [(String, ModelProvider)] = [
                 ("claude-opus-5-5", .anthropic), (" OpenRouter/Anthropic/Claude-Sonnet-4.6 ", .anthropic),
@@ -146,6 +172,12 @@ enum RegressionScenarios {
             let breakdownOnly = UsageSession(id: "breakdown", models: [], usage: .zero,
                                              modelBreakdowns: [.init(id: "gemini-2.5-pro", usage: .zero)])
             try requireRegression(breakdownOnly.modelProvider == .google, "Model breakdown names ignored")
+            try requireRegression(ModelProvider.logos(models: ["claude-sonnet-4.6", "gpt-6-astra"], sources: ["claude"]) == [.anthropic, .openai],
+                                  "Mixed session logos collapsed into generic icon")
+            try requireRegression(ModelProvider.logos(models: ["custom-model"], sources: ["claude"]) == [.anthropic],
+                                  "Unknown model lost its source logo")
+            try requireRegression(ModelProvider.logos(models: ["gpt-6-astra"], sources: ["claude"]) == [.openai],
+                                  "Known author replaced by source logo")
         }
         await check("Statistics: ranking precedes the three-row limit and respects source and exclusion filters") {
             let sessions: [UsageSession] = (0..<8).map { index in

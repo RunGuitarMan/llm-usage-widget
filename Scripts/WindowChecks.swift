@@ -38,6 +38,27 @@ struct WindowChecks {
             if let scroll = view as? NSScrollView { result.append(scroll) }
             return result + view.subviews.flatMap { nestedScrollViews(in: $0) }
         }
+        func periodMenus(in view: NSView) -> [NSPopUpButton] {
+            ((view as? NSPopUpButton).map { [$0] } ?? []) + view.subviews.flatMap { periodMenus(in: $0) }
+        }
+        func checkToolbar(_ window: NSWindow) throws {
+            guard let toolbar = window.toolbar else {
+                throw NSError(domain: "WindowChecks", code: 4, userInfo: [NSLocalizedDescriptionKey: "Missing dashboard toolbar"])
+            }
+            let controls = toolbar.items.compactMap(\.view)
+            let menus = controls.flatMap { periodMenus(in: $0) }
+            let showsPeriod = store.tab != .settings
+            // Sidebar toggle and refresh are always present; period/date controls are conditional.
+            let expectedControls = 2 + (showsPeriod ? 1 : 0) + (showsPeriod && store.period == .custom ? 1 : 0)
+            let context = "\(store.tab) / \(store.period) / \(store.interfaceLanguage.rawValue)"
+            try require(controls.count == expectedControls,
+                        "Toolbar retained duplicate or missing controls in \(context): \(controls.count), expected \(expectedControls)")
+            try require(menus.count == (showsPeriod ? 1 : 0), "Toolbar duplicated or lost the period menu in \(context)")
+            if let menu = menus.first {
+                try require(menu.title == store.period.title, "Toolbar period title is stale in \(context)")
+                try require(menu.isEnabled == !store.isDemo, "Toolbar period menu has the wrong enabled state in \(context)")
+            }
+        }
         func arrowKey(_ keyCode: UInt16, characters: String, in table: NSTableView) {
             let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [.function, .numericPad],
                                         timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: table.window!.windowNumber,
@@ -64,6 +85,7 @@ struct WindowChecks {
             host.layoutSubtreeIfNeeded()
             settle()
             try require(try checkBounds(host, host: host) >= 3, "Layout check did not reach the native columns")
+            try checkToolbar(window)
         }
 
         for language in [InterfaceLanguage.english, .russian] {
@@ -77,6 +99,7 @@ struct WindowChecks {
             window.orderFront(nil)
             host.layoutSubtreeIfNeeded()
             settle()
+            try checkToolbar(window)
             let normal = window.contentMinSize.width
             try require(normal >= 860 && normal < 1160, "Dashboard cannot use its normal minimum width")
             guard let sidebar = sidebarTable(in: host) else {
@@ -100,17 +123,29 @@ struct WindowChecks {
             sidebar.selectRowIndexes(IndexSet(integer: 1), byExtendingSelection: false)
             settle()
             try require(store.tab == .models, "Native row selection no longer opens Models")
+            try checkToolbar(window)
             print("PASS Sidebar keeps native selection and keyboard navigation without an accent-filled highlight")
+            for _ in 0..<3 {
+                for period in [DataPeriod.custom, .yesterday, .today] {
+                    store.period = period
+                    for tab in [DashboardTab.settings, .overview, .models] {
+                        store.tab = tab
+                        settle()
+                        try checkToolbar(window)
+                    }
+                }
+            }
+            print("PASS Toolbar controls stay unique through repeated settings navigation and period changes in \(language.rawValue)")
             store.tab = .overview
             store.sessionList.setExpanded(false)
             settle()
             let compactScrolls = Set(nestedScrollViews(in: host).map(ObjectIdentifier.init))
-            try require(compactScrolls.count >= 3, "Compact rankings lack their persistent session viewport")
+            try require(compactScrolls.count == 2, "Statistics should only scroll its sidebar and main content")
             for expanded in [true, false, true] {
                 store.sessionList.setExpanded(expanded)
                 settle()
                 let currentScrolls = Set(nestedScrollViews(in: host).map(ObjectIdentifier.init))
-                try require(compactScrolls.isSubset(of: currentScrolls), "Session expansion recreated a scroll view and lost its geometry")
+                try require(compactScrolls == currentScrolls, "Session expansion added or recreated a scroll view")
             }
             print("PASS Expanding and collapsing preserve the native scroll views")
             for width: CGFloat in [860, 1080] { try resizeAndCheck(window, host: host, width: width) }

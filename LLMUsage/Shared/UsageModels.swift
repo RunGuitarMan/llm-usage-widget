@@ -166,6 +166,22 @@ enum ModelProvider: String, CaseIterable, Sendable {
         })
         return providers.count > 1 ? .mixed : providers.first ?? .custom
     }
+
+    /// Preserve each known author. For an unrecognized model, the source logo
+    /// identifies its agent without claiming that agent authored the model.
+    static func logos(models: [String], sources: [String]) -> [Self] {
+        let known = Set(models.map { resolve(models: [$0]) }.filter { $0 != .custom })
+        if !known.isEmpty { return allCases.filter { known.contains($0) } }
+        let fallback = Set(sources.compactMap { source -> Self? in
+            switch source {
+            case "claude": return .anthropic
+            case "codex": return .openai
+            case "gemini": return .google
+            default: return nil
+            }
+        })
+        return fallback.isEmpty ? [.custom] : allCases.filter { fallback.contains($0) }
+    }
 }
 
 /// Exact, case-insensitive model-name overrides take precedence over provider defaults.
@@ -342,6 +358,7 @@ struct UsageSnapshot: Codable, Equatable, Sendable {
                 summary.usage = summary.usage + component.reportedUsage
                 sessionIDs[id, default: []].insert(session.id)
                 summary.sessionCount = sessionIDs[id]?.count ?? 0
+                summary.sources = Array(Set(summary.sources + [session.sourceID])).sorted()
                 summaries[id] = summary
             }
         }
@@ -355,6 +372,7 @@ struct ModelSummary: Identifiable, Equatable, Sendable {
     var usage: TokenUsage
     var sessionCount: Int
     var isExcluded = false
+    var sources: [String] = []
 }
 
 enum SessionSort: String, CaseIterable, Identifiable, Sendable {

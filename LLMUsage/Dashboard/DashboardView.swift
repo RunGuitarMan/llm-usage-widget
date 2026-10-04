@@ -104,7 +104,8 @@ struct DashboardView: View {
             sidebar
                 .navigationSplitViewColumnWidth(min: 180, ideal: 200, max: 250)
         } detail: {
-            detail
+            // Keep one toolbar owner when detail switches between settings and statistics.
+            VStack(spacing: 0) { detail }
                 // Constrain the native column. A content frame minimum can make
                 // Tahoe's split view wider than its window and clip both edges.
                 .navigationSplitViewColumnWidth(min: 520, ideal: 700)
@@ -191,7 +192,7 @@ struct DashboardView: View {
                         Button(L10n.text("Настройки")) { store.tab = .settings }.buttonStyle(.borderless)
                     }
                     .font(.caption).padding(.horizontal, 28).padding(.vertical, 10)
-                    .background(Color.orange.opacity(0.06))
+                    .background(Color.orange.opacity(0.06), ignoresSafeAreaEdges: [])
                 }
                 if let snapshot = store.displaySnapshot {
                     switch store.tab {
@@ -297,17 +298,17 @@ struct DashboardView: View {
                         }
                         .transition(.opacity.combined(with: .move(edge: .top)))
                     }
-                    if store.sourceFilter.isEmpty, snapshot.sourceSummaries.count > 1 {
-                        sourceSpending(snapshot)
-                    }
-                    DashboardSessionsSection(store: store) { scrollToSessions(using: proxy) }
+                    DashboardSessionsSection(store: store, scrollToSession: { id in
+                        proxy.scrollTo(id)
+                    }) { scrollToSessions(using: proxy) }
                         .id("session-list")
                 }
                 .padding(30).frame(maxWidth: 1000, alignment: .leading).frame(maxWidth: .infinity)
             }
             .task(id: store.sessionNavigationID) {
                 // Reveal explicit widget/deep links once; local toggles do not auto-scroll.
-                guard store.sessionList.isExpanded else { return }
+                // A selected row is revealed by the session section once filtering completes.
+                guard store.sessionList.isExpanded, store.selectedSessionID == nil else { return }
                 await Task.yield()
                 guard !Task.isCancelled else { return }
                 proxy.scrollTo("session-list", anchor: .top)
@@ -333,6 +334,17 @@ struct DashboardView: View {
                     spendAmount(snapshot)
                     activitySummary(snapshot)
                 }
+            }
+            if let totals = store.snapshot?.totals,
+               let budget = DailyBudget(limit: store.dailyBudget, usage: totals) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(L10n.text("Дневной бюджет"))
+                        .font(.system(size: 12, weight: .medium))
+                    UsageBudgetMeter(budget: budget)
+                    if !store.sourceFilter.isEmpty {
+                        Text(L10n.text("Все источники")).font(.caption).foregroundStyle(.secondary)
+                    }
+                }.frame(maxWidth: 420, alignment: .leading)
             }
             GlassEffectContainer(spacing: 4) {
                 HStack(spacing: 12) {
@@ -400,25 +412,6 @@ struct DashboardView: View {
         return usage
     }
 
-    private func sourceSpending(_ snapshot: UsageSnapshot) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(L10n.text("По источникам")).font(.system(size: 15, weight: .semibold))
-            DashboardSection {
-                ForEach(Array(snapshot.sourceSummaries.enumerated()), id: \.element.id) { index, source in
-                    if index > 0 { Divider().padding(.leading, 16) }
-                    Button { store.sourceFilter = source.id } label: {
-                        HStack(spacing: 16) {
-                            SourceBadge(source: source.id).frame(width: 115, alignment: .leading)
-                            UsageBar(fraction: snapshot.totals.cost > 0 ? source.usage.cost / snapshot.totals.cost : 0,
-                                     color: UsageSource.color(source.id), height: 5)
-                            Text(UsageFormat.cost(source.usage)).font(.system(size: 13, weight: .medium))
-                                .monospacedDigit().frame(width: 80, alignment: .trailing)
-                        }.padding(16).contentShape(Rectangle())
-                    }.buttonStyle(.plain).help(L10n.text("Фильтр: \(source.label)"))
-                }
-            }
-        }
-    }
 }
 
 struct DashboardPreviews: PreviewProvider {

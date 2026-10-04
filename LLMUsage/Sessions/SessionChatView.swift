@@ -12,7 +12,7 @@ final class TranscriptReaderModel: ObservableObject {
 
     init(transcript: SessionTranscript? = nil) { self.transcript = transcript }
 
-    func load(_ session: UsageSession, file: URL? = nil, customPath: String = "", pricingKey: String? = nil) async {
+    func load(_ session: UsageSession, file: URL? = nil, customPath: String = "", pricingKey: String? = nil, services: TranscriptServices = .live) async {
         let token = UUID()
         request = token
         isLoading = true
@@ -20,11 +20,11 @@ final class TranscriptReaderModel: ObservableObject {
         pricingError = nil
         defer { if request == token { isLoading = false } }
         do {
-            let result = try await TranscriptService().load(session: session, file: file)
+            let result = try await services.load(session, file)
             guard request == token, !Task.isCancelled else { return }
             transcript = result
             do {
-                let priced = try await TranscriptCostService().price(result, source: session.sourceID, customPath: customPath, pricingKey: pricingKey)
+                let priced = try await services.price(result, session.sourceID, customPath, pricingKey)
                 guard request == token, !Task.isCancelled else { return }
                 transcript = priced
             } catch is CancellationError { }
@@ -51,6 +51,7 @@ struct SessionChatView: View {
     var pricingKey: String?
     @StateObject private var reader: TranscriptReaderModel
     @StateObject private var results: SearchResults<TranscriptSearchRequest, TranscriptSearchResult>
+    @Environment(\.transcriptServices) private var transcriptServices
     @Environment(\.dismiss) private var dismiss
     @State private var search = ""
     @State private var searchFocusRequest = 0
@@ -65,6 +66,7 @@ struct SessionChatView: View {
     @State private var jumpID: String?
     @State private var filter = TranscriptEventFilter.all
     @State private var scrollTarget: String?
+    @State private var timelinePosition: String?
 
     init(session: UsageSession, timezone: String, isDemo: Bool = false, preview: SessionTranscript? = nil,
          day: UsageDay? = nil, policy: ModelExclusionPolicy = .init(), customPath: String = "", pricingKey: String? = nil,
@@ -116,9 +118,20 @@ struct SessionChatView: View {
         }
         .background(Color(nsColor: .windowBackgroundColor))
         .frame(minWidth: 680, idealWidth: 900, maxWidth: .infinity, minHeight: 520, idealHeight: 740, maxHeight: .infinity)
+        #if MANUAL_REVIEW
+        .onAppear {
+            guard let kind = ManualReviewController.active?.chatKind else { return }
+            view = kind == "expensive" ? .expensive : kind == "analytics" ? .tools : .chat
+            filter = kind == "errors" ? .errors : kind == "tools" ? .tools : .all
+            expandedTools = kind == "tools" ? ["3", "4", "7"] : []
+            search = kind == "search" ? "поиск" : ""
+            showInfo = kind == "info"
+            scope = .session
+        }
+        #endif
         .task(id: reload) {
             if !isDemo && (reader.transcript == nil || reload > 0) {
-                await reader.load(session, file: selectedFile, customPath: customPath, pricingKey: pricingKey)
+                await reader.load(session, file: selectedFile, customPath: customPath, pricingKey: pricingKey, services: transcriptServices)
             }
         }
         .task(id: searchRequest) {
@@ -291,10 +304,12 @@ struct SessionChatView: View {
                         }
                         Color.clear.frame(height: 22).id("chat-end")
                     }
+                    .scrollTargetLayout()
                     .frame(maxWidth: 860, alignment: .leading)
                     .padding(.horizontal, 24).padding(.top, 10).padding(.bottom, 12)
                     .frame(maxWidth: .infinity)
                 }
+                .scrollPosition(id: $timelinePosition, anchor: .top)
             }
             .onChange(of: scrollTarget) { _, target in
                 guard let target else { return }
@@ -306,7 +321,7 @@ struct SessionChatView: View {
             .onChange(of: jumpID) { _, id in
                 guard let id, results.completedInput == searchRequest,
                       rows.contains(where: { $0.id == id }) else { return }
-                proxy.scrollTo(id, anchor: .top)
+                timelinePosition = id
                 jumpID = nil
             }
             .task(id: results.completedInput) {
@@ -314,13 +329,13 @@ struct SessionChatView: View {
                     expandedTools.formUnion(rows.flatMap(\.events).filter { $0.kind == .tool }.map(\.id))
                 }
                 if let jumpID, rows.contains(where: { $0.id == jumpID }) {
-                    proxy.scrollTo(jumpID, anchor: .top)
+                    timelinePosition = jumpID
                     self.jumpID = nil
                 }
             }
             .onAppear {
                 if let jumpID, rows.contains(where: { $0.id == jumpID }) {
-                    proxy.scrollTo(jumpID, anchor: .top); self.jumpID = nil
+                    timelinePosition = jumpID; self.jumpID = nil
                 }
             }
         }
@@ -328,6 +343,7 @@ struct SessionChatView: View {
 
     private func messageRow(_ event: TranscriptEvent) -> some View {
         let isUser = event.kind == .user
+        let preview = TranscriptTextPreview(event.text)
         return VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
                 Image(systemName: isUser ? "person.fill" : "sparkle")
@@ -352,13 +368,13 @@ struct SessionChatView: View {
                 } label: { Image(systemName: "ellipsis").font(.system(size: 12)).foregroundStyle(.tertiary) }
                     .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize().help(L10n.text("Действия с сообщением")).accessibilityLabel(L10n.text("Действия с сообщением"))
             }
-            TranscriptMessageText(text: String(event.text.prefix(3200)))
-            if event.text.count > 3200 {
+            TranscriptMessageText(text: preview.text)
+            if preview.isTruncated {
                 Button(L10n.text("Читать полностью · \(UsageFormat.exact(Int64(event.text.count))) знаков")) {
                     reading = .init(title: event.title, text: event.text)
                 }.buttonStyle(.link).font(.system(size: 11))
             }
-            if !search.isEmpty && !String(event.text.prefix(3200)).localizedCaseInsensitiveContains(search) {
+            if !search.isEmpty && !preview.text.localizedCaseInsensitiveContains(search) {
                 Button(L10n.text("Совпадение в полном содержимом")) {
                     reading = .init(title: event.title, text: event.searchableText, monospaced: true)
                 }.buttonStyle(.link).font(.system(size: 11))
@@ -604,7 +620,7 @@ private struct TranscriptMessageText: View {
                         .font(.system(size: 13)).lineSpacing(5).frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
-        }.textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+        }.textSelection(.enabled)
     }
 }
 
@@ -699,5 +715,25 @@ enum TranscriptPreview {
             }
         }
         return transcript
+    }
+}
+
+/// Inject I/O at the boundary; TranscriptReaderModel owns the same loading and error lifecycle.
+struct TranscriptServices {
+    var load: @MainActor (UsageSession, URL?) async throws -> SessionTranscript
+    var price: @MainActor (SessionTranscript, String, String, String?) async throws -> SessionTranscript
+
+    static let live = Self(
+        load: { try await TranscriptService().load(session: $0, file: $1) },
+        price: { try await TranscriptCostService().price($0, source: $1, customPath: $2, pricingKey: $3) })
+}
+
+private struct TranscriptServicesKey: EnvironmentKey {
+    static let defaultValue = TranscriptServices.live
+}
+extension EnvironmentValues {
+    var transcriptServices: TranscriptServices {
+        get { self[TranscriptServicesKey.self] }
+        set { self[TranscriptServicesKey.self] = newValue }
     }
 }
