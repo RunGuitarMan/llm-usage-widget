@@ -8,8 +8,8 @@ A native macOS 26 app that shows token usage and estimated costs from local AI c
 ## What it does
 
 - Shows daily totals, a seven-day spending chart, and usage by model and session.
-- Statistics combines the summary and session browser. **All sessions** expands a scrollable list on the same screen, preserving the compact view’s provider logos, token bars and cost layout, with model/project/ID search (⌘F), model filtering, cost/token/activity/Output/Cache read sorting, and the count and total of matching sessions. **Collapse list** clears search and model filters and returns to the top five. Widget and legacy session links open the expanded list and its shared inspector.
-- The compact view ranks the top five sessions by cost, tokens or recent activity. Model-provider logos identify Anthropic, OpenAI and Google independently of the coding agent; mixed and unknown providers use neutral icons. Each row's token bar shows that session's token composition, with exact categories in its tooltip.
+- Statistics combines the summary and session browser. **All sessions** expands a scrollable list on the same screen, preserving the compact view’s provider logos, token bars and cost layout, with model/project/ID search (⌘F), model filtering, cost/token/activity/Output/Cache read sorting, and the count and total of matching sessions. **Collapse list** clears search and model filters and returns to the top three. Widget and legacy session links open the expanded list and its shared inspector.
+- The compact view ranks the top three sessions by cost, tokens or recent activity. Model-provider logos identify Anthropic, OpenAI and Google independently of the coding agent; mixed and unknown providers use neutral icons. Each row's token bar shows that session's token composition, with exact categories in its tooltip.
 - Filters by date, source and model; searches sessions and local chat transcripts.
 - Breaks down chat request tokens and estimated cost for Claude Code, Codex and Gemini, with costliest requests and tool-call frequency.
 - Excludes models by exact name from token and cost totals for every date; Z.ai / GLM are excluded by default.

@@ -144,7 +144,7 @@ enum RegressionScenarios {
                                              modelBreakdowns: [.init(id: "gemini-2.5-pro", usage: .zero)])
             try requireRegression(breakdownOnly.modelProvider == .google, "Model breakdown names ignored")
         }
-        await check("Statistics: ranking precedes the five-row limit and respects source and exclusion filters") {
+        await check("Statistics: ranking precedes the three-row limit and respects source and exclusion filters") {
             let sessions: [UsageSession] = (0..<8).map { index in
                 let model = index == 7 ? "glm-5" : "gpt-6"
                 let source = index == 0 ? "claude" : "codex"
@@ -154,9 +154,9 @@ enum RegressionScenarios {
             }
             let snapshot = UsageSnapshot(generatedAt: Date(), day: .init(), sessions: sessions).applyingExclusions(.init())
             let cost = SessionSort.cost.topSessions(in: snapshot.filtered(source: "codex"))
-            try requireRegression(cost.map(\.id) == ["s6", "s5", "s4", "s3", "s2"], "Ranking truncated before sort or included excluded cost")
-            try requireRegression(SessionSort.tokens.topSessions(in: snapshot).map(\.id) == ["s0", "s1", "s2", "s3", "s4"], "Token ranking incorrect")
-            try requireRegression(SessionSort.activity.topSessions(in: snapshot).map(\.id) == ["s7", "s6", "s5", "s4", "s3"], "Activity ranking incorrect")
+            try requireRegression(cost.map(\.id) == ["s6", "s5", "s4"], "Ranking truncated before sort or included excluded cost")
+            try requireRegression(SessionSort.tokens.topSessions(in: snapshot).map(\.id) == ["s0", "s1", "s2"], "Token ranking incorrect")
+            try requireRegression(SessionSort.activity.topSessions(in: snapshot).map(\.id) == ["s7", "s6", "s5"], "Activity ranking incorrect")
             var tied = snapshot
             tied.sessions = [sessions[1], sessions[0]].map { var session = $0; session.usage.cost = 1; return session }
             try requireRegression(SessionSort.cost.topSessions(in: tied).map(\.id) == ["s0", "s1"], "Equal costs reorder nondeterministically")

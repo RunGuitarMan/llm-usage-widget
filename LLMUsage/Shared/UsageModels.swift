@@ -361,6 +361,7 @@ enum SessionSort: String, CaseIterable, Identifiable, Sendable {
     var id: String { rawValue }
     var title: String { L10n.key(rawValue) }
     static let compactCases: [Self] = [.cost, .tokens, .activity]
+    static let compactLimit = 3
     var metricTitle: String {
         switch self {
         case .cost: return L10n.text("Стоимость")
@@ -381,9 +382,9 @@ enum SessionSort: String, CaseIterable, Identifiable, Sendable {
     var orderDescription: String {
         self == .activity ? L10n.text("Сначала недавние") : L10n.text("По убыванию")
     }
-    /// Rank the entire filtered report before applying the compact five-row limit.
+    /// Rank the entire filtered report before applying the compact row limit.
     func topSessions(in snapshot: UsageSnapshot) -> [UsageSession] {
-        Array(sorted(snapshot.sessions).prefix(5))
+        Array(sorted(snapshot.sessions).prefix(Self.compactLimit))
     }
     func sorted(_ sessions: [UsageSession]) -> [UsageSession] {
         sessions.sorted { a, b in

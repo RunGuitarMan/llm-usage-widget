@@ -36,12 +36,12 @@ struct DashboardSessionsSection: View {
     private var isCurrent: Bool { results.completedInput == searchRequest }
     private var isExpanded: Bool { store.sessionList.isExpanded }
     private var sort: SessionSort { store.sessionList.sort }
-    private var visibleSessions: [UsageSession] { isExpanded ? sessions : Array(sessions.prefix(5)) }
+    private var visibleSessions: [UsageSession] { isExpanded ? sessions : Array(sessions.prefix(SessionSort.compactLimit)) }
     private var listHeight: CGFloat {
-        let compactCount = min(5, sessions.count)
+        let compactCount = min(SessionSort.compactLimit, sessions.count)
         let compactHeight = sessionRowHeight * CGFloat(compactCount) + CGFloat(max(0, compactCount - 1))
         let fullHeight = sessionRowHeight * CGFloat(sessions.count) + CGFloat(max(0, sessions.count - 1))
-        // Expanding must never make the viewport shorter than its five-row preview.
+        // Expanding must never make the viewport shorter than its compact preview.
         return isExpanded ? min(fullHeight, max(360, compactHeight)) : compactHeight
     }
 
@@ -221,7 +221,7 @@ struct DashboardSessionsSection: View {
                         Text(L10n.text("Итого: \(UsageFormat.cost(results.value.total))"))
                     }
                 } else {
-                    Text(L10n.text("Показано \(min(5, sessions.count)) из \(sessions.count)"))
+                    Text(L10n.text("Показано \(visibleSessions.count) из \(sessions.count)"))
                 }
             } else {
                 ProgressView().controlSize(.mini)
