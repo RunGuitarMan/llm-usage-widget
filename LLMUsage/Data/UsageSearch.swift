@@ -114,7 +114,8 @@ struct TranscriptSearchResult: Sendable {
                       start < day.end, end > day.date, end > start else { continue }
             }
             guard request.filter.includes(event) else { continue }
-            guard request.showContext || event.kind != .context || !request.query.isEmpty else { continue }
+            guard request.showContext || event.kind != .context || !request.query.isEmpty
+                || (request.filter == .errors && event.isError) else { continue }
             if !request.query.isEmpty {
                 var matches = [event.title, event.text, event.input, event.output]
                     .contains { $0.localizedCaseInsensitiveContains(request.query) }

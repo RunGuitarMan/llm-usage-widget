@@ -279,7 +279,9 @@ struct TranscriptDecoder {
             return
         }
         if ["function_call_output", "custom_tool_call_output"].contains(type) {
-            result(callID: message["call_id"] as? String, value: message["output"], failed: false, raw: raw, timestamp: timestamp)
+            result(callID: message["call_id"] as? String, value: message["output"],
+                   failed: source == "codex" && (TranscriptCodexFailure.recorded(in: message)
+                       || TranscriptCodexFailure.output(message["output"])), raw: raw, timestamp: timestamp)
             return
         }
         if ["tool", "toolResult", "function"].contains(role) {
@@ -399,5 +401,39 @@ struct TranscriptDecoder {
         var event = make(.context, raw: raw, timestamp: timestamp)
         event.title = title
         events.append(event)
+    }
+}
+
+/// Read explicit outcome metadata, never arbitrary words in a command's output.
+enum TranscriptCodexFailure {
+    static func recorded(in fields: [String: Any]) -> Bool {
+        if fields["isError"] as? Bool == true || fields["is_error"] as? Bool == true
+            || fields["success"] as? Bool == false { return true }
+        if let status = fields["status"] as? String, ["failed", "error", "declined"].contains(status.lowercased()) { return true }
+        for key in ["exit_code", "exitCode"] {
+            if let code = fields[key] as? NSNumber, CFGetTypeID(code) != CFBooleanGetTypeID(),
+               code.doubleValue.isFinite, code.doubleValue.rounded() == code.doubleValue, code.doubleValue != 0 { return true }
+        }
+        return false
+    }
+
+    static func output(_ value: Any?) -> Bool {
+        if let fields = value as? [String: Any] {
+            return recorded(in: fields) || recorded(in: TranscriptJSON.object(fields["metadata"]))
+        }
+        guard let text = value as? String else { return false }
+        if let fields = (try? JSONSerialization.jsonObject(with: Data(text.utf8))) as? [String: Any] {
+            return output(fields)
+        }
+        // Older shell tools serialize their exit status in a header before the
+        // output body. A matching line printed by the command itself is not evidence.
+        let lines = text.prefix(4096).components(separatedBy: .newlines)
+        guard let boundary = lines.firstIndex(where: { $0 == "Output:" || $0 == "Final output:" }) else { return false }
+        for line in lines[..<boundary] {
+            for prefix in ["Process exited with code ", "Exit code: "] where line.hasPrefix(prefix) {
+                if let code = Int(line.dropFirst(prefix.count)), code != 0 { return true }
+            }
+        }
+        return false
     }
 }

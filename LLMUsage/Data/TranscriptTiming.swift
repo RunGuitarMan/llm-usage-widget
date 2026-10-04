@@ -218,6 +218,12 @@ enum TranscriptTimingParser {
                 case "CommandExecution", "McpToolCall", "FileChange", "ImageView", "Extension", "WebSearch": kind = .tool
                 default: kind = .service
                 }
+                if kind == .tool, TranscriptCodexFailure.recorded(in: item)
+                    || TranscriptCodexFailure.output(item["result"]) {
+                    // Use the same unambiguous, log-scoped match as timing. Keep
+                    // unmatched failures on their own service event.
+                    transcript.events[index].isError = true
+                }
                 let rawDuration = TranscriptJSON.object(item["duration"])
                 let duration = seconds(rawDuration["secs"]).flatMap { secs -> Double? in
                     guard let nanos = seconds(rawDuration["nanos"]), nanos < 1_000_000_000 else { return nil }

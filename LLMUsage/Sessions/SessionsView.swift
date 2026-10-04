@@ -9,7 +9,13 @@ struct DashboardSessionsSection: View {
     @StateObject private var results: SearchResults<SessionSearchRequest, SessionSearchResult>
     @State private var searchFocusRequest = 0
     @State private var sessionRowHeight: CGFloat = 76
+    @State private var pendingSessionID: String?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private struct ScrollSelection: Equatable {
+        var id: String?
+        var navigationID: UUID
+    }
 
     init(store: UsageStore, revealSearch: @escaping () -> Void = {}) {
         self.store = store
@@ -169,15 +175,27 @@ struct DashboardSessionsSection: View {
                     withTransaction(transaction) { proxy.scrollTo(id, anchor: .top) }
                 }
             }
-            .onChange(of: store.selectedSessionID, initial: true) { _, id in
-                if isExpanded, let id { proxy.scrollTo(id) }
+            .onChange(of: ScrollSelection(id: store.selectedSessionID, navigationID: store.sessionNavigationID), initial: true) { _, selection in
+                pendingSessionID = selection.id
+                _ = revealPendingSession(using: proxy)
             }
             .onChange(of: results.completedInput) { old, new in
+                guard isCurrent, !revealPendingSession(using: proxy) else { return }
                 if old?.query != new?.query || old?.model != new?.model || old?.sort != new?.sort || old?.source != new?.source {
                     if let id = sessions.first?.id { proxy.scrollTo(id, anchor: .top) }
                 }
             }
         }
+    }
+
+    private func revealPendingSession(using proxy: ScrollViewProxy) -> Bool {
+        guard isExpanded, isCurrent, let pendingSessionID,
+              let session = sessions.first(where: {
+                  $0.id == pendingSessionID || ($0.sourceID == "claude" && $0.rawID == pendingSessionID)
+              }) else { return false }
+        proxy.scrollTo(session.id)
+        self.pendingSessionID = nil
+        return true
     }
 
     private var rowDivider: some View {

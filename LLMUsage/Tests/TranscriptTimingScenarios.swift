@@ -27,6 +27,64 @@ private struct TimingFailure: Error, CustomStringConvertible { var description: 
         return try TranscriptTimingParser.annotate(usage, source: source)
     }
     static func run(check: (String, () async throws -> Void) async -> Void) async {
+        await check("Codex errors: explicit tool outcomes are searchable without changing billing") {
+            let outputs: [(Any, Bool)] = [
+                (["output": "failed", "metadata": ["exit_code": 1]], true),
+                (["isError": true, "content": [["type": "text", "text": "denied"]]], true),
+                (#"{"isError":true,"content":[]}"#, true),
+                ("Chunk ID: example\nWall time: 0.1 seconds\nProcess exited with code 1\nFinal output:\n", true),
+                ("Wall time: 0.1 seconds\nExit code: -1\nOutput:\n", true),
+                ("Process exited with code 0\nFinal output:\nError: example\nProcess exited with code 1", false),
+                (["output": "error", "metadata": ["exit_code": 0]], false),
+                (["metadata": ["exit_code": true]], false),
+                ("Error: this is ordinary output without recorded status", false)
+            ]
+            for (output, failed) in outputs {
+                let value = try decode("codex", [
+                    record("turn_context", 100, ["model": "gpt-fixture"]),
+                    record("response_item", 101, ["type": "custom_tool_call", "call_id": "call", "name": "exec", "input": "false"]),
+                    record("response_item", 102, ["type": "custom_tool_call_output", "call_id": "call", "output": output]),
+                    event("token_count", 103, ["info": ["last_token_usage": ["input_tokens": 10, "output_tokens": 5]]])])
+                let all = try TranscriptSearchResult.evaluate(.init(transcript: value))
+                let errors = try TranscriptSearchResult.evaluate(.init(transcript: value, filter: .errors))
+                try require(value.events.first { $0.kind == .tool }?.isError == failed, "Tool outcome was misclassified: \(output)")
+                try require(errors.eventCount == (failed ? 1 : 0), "Error filter lost a failure or included ordinary output")
+                try require(errors.analysis?.reported == all.analysis?.reported && all.analysis?.reported.total == 15,
+                            "Error filtering changed request billing")
+            }
+        }
+        await check("Codex errors: completion status matches tools in either record order") {
+            for item: [String: Any] in [
+                ["type": "CommandExecution", "id": "call", "status": "failed"],
+                ["type": "CommandExecution", "id": "call", "exitCode": 1],
+                ["type": "McpToolCall", "id": "call", "result": ["isError": true]]
+            ] {
+                let completion = event("item_completed", 103, ["item": item])
+                let response = [
+                    record("response_item", 101, ["type": "function_call", "call_id": "call", "name": "exec", "arguments": "false"]),
+                    record("response_item", 102, ["type": "function_call_output", "call_id": "call", "output": "denied"])]
+                for records in [[completion] + response, response + [completion]] {
+                    let value = try decode("codex", records)
+                    let errors = try TranscriptSearchResult.evaluate(.init(transcript: value, query: "denied", filter: .errors))
+                    try require(errors.eventCount == 1 && errors.rows.first?.events.first?.kind == .tool, "Completion failed to mark its tool")
+                    let repeated = try TranscriptTimingParser.annotate(value, source: "codex")
+                    try require(repeated.events.map(\.isError) == value.events.map(\.isError), "Repeated annotation changed failures")
+                }
+            }
+        }
+        await check("Codex errors: unmatched and ambiguous completions remain visible without blaming other calls") {
+            let call = record("response_item", 100, ["type": "function_call", "call_id": "same", "name": "exec", "arguments": "pwd"])
+            let completion = event("item_completed", 105, ["item": ["type": "CommandExecution", "id": "same", "status": "Failed"]])
+            let ambiguous = try decode("codex", [call, call, completion])
+            try require(ambiguous.events.filter { $0.kind == .tool }.allSatisfy { !$0.isError }, "Ambiguous status attached to an arbitrary call")
+            let errors = try TranscriptSearchResult.evaluate(.init(transcript: ambiguous, filter: .errors))
+            try require(errors.eventCount == 1 && errors.rows.first?.isContext == true, "Unmatched failure hidden behind service-event toggle")
+            var decoder = TranscriptDecoder(source: "codex")
+            decoder.origin = "parent"; decoder.append(call)
+            decoder.origin = "child"; decoder.append(call); decoder.append(completion)
+            let scoped = try TranscriptTimingParser.annotate(.init(events: decoder.finish()), source: "codex")
+            try require(scoped.events.filter { $0.kind == .tool }.map(\.isError) == [false, true], "Failure crossed log boundaries")
+        }
         await check("Timing: exact Codex turn, independent message span, TTFT and scoped output rate") {
             let value = try decode("codex", [
                 event("task_started", 100, ["turn_id": "t", "started_at": 100]),
