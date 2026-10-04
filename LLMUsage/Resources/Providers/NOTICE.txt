@@ -1,0 +1,9 @@
+Provider marks: Simple Icons 14.0.0, distributed under CC0-1.0 (LICENSE.txt).
+Unmodified vector SVGs from:
+https://github.com/simple-icons/simple-icons/blob/14.0.0/icons/anthropic.svg
+https://github.com/simple-icons/simple-icons/blob/14.0.0/icons/openai.svg
+https://github.com/simple-icons/simple-icons/blob/14.0.0/icons/google.svg
+
+Brand names and marks belong to their respective owners. Their use identifies
+model providers and does not imply endorsement. The app renders the marks as
+monochrome templates so they remain legible in light and dark appearances.

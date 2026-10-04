@@ -97,14 +97,15 @@ enum SnapshotFiles {
             throw UsageError.sharedContainer("Unsupported snapshot schema version")
         }
         if let snapshot {
-            guard TimeZone(identifier: snapshot.day.timezone) != nil,
+            guard validDay(snapshot.day),
+                  snapshot.dataContext == nil || snapshot.dataContext?.timezone == snapshot.day.timezone,
                   Set(snapshot.sessions.map(\.id)).count == snapshot.sessions.count,
                   snapshot.sessions.count <= 100_000,
                   snapshot.sessions.allSatisfy({ session in
-                      let values = [session.usage.input, session.usage.output, session.usage.cacheCreate, session.usage.cacheRead]
-                      return !session.id.isEmpty && values.allSatisfy { $0 >= 0 && $0 <= 1_000_000_000_000 }
-                          && (0...5_000_000_000_000).contains(session.usage.additional ?? 0)
-                          && session.usage.cost.isFinite && session.usage.cost >= 0
+                      !session.id.isEmpty && validUsage(session.usage, limit: 5_000_000_000_000, costLimit: 1e12)
+                          && session.modelBreakdowns.count <= 100_000
+                          && session.modelBreakdowns.allSatisfy { validUsage($0.usage, limit: 5_000_000_000_000, costLimit: 1e12) }
+                          && (0...1_000_000_000_000).contains(session.reasoningOutputTokens ?? 0)
                   }) else { throw UsageError.sharedContainer("Invalid values in saved snapshot") }
         }
         return snapshot
@@ -118,13 +119,46 @@ enum SnapshotFiles {
             guard history.schemaVersion == 1, TimeZone(identifier: history.context.timezone) != nil,
                   history.days.count <= 7, Set(history.days.map(\.id)).count == history.days.count,
                   history.days.allSatisfy({ item in
-                      item.day.timezone == history.context.timezone && item.sessionCount >= 0
-                          && item.sessionCount <= 100_000 && item.usage.cost.isFinite && item.usage.cost >= 0
-                          && [item.usage.input, item.usage.output, item.usage.cacheCreate, item.usage.cacheRead,
-                              item.usage.additional ?? 0].allSatisfy { $0 >= 0 && $0 <= 500_000_000_000_000_000 }
+                      validDay(item.day) && item.day.timezone == history.context.timezone
+                          && (0...100_000).contains(item.sessionCount)
+                          && validUsage(item.usage, limit: dailyTokenLimit, costLimit: 1e17)
+                          && item.reportedUsage.map { validUsage($0, limit: dailyTokenLimit, costLimit: 1e17) } != false
+                          && validComponents(item.usageComponents)
                   }) else { throw UsageError.sharedContainer("Invalid saved daily history") }
         }
         return history
+    }
+
+    // CLI limits permit at most 100,000 sessions of 5e12 tokens per day.
+    // Bound the sum as well as each bucket, keeping a seven-day sum within Int64.
+    private static let dailyTokenLimit: Int64 = 500_000_000_000_000_000
+
+    private static func validDay(_ day: UsageDay) -> Bool {
+        TimeZone(identifier: day.timezone) != nil && day == UsageDay(date: day.date, timezone: day.timezone)
+    }
+
+    private static func validUsage(_ usage: TokenUsage, limit: Int64, costLimit: Double) -> Bool {
+        func amounts(_ value: TokenUsage) -> Bool {
+            guard value.cost.isFinite, (0...costLimit).contains(value.cost) else { return false }
+            var remaining = limit
+            for count in [value.input, value.output, value.cacheCreate, value.cacheRead, value.additional ?? 0] {
+                guard count >= 0, count <= remaining else { return false }
+                remaining -= count
+            }
+            return true
+        }
+        // Exclusions restore reportedAmounts before computing any totals.
+        return amounts(usage) && amounts(usage.reported)
+    }
+
+    private static func validComponents(_ components: [ModelUsageComponent]?) -> Bool {
+        guard let components else { return true } // Legacy history is rebuilt by the store.
+        var remaining = dailyTokenLimit
+        for component in components {
+            guard validUsage(component.reportedUsage, limit: remaining, costLimit: 1e17) else { return false }
+            remaining -= max(component.reportedUsage.total, component.reportedUsage.reported.total)
+        }
+        return true
     }
     private static func readValue<T: Decodable>(name: String, directory: URL?) throws -> T? {
         guard let directory else { throw UsageError.sharedContainer(SharedConfiguration.appGroup) }

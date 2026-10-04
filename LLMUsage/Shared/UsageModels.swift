@@ -108,10 +108,12 @@ struct UsageSession: Codable, Equatable, Identifiable, Sendable {
         return UsageFormat.shortID(basename.isEmpty ? rawID : basename)
     }
     var modelLabel: String { models.isEmpty ? L10n.text("Модель неизвестна") : models.joined(separator: ", ") }
+    var modelProvider: ModelProvider { .resolve(models: models + modelBreakdowns.map(\.id)) }
 
     var usageComponents: [ModelUsageComponent] {
         let total = modelBreakdowns.reduce(TokenUsage.zero) { $0 + $1.usage.reported }
-        if !modelBreakdowns.isEmpty, total.total == usage.reported.total,
+        if !modelBreakdowns.isEmpty,
+           TokenCategory.allCases.allSatisfy({ total.value(for: $0) == usage.reported.value(for: $0) }),
            abs(total.cost - usage.reported.cost) < 0.001 {
             return modelBreakdowns.map {
                 .init(models: $0.id.isEmpty ? models : [$0.id], usage: $0.usage.reported)
@@ -134,6 +136,35 @@ struct UsageSession: Codable, Equatable, Identifiable, Sendable {
             return adjusted
         }
         return result
+    }
+}
+
+/// Model authorship is independent of the CLI agent (and of a routing service).
+/// Unknown model names deliberately do not inherit the agent's vendor.
+enum ModelProvider: String, CaseIterable, Sendable {
+    case anthropic, openai, google, custom, mixed
+
+    var title: String {
+        switch self {
+        case .anthropic: return "Anthropic"
+        case .openai: return "OpenAI"
+        case .google: return "Google"
+        case .custom: return L10n.text("Другой или неизвестный провайдер")
+        case .mixed: return L10n.text("Несколько провайдеров")
+        }
+    }
+
+    static func resolve(models: [String]) -> Self {
+        let names = models.map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }.filter { !$0.isEmpty }
+        let providers = Set(names.map { name -> Self in
+            // Match whole family prefixes, including namespaces used by routers
+            // and Bedrock (e.g. openrouter/anthropic/claude-… or us.anthropic.claude-…).
+            if name.range(of: #"(?:^|[/.:])(?:claude|opus|sonnet|haiku)(?:$|[-_.])"#, options: .regularExpression) != nil { return .anthropic }
+            if name.range(of: #"(?:^|[/.:])(?:gpt(?:$|[-_.])|chatgpt(?:$|[-_.])|o[1-9][0-9]*(?:$|[-_.]))"#, options: .regularExpression) != nil { return .openai }
+            if name.range(of: #"(?:^|[/.:])(?:gemini|gemma)(?:$|[-_.])"#, options: .regularExpression) != nil { return .google }
+            return .custom
+        })
+        return providers.count > 1 ? .mixed : providers.first ?? .custom
     }
 }
 
@@ -242,6 +273,7 @@ struct UsageSnapshot: Codable, Equatable, Sendable {
     var generatedAt: Date
     var day: UsageDay
     var sessions: [UsageSession]
+    var pricingKey: String? = nil
     // Derived totals prevent a stale or inconsistent CLI totals object from contradicting rows.
     var totals: TokenUsage { sessions.reduce(.zero) { $0 + $1.usage } }
     var topModel: String { modelSummaries.first?.id ?? "—" }
@@ -283,7 +315,8 @@ struct UsageSnapshot: Codable, Equatable, Sendable {
             // Never attribute all session tokens to EACH model of a mixed session.
             // Incomplete breakdowns stay together, with an explicit composite label.
             let breakdownTotal = session.modelBreakdowns.reduce(TokenUsage.zero) { $0 + $1.usage }
-            let complete = !session.modelBreakdowns.isEmpty && breakdownTotal.total == session.usage.total
+            let complete = !session.modelBreakdowns.isEmpty
+                && TokenCategory.allCases.allSatisfy { breakdownTotal.value(for: $0) == session.usage.value(for: $0) }
                 && abs(breakdownTotal.cost - session.usage.cost) < 0.001
             let parts = complete ? session.modelBreakdowns : [ModelUsage(id: session.modelLabel, usage: session.usage)]
             for part in parts {
@@ -329,6 +362,32 @@ enum SessionSort: String, CaseIterable, Identifiable, Sendable {
     case output = "По Output", cacheRead = "По Cache read"
     var id: String { rawValue }
     var title: String { L10n.key(rawValue) }
+    static let compactCases: [Self] = [.cost, .tokens, .activity]
+    static let compactLimit = 3
+    var metricTitle: String {
+        switch self {
+        case .cost: return L10n.text("Стоимость")
+        case .tokens: return L10n.text("Токены")
+        case .activity: return L10n.text("Активность")
+        case .output: return "Output"
+        case .cacheRead: return "Cache read"
+        }
+    }
+    var heading: String {
+        switch self {
+        case .cost: return L10n.text("Основные расходы")
+        case .tokens: return L10n.text("Больше всего токенов")
+        case .activity: return L10n.text("Последняя активность")
+        case .output, .cacheRead: return L10n.text("Все сессии")
+        }
+    }
+    var orderDescription: String {
+        self == .activity ? L10n.text("Сначала недавние") : L10n.text("По убыванию")
+    }
+    /// Rank the entire filtered report before applying the compact row limit.
+    func topSessions(in snapshot: UsageSnapshot) -> [UsageSession] {
+        Array(sorted(snapshot.sessions).prefix(Self.compactLimit))
+    }
     func sorted(_ sessions: [UsageSession]) -> [UsageSession] {
         sessions.sorted { a, b in
             let left: Double, right: Double

@@ -1,4 +1,5 @@
 import Foundation
+import CoreFoundation
 
 enum TranscriptKind: String, Sendable { case user, assistant, tool, context }
 
@@ -7,6 +8,8 @@ enum TranscriptKind: String, Sendable { case user, assistant, tool, context }
 struct TranscriptRecord: Identifiable, Sendable {
     let id = UUID()
     let text: String
+    var sequence = 0
+    var origin: String? = nil
 }
 
 struct TranscriptEvent: Identifiable, Sendable {
@@ -22,6 +25,11 @@ struct TranscriptEvent: Identifiable, Sendable {
     var isError = false
     var hasResult = false
     var records: [TranscriptRecord] = []
+    var requestIDs: [String] = []
+    var isUsageOnly = false
+    var isToolResultOnly = false
+    var timing: TranscriptTiming?
+    var origin: String? { records.compactMap(\.origin).first.map { ($0 as NSString).lastPathComponent } }
     var raw: String { records.map(\.text).joined(separator: "\n\n") }
 
     init(id: String, kind: TranscriptKind, title: String, text: String = "", input: String = "",
@@ -65,14 +73,19 @@ struct SessionTranscript: Sendable {
     var files: [URL] = []
     var relatedFiles: [URL] = []
     var notices: [String] = []
+    var requests: [TranscriptRequest] = []
+    var usageSupported = false
+    var usageUncertain = false
+    var imported = false
 
-    var messageCount: Int { events.filter(\.isMessage).count }
+    var messageCount: Int { events.filter { $0.isMessage && !$0.isUsageOnly }.count }
     var toolCount: Int { events.filter { $0.kind == .tool }.count }
     var exportText: String {
         var exportedRecords = Set<UUID>()
         return events.map { event in
             var parts = ["## \(event.title)"]
             if let date = event.timestamp { parts.append(date.ISO8601Format()) }
+            if let timing = event.timing { parts.append(timing.exportText) }
             if !event.text.isEmpty { parts.append(event.text) }
             if !event.input.isEmpty { parts.append(L10n.text("Передано:\n\(event.input)")) }
             if !event.output.isEmpty { parts.append(L10n.text("Получено:\n\(event.output)")) }
@@ -98,6 +111,7 @@ enum TranscriptJSON {
     static func date(_ value: Any?) -> Date? {
         if let number = value as? NSNumber {
             let n = number.doubleValue
+            guard CFGetTypeID(number) != CFBooleanGetTypeID(), n.isFinite, n >= 0, n <= 253_402_300_799_000 else { return nil }
             return Date(timeIntervalSince1970: n > 10_000_000_000 ? n / 1000 : n)
         }
         guard let text = value as? String else { return nil }
@@ -120,16 +134,21 @@ enum TranscriptJSON {
 /// aggregated reports are deliberately not treated as a conversation.
 struct TranscriptDecoder {
     private(set) var events: [TranscriptEvent] = []
-    private var pendingTools: [String: Int] = [:]
+    private struct ToolKey: Hashable { var origin: String?; var id: String }
+    private var pendingTools: [ToolKey: Int] = [:]
+    private var ambiguousTools: Set<ToolKey> = []
     private var codexFallbacks: [(String, TranscriptEvent)] = []
     private var codexMessages: [String: [Int]] = [:]
     private var serial = 0
+    private var recordSequence = 0
     var source: String
+    var origin: String?
 
     init(source: String) { self.source = source }
 
     mutating func append(_ record: [String: Any]) {
-        let raw = TranscriptRecord(text: TranscriptJSON.render(record))
+        recordSequence += 1
+        let raw = TranscriptRecord(text: TranscriptJSON.render(record), sequence: recordSequence, origin: origin)
         let type = record["type"] as? String ?? ""
         let timestamp = TranscriptJSON.date(record["timestamp"] ?? record["created_at"] ?? record["time_created"] ?? record["time"])
         if record["role"] != nil { decodeMessage(record, raw: raw, timestamp: timestamp); return }
@@ -260,7 +279,9 @@ struct TranscriptDecoder {
             return
         }
         if ["function_call_output", "custom_tool_call_output"].contains(type) {
-            result(callID: message["call_id"] as? String, value: message["output"], failed: false, raw: raw, timestamp: timestamp)
+            result(callID: message["call_id"] as? String, value: message["output"],
+                   failed: source == "codex" && (TranscriptCodexFailure.recorded(in: message)
+                       || TranscriptCodexFailure.output(message["output"])), raw: raw, timestamp: timestamp)
             return
         }
         if ["tool", "toolResult", "function"].contains(role) {
@@ -348,15 +369,23 @@ struct TranscriptDecoder {
         event.title = name ?? L10n.text("Вызов инструмента")
         event.callID = callID
         event.input = TranscriptJSON.render(input)
-        if let callID { pendingTools[callID] = events.count }
+        event.timing = .init(kind: .tool, start: timestamp, status: .incomplete)
+        if let callID {
+            let key = ToolKey(origin: origin, id: callID)
+            if pendingTools.removeValue(forKey: key) != nil { ambiguousTools.insert(key) }
+            if !ambiguousTools.contains(key) { pendingTools[key] = events.count }
+        }
         events.append(event)
     }
     private mutating func result(callID: String?, value: Any?, failed: Bool, raw: TranscriptRecord?, timestamp: Date?) {
-        if let callID, let index = pendingTools.removeValue(forKey: callID) {
+        if let callID, let index = pendingTools.removeValue(forKey: .init(origin: origin, id: callID)) {
             events[index].output = TranscriptJSON.content(value)
             events[index].isError = failed
             events[index].hasResult = true
             events[index].attach(raw)
+            // Inline results share the message timestamp: that is not a measured zero-duration call.
+            events[index].timing = .init(kind: .tool, start: raw == nil ? nil : events[index].timestamp,
+                                        end: raw == nil ? nil : timestamp)
         } else {
             var event = make(.tool, raw: raw, timestamp: timestamp)
             event.title = L10n.text("Результат инструмента")
@@ -364,6 +393,7 @@ struct TranscriptDecoder {
             event.callID = callID
             event.isError = failed
             event.hasResult = true
+            event.isToolResultOnly = true
             events.append(event)
         }
     }
@@ -371,5 +401,39 @@ struct TranscriptDecoder {
         var event = make(.context, raw: raw, timestamp: timestamp)
         event.title = title
         events.append(event)
+    }
+}
+
+/// Read explicit outcome metadata, never arbitrary words in a command's output.
+enum TranscriptCodexFailure {
+    static func recorded(in fields: [String: Any]) -> Bool {
+        if fields["isError"] as? Bool == true || fields["is_error"] as? Bool == true
+            || fields["success"] as? Bool == false { return true }
+        if let status = fields["status"] as? String, ["failed", "error", "declined"].contains(status.lowercased()) { return true }
+        for key in ["exit_code", "exitCode"] {
+            if let code = fields[key] as? NSNumber, CFGetTypeID(code) != CFBooleanGetTypeID(),
+               code.doubleValue.isFinite, code.doubleValue.rounded() == code.doubleValue, code.doubleValue != 0 { return true }
+        }
+        return false
+    }
+
+    static func output(_ value: Any?) -> Bool {
+        if let fields = value as? [String: Any] {
+            return recorded(in: fields) || recorded(in: TranscriptJSON.object(fields["metadata"]))
+        }
+        guard let text = value as? String else { return false }
+        if let fields = (try? JSONSerialization.jsonObject(with: Data(text.utf8))) as? [String: Any] {
+            return output(fields)
+        }
+        // Older shell tools serialize their exit status in a header before the
+        // output body. A matching line printed by the command itself is not evidence.
+        let lines = text.prefix(4096).components(separatedBy: .newlines)
+        guard let boundary = lines.firstIndex(where: { $0 == "Output:" || $0 == "Final output:" }) else { return false }
+        for line in lines[..<boundary] {
+            for prefix in ["Process exited with code ", "Exit code: "] where line.hasPrefix(prefix) {
+                if let code = Int(line.dropFirst(prefix.count)), code != 0 { return true }
+            }
+        }
+        return false
     }
 }

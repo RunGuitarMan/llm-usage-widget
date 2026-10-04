@@ -34,6 +34,36 @@ enum PricingScenarios {
     }
 
     @MainActor static func run(check: (String, () async throws -> Void) async -> Void) async {
+        await check("Pricing: unwritable cache retains fetched rates in memory and recovers on revalidation") {
+            let directory = directory()
+            defer { try? FileManager.default.removeItem(at: directory) }
+            // A regular file in place of the cache directory fails regardless of test-user privileges.
+            try Data("blocked".utf8).write(to: directory)
+            let server = PricingServer([.init(status: 200, data: catalog, etag: "v1"),
+                .init(status: 304, data: Data(), etag: nil)])
+            let cache = ClaudePricingCache(directory: directory, fetch: server.fetch)
+            let fresh = try await cache.refresh()
+            try FileManager.default.removeItem(at: directory)
+            let revalidated = try await cache.refresh()
+            let offline = try await cache.refresh()
+            let restarted = try await ClaudePricingCache(directory: directory, fetch: server.fetch).refresh()
+            try requirePricing(!fresh.isEmpty && fresh == revalidated && fresh == offline && fresh == restarted,
+                               "An optional disk cache failure lost usable prices or prevented recovery")
+        }
+        await check("Pricing: failed 304 persistence preserves previously loaded prices") {
+            let directory = directory()
+            defer { try? FileManager.default.removeItem(at: directory) }
+            let server = PricingServer([.init(status: 200, data: catalog, etag: "v1"),
+                .init(status: 304, data: Data(), etag: nil)])
+            let cache = ClaudePricingCache(directory: directory, fetch: server.fetch)
+            let fresh = try await cache.refresh()
+            let file = directory.appendingPathComponent(ClaudePricingCache.filename)
+            try FileManager.default.removeItem(at: file)
+            try FileManager.default.createDirectory(at: file, withIntermediateDirectories: true)
+            let revalidated = try await cache.refresh()
+            let offline = try await cache.refresh()
+            try requirePricing(fresh == revalidated && fresh == offline, "A failed metadata write aborted usable pricing")
+        }
         await check("Pricing: persisted Claude rates survive restart and a network failure") {
             let directory = directory()
             defer { try? FileManager.default.removeItem(at: directory) }

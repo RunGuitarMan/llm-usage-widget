@@ -5,18 +5,7 @@ cd "$(dirname "$0")/.."
 SOURCE="$PWD/build/LLM Usage.app"
 DESTINATION="$HOME/Applications/LLM Usage.app"
 REGISTER=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
-python3 Scripts/verify-bundle.py "$SOURCE"
-if [[ -d "$DESTINATION" ]]; then
-  SOURCE_ID=$(/usr/libexec/PlistBuddy -c 'Print CFBundleIdentifier' "$SOURCE/Contents/Info.plist")
-  DESTINATION_ID=$(/usr/libexec/PlistBuddy -c 'Print CFBundleIdentifier' "$DESTINATION/Contents/Info.plist")
-  if [[ "$SOURCE_ID" != "$DESTINATION_ID" ]]; then
-    printf 'Refusing to replace an app with a different bundle identifier: %s\n' "$DESTINATION" >&2
-    exit 1
-  fi
-fi
-mkdir -p "$HOME/Applications"
-ditto "$SOURCE" "$DESTINATION"
-python3 Scripts/verify-bundle.py "$DESTINATION"
+python3 Scripts/install_bundle.py "$SOURCE" "$DESTINATION"
 # WidgetKit may keep the old extension executable alive after its bundle is replaced.
 # That process still advertises the old version, so the new timeline is rejected.
 # Stop only this installed extension; macOS will launch the replacement on demand.

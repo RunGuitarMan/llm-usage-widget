@@ -203,42 +203,147 @@ struct TokenUsageGrid: View {
     }
 }
 
+/// Browsing months is local to the calendar; only selecting/confirming a day
+/// invokes the callback. The footer also permits reselecting the initial day.
+struct UsageDatePopover: View {
+    @State private var selection: Date
+    var timezone: String
+    var onSelect: (Date) -> Void
+    var onCancel: () -> Void
+
+    init(date: Date, timezone: String, onSelect: @escaping (Date) -> Void, onCancel: @escaping () -> Void) {
+        _selection = State(initialValue: date)
+        self.timezone = timezone
+        self.onSelect = onSelect
+        self.onCancel = onCancel
+    }
+
+    private var calendar: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: timezone) ?? .gmt
+        calendar.locale = L10n.locale
+        return calendar
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(L10n.text("Выбрать дату")).font(.headline)
+            DatePicker(L10n.text("Дата"), selection: Binding(get: { selection }, set: { date in
+                selection = date
+                onSelect(date)
+            }), in: ...Date(), displayedComponents: .date)
+                .datePickerStyle(.graphical).labelsHidden()
+                .environment(\.calendar, calendar)
+                .environment(\.timeZone, calendar.timeZone)
+                .environment(\.locale, L10n.locale)
+            HStack {
+                Button(L10n.text("Сегодня")) { onSelect(calendar.startOfDay(for: Date())) }
+                    .buttonStyle(.borderless)
+                Spacer()
+                Button(L10n.text("Готово")) { onSelect(selection) }
+                    .keyboardShortcut(.defaultAction)
+            }
+        }.padding(16).fixedSize()
+            .onExitCommand(perform: onCancel)
+    }
+}
+
+/// Bundled SVGs stay vector at every display scale and follow the system label color.
+struct ProviderLogo: View {
+    var provider: ModelProvider
+
+    static let images: [ModelProvider: NSImage] = {
+        var result: [ModelProvider: NSImage] = [:]
+        for provider in [ModelProvider.anthropic, .openai, .google] {
+            if let url = Bundle.main.url(forResource: provider.rawValue, withExtension: "svg", subdirectory: "Providers"),
+               let image = NSImage(contentsOf: url), image.isValid {
+                image.isTemplate = true
+                result[provider] = image
+            }
+        }
+        return result
+    }()
+
+    var body: some View {
+        Group {
+            if let image = Self.images[provider] {
+                Image(nsImage: image).resizable().scaledToFit().padding(5)
+            } else {
+                Image(systemName: provider == .mixed ? "square.stack.3d.up" : "cpu")
+                    .font(.system(size: 17, weight: .regular))
+            }
+        }
+        .foregroundStyle(.primary.opacity(0.8))
+        .frame(width: 30, height: 30)
+        .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 7))
+        .help(L10n.text("Провайдер модели: \(provider.title)"))
+        .accessibilityHidden(true)
+    }
+}
+
 struct SessionSummaryRow: View {
     var session: UsageSession
     var timezone: String
     var selected: Bool
-    var share: Double = 0
     var action: () -> Void
     @State private var hovered = false
+    @Environment(\.colorSchemeContrast) private var contrast
+
+    private var tokenDescription: String {
+        ([L10n.text("Состав токенов")] + session.usage.categories.map { category in
+            L10n.text("\(category.title): \(UsageFormat.exact(session.usage.value(for: category))) токенов")
+        }).joined(separator: "\n")
+    }
+
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 12) {
-                Image(systemName: "terminal").font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(UsageSource.color(session.sourceID))
-                    .frame(width: 26, height: 26)
-                    .background(UsageSource.color(session.sourceID).opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(session.modelLabel).font(.system(size: 13, weight: .medium)).lineLimit(1)
-                    HStack(spacing: 6) {
-                        Text(session.sourceLabel)
-                        Text("·")
-                        Text(session.shortID).fontDesign(.monospaced)
-                    }.font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
-                }
-                Spacer(minLength: 8)
-                VStack(alignment: .trailing, spacing: 4) {
-                    Text(UsageFormat.cost(session.usage)).font(.system(size: 18, weight: .medium)).monospacedDigit()
-                    Text(L10n.text("\(UsageFormat.tokens(session.usage.total)) токенов")).font(.system(size: 11)).foregroundStyle(.secondary)
-                    UsageBar(fraction: share, color: UsageSource.color(session.sourceID), height: 3).frame(width: 76)
-                }
-                Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold)).foregroundStyle(.tertiary)
+            ViewThatFits(in: .horizontal) {
+                row(compact: false).frame(minWidth: 540)
+                row(compact: true)
             }
-            .padding(.horizontal, 18).padding(.vertical, 13)
+            .padding(.horizontal, 18).padding(.vertical, 14)
             .contentShape(Rectangle())
-            .background(selected ? Color.accentColor.opacity(0.09) : hovered ? Color.primary.opacity(0.025) : .clear)
+            .background(selected ? Color.accentColor.opacity(contrast == .increased ? 0.18 : 0.09)
+                        : hovered ? Color.primary.opacity(0.04) : .clear)
         }
         .buttonStyle(.plain).onHover { hovered = $0 }
-        .help(UsageFormat.activity(session, timezone: timezone))
+        .accessibilityElement(children: .ignore)
+        .accessibilityAddTraits(selected ? [.isButton, .isSelected] : [.isButton])
         .accessibilityLabel(L10n.text("\(session.sourceLabel), \(session.shortID), \(UsageFormat.cost(session.usage)), \(UsageFormat.tokens(session.usage.total)) токенов. Подробности"))
+        .accessibilityValue(session.modelLabel + ". " + session.modelProvider.title + ". " + tokenDescription)
+    }
+
+    private func row(compact: Bool) -> some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 12) {
+                    ProviderLogo(provider: session.modelProvider)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(session.modelLabel).font(.system(size: 14, weight: .medium)).lineLimit(1)
+                            .help(session.modelLabel)
+                        Text(session.sourceLabel).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
+                            .help(UsageFormat.activity(session, timezone: timezone))
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                if compact { tokenSummary.frame(maxWidth: 160).padding(.leading, 42) }
+            }
+            .frame(minWidth: compact ? 112 : 182, maxWidth: .infinity, alignment: .leading)
+            if !compact { tokenSummary.frame(width: 140).padding(.trailing, 8) }
+            Text(UsageFormat.cost(session.usage)).font(.system(size: 18, weight: .medium)).monospacedDigit()
+                .lineLimit(1).minimumScaleFactor(0.65)
+                .frame(width: compact ? 96 : 112, alignment: .trailing)
+                .help(UsageFormat.cost(session.usage))
+            Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(.tertiary).frame(width: 9).accessibilityHidden(true)
+        }
+    }
+
+    private var tokenSummary: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Text(L10n.text("\(UsageFormat.tokens(session.usage.total)) токенов"))
+                .font(.system(size: 11)).monospacedDigit().foregroundStyle(.secondary).lineLimit(1)
+            TokenDistribution(usage: session.usage, height: 5)
+        }.help(tokenDescription)
     }
 }

@@ -32,6 +32,8 @@ struct RenderPreviews {
                     || (requestedNames.contains("--widgets") && name.hasPrefix("widget-"))
                     || (requestedNames.contains("--sidebars") && name.hasPrefix("sidebar-"))
                     || (requestedNames.contains("--models") && name.hasPrefix("models"))
+                    || (requestedNames.contains("--chat") && name.hasPrefix("session-chat"))
+                    || (requestedNames.contains("--ui-polish") && (name.hasPrefix("polish-") || name.hasPrefix("overview-")))
                     || (requestedNames.contains("--menus") && name.hasPrefix("menu-dropdown")) else { return }
             let appearance = NSAppearance(named: dark ? .darkAqua : .aqua)!
             app.appearance = appearance
@@ -57,6 +59,51 @@ struct RenderPreviews {
         }
         for dark in [false, true] {
             let suffix = dark ? "dark" : "light"
+            let rowUsage = TokenUsage(input: 460, output: 85_337, cacheCreate: 1_844_043, cacheRead: 32_397_328, cost: 17.41)
+            let rowSessions: [UsageSession] = [
+                .init(id: "db11b858-cb3a-484c-a6b2-57ea64bf91c0", models: ["claude-opus-5-5"], usage: rowUsage, lastActivity: Date()),
+                .init(id: "openai-row", models: ["openai/gpt-6-astra"], usage: .init(input: 4000, output: 800, cacheRead: 12000, cost: 4.52), agent: "opencode"),
+                .init(id: "google-row", models: ["gemini-2.5-pro"], usage: .init(input: 1000, output: 2000, cost: 1.37, additional: 2000), agent: "gemini"),
+                .init(id: "custom-row", models: ["custom-model-with-a-long-name-and-release-version"], usage: .zero, agent: "opencode"),
+                .init(id: "mixed-row", models: ["claude-sonnet-4.6", "gpt-6-astra"], usage: rowUsage, agent: "opencode"),
+                .init(id: "huge-row", models: ["gpt-6-astra"], usage: .init(input: 123_456_789, cost: 123_456.78), agent: "codex")
+            ]
+            for width: CGFloat in [370, 520, 880] {
+                let rows = DashboardSection {
+                    ForEach(Array(rowSessions.enumerated()), id: \.element.id) { index, session in
+                        if index > 0 { Divider().padding(.leading, 60).padding(.trailing, 18) }
+                        SessionSummaryRow(session: session, timezone: "Europe/Moscow", selected: index == 1) { }
+                    }
+                }.clipShape(RoundedRectangle(cornerRadius: 18)).padding(20)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                    .background(Color(nsColor: .windowBackgroundColor))
+                try render(rows, name: "polish-rows-\(Int(width))-\(suffix)", size: .init(width: width, height: width < 600 ? 620 : 430), dark: dark)
+            }
+            let detailsStore = previewStore()
+            detailsStore.selectedSessionID = detailsStore.snapshot!.sessions[0].id
+            for width: CGFloat in [280, 360] {
+                try render(SessionDetailView(store: detailsStore, sessionID: detailsStore.selectedSessionID!, initiallyExpandedMetadata: true)
+                    .background(Color(nsColor: .windowBackgroundColor)), name: "polish-inspector-\(Int(width))-\(suffix)",
+                           size: .init(width: width, height: 760), dark: dark)
+            }
+            let headerSessions: [UsageSession] = [
+                .init(id: "typical", models: ["gpt-6-astra"], usage: .init(input: 411834, output: 21651, cacheRead: 6630528, cost: 11.83), agent: "codex"),
+                .init(id: "long-model", models: ["custom-model-with-a-long-name-and-release-version"], usage: .init(input: 123456789, cost: 123456.78), agent: "opencode"),
+                .init(id: "mixed-models", models: ["claude-sonnet-4.6", "gpt-6-astra"], usage: .zero, agent: "opencode")
+            ]
+            for width: CGFloat in [280, 360] {
+                try render(VStack(spacing: 28) {
+                    ForEach(headerSessions) { session in
+                        SessionInspectorSummary(session: session) { }
+                        Divider()
+                    }
+                }.padding(22).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                    .background(Color(nsColor: .windowBackgroundColor)), name: "polish-inspector-summary-\(Int(width))-\(suffix)",
+                           size: .init(width: width, height: 600), dark: dark)
+            }
+            try render(UsageDatePopover(date: Date(), timezone: "Europe/Moscow", onSelect: { _ in }, onCancel: {})
+                .background(Color(nsColor: .windowBackgroundColor)), name: "polish-calendar-\(suffix)",
+                       size: .init(width: 320, height: 350), dark: dark)
             let modelsStore = previewStore()
             modelsStore.tab = .models
             modelsStore.setModelIncluded(false, model: "gpt-6-astra")
@@ -200,9 +247,53 @@ struct RenderPreviews {
                    name: "session-chat-dark", size: .init(width: 900, height: 780), dark: true)
         try render(SessionChatView(session: chatSession, timezone: "Europe/Moscow", isDemo: true),
                    name: "session-chat-narrow", size: .init(width: 680, height: 640))
-        store.tab = .sessions
+        let chatTranscript = TranscriptPreview.sample
+        try render(TranscriptTimingDetails(timing: chatTranscript.events[0].timing!, timezone: "Europe/Moscow")
+                    .padding(18).frame(width: 340, height: 450, alignment: .topLeading)
+                    .background(Color(nsColor: .windowBackgroundColor)),
+                   name: "session-chat-timing-details", size: .init(width: 340, height: 450))
+        var usageChat = chatSession
+        usageChat.usage = chatTranscript.requests.reduce(.zero) { $0 + $1.usage }
+        let chatDay = UsageDay(date: chatTranscript.requests[0].timestamp!, timezone: "Europe/Moscow")
+        for width: CGFloat in [680, 900] {
+            for dark in [false, true] {
+                for tab in TranscriptAnalysisTab.allCases {
+                    try render(SessionChatView(session: usageChat, timezone: "Europe/Moscow", isDemo: true, preview: chatTranscript,
+                                               day: chatDay, initialTab: tab),
+                               name: "session-chat-usage-\(tab.rawValue)-\(Int(width))-\(dark ? "dark" : "light")",
+                               size: .init(width: width, height: 740), dark: dark)
+                }
+                try render(SessionChatView(session: usageChat, timezone: "Europe/Moscow", isDemo: true, preview: chatTranscript,
+                                           day: chatDay, initialFilter: .tools, initiallyExpandedTools: ["3"]),
+                           name: "session-chat-inspector-\(Int(width))-\(dark ? "dark" : "light")",
+                           size: .init(width: width, height: 740), dark: dark)
+                try render(SessionChatView(session: usageChat, timezone: "Europe/Moscow", isDemo: true, preview: chatTranscript,
+                                           day: chatDay, initialFilter: .errors, initiallyExpandedTools: ["7"]),
+                           name: "session-chat-errors-\(Int(width))-\(dark ? "dark" : "light")",
+                           size: .init(width: width, height: 740), dark: dark)
+            }
+        }
+        try render(TranscriptRequestDetails(request: chatTranscript.requests[0], policy: .init()).padding(18)
+            .frame(width: 330).background(Color(nsColor: .windowBackgroundColor)),
+                   name: "session-chat-request-details", size: .init(width: 330, height: 340))
+        try render(TranscriptUserUsageDetails(requests: chatTranscript.requests, policy: .init())
+                    .background(Color(nsColor: .windowBackgroundColor)),
+                   name: "session-chat-user-usage-details", size: .init(width: 370, height: 450))
+        store.tab = .overview
+        store.sessionList.setExpanded(true)
         try render(DashboardView(store: store).contentPreview, name: "sessions", size: .init(width: 900, height: 700))
         try render(DashboardView(store: store).contentPreview, name: "sessions-narrow", size: .init(width: 370, height: 600))
+        try render(DashboardSessionsSection(store: store).padding(30).background(DashboardBackdrop()),
+                   name: "statistics-sessions-narrow", size: .init(width: 520, height: 500))
+        store.sessionList.query = "no-match"
+        try render(DashboardSessionsSection(store: store).padding(30).background(DashboardBackdrop()),
+                   name: "statistics-sessions-empty", size: .init(width: 520, height: 450))
+        store.sessionList.query = ""
+        store.sessionList.model = "gpt-6-astra"
+        store.sessionList.sort = .cacheRead
+        try render(DashboardSessionsSection(store: store).padding(30).background(DashboardBackdrop()),
+                   name: "statistics-sessions-filtered-dark", size: .init(width: 520, height: 400), dark: true)
+        store.sessionList.setExpanded(false)
         store.selectedSessionID = SampleData.multiSourceSnapshot().sessions[2].id
         try render(SessionDetailView(store: store, sessionID: store.selectedSessionID!)
             .background(Color(nsColor: .windowBackgroundColor)), name: "session-detail", size: .init(width: 310, height: 740))

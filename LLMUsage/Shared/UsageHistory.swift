@@ -72,11 +72,12 @@ struct UsageHistory: Codable, Equatable, Sendable {
         return result
     }
 
-    mutating func record(_ snapshot: UsageSnapshot, today: UsageDay) {
+    mutating func record(_ snapshot: UsageSnapshot, today: UsageDay, now: Date = Date()) {
         guard snapshot.day.timezone == context.timezone, snapshot.dataContext == context,
               snapshot.day.date >= today.adding(days: -6).date, snapshot.day.date <= today.date else { return }
         let new = DailyUsageTotal(snapshot: snapshot)
-        if let old = days.first(where: { $0.day == new.day }), old.capturedAt > new.capturedAt { return }
+        if let old = days.first(where: { $0.day == new.day }), old.capturedAt <= now,
+           old.capturedAt > new.capturedAt { return }
         days.removeAll { $0.day == new.day || $0.day.date < today.adding(days: -6).date || $0.day.date > today.date }
         days.append(new)
         days.sort { $0.day.date < $1.day.date }
@@ -92,6 +93,7 @@ struct UsageHistory: Codable, Equatable, Sendable {
     func missingCompletedDays(ending today: UsageDay, now: Date = Date()) -> [UsageDay] {
         points(ending: today).reversed().filter { point in
             point.day != today && (point.total == nil || point.total?.isPartialDay == true
+                || point.total!.capturedAt > now
                 || now.timeIntervalSince(point.total!.capturedAt) >= Self.completedDayRefreshInterval)
         }.map(\.day)
     }

@@ -94,7 +94,7 @@ struct UsageTrendWidget: View {
         var data = history ?? UsageHistory(context: status?.dataContext ?? snapshot?.dataContext ?? .init(timezone: today.timezone, customPath: ""))
         if var snapshot {
             snapshot.dataContext = data.context
-            data.record(snapshot, today: today)
+            data.record(snapshot, today: today, now: date)
         }
         return data.points(ending: today)
     }

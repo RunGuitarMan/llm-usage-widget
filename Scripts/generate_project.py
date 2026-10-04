@@ -20,8 +20,9 @@ tests = sorted(str(p.relative_to(root)) for p in (root/'LLMUsage/Tests').glob('*
 files.update({p: ref(p) for p in tests})
 fixture = ref('LLMUsage/Tests/Fixtures', 'folder')
 assets = ref('LLMUsage/Resources/Assets.xcassets', 'folder.assetcatalog')
+providers = ref('LLMUsage/Resources/Providers', 'folder')
 config = ref('Configuration/Shared.xcconfig', 'text.xcconfig')
-extras = [ref('README.md', 'net.daringfireball.markdown'), config, assets]
+extras = [ref('README.md', 'net.daringfireball.markdown'), config, assets, providers]
 extras += [ref('LLMUsage/Resources/Brand/' + name, 'image.svg') for name in ['LLMUsageIcon.svg', 'LLMUsageIcon-dark.svg', 'LLMUsageSymbol.svg', 'LLMUsageSymbol-dark.svg']]
 for p in ['App-Info.plist', 'Widget-Info.plist', 'App.entitlements', 'Widget.entitlements']:
     extras.append(ref('LLMUsage/Resources/' + p, 'text.plist.xml'))
@@ -69,7 +70,9 @@ for target in ['LLMUsage','LLMUsageWidget','LLMUsageTests']:
     source_phase = obj('sources:'+target, 'PBXSourcesBuildPhase', buildActionMask='2147483647', files=[build_file(target,p) for p in paths], runOnlyForDeploymentPostprocessing='0')
     framework_phase = obj('frameworks:'+target, 'PBXFrameworksBuildPhase', buildActionMask='2147483647', files=[], runOnlyForDeploymentPostprocessing='0')
     resource_files = []
-    if target == 'LLMUsage': resource_files.append(obj('asset-build','PBXBuildFile',fileRef=assets))
+    if target == 'LLMUsage':
+        resource_files.append(obj('asset-build','PBXBuildFile',fileRef=assets))
+        resource_files.append(obj('providers-build','PBXBuildFile',fileRef=providers))
     if target.endswith('Tests'): resource_files.append(obj('fixture-build','PBXBuildFile',fileRef=fixture))
     resource_phase = obj('resources:'+target, 'PBXResourcesBuildPhase', buildActionMask='2147483647', files=resource_files, runOnlyForDeploymentPostprocessing='0')
     phases = [source_phase, framework_phase, resource_phase]

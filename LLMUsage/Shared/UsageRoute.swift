@@ -1,13 +1,12 @@
 import Foundation
 
 enum DashboardTab: String, CaseIterable, Identifiable {
-    case overview = "Обзор", sessions = "Сессии", models = "Модели", settings = "Настройки"
+    case overview = "Обзор", models = "Модели", settings = "Настройки"
     var id: String { rawValue }
-    var title: String { L10n.key(rawValue) }
+    var title: String { self == .overview ? L10n.text("Статистика") : L10n.key(rawValue) }
     var symbol: String {
         switch self {
         case .overview: return "square.grid.2x2"
-        case .sessions: return "list.bullet"
         case .models: return "cube"
         case .settings: return "gearshape"
         }

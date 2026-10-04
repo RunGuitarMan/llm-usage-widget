@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import plistlib
 import re
+import shutil
 import sys
 
 kind, destination = sys.argv[1:]
@@ -62,6 +63,8 @@ if not is_widget:
     info["CFBundleIconFile"] = "LLMUsage"
 for directory in ["MacOS", "Resources"]:
     (bundle / "Contents" / directory).mkdir(parents=True, exist_ok=True)
+if not is_widget:
+    shutil.copytree(resources / "Providers", bundle / "Contents/Resources/Providers", dirs_exist_ok=True)
 (bundle / "Contents/Info.plist").write_bytes(plistlib.dumps(info))
 entitlements = expand(plistlib.loads((resources / f"{stem}.entitlements").read_bytes()))
 if storage_mode == "local-files":

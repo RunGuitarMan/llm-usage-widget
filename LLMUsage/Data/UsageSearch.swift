@@ -12,7 +12,8 @@ final class SearchResults<Input: Sendable, Output: Sendable>: ObservableObject {
     private var worker: Task<Output, Error>?
     private let evaluate: @Sendable (Input) throws -> Output
 
-    init(initial: Output, evaluate: @escaping @Sendable (Input) throws -> Output) {
+    init(initial: Output, input: Input? = nil, evaluate: @escaping @Sendable (Input) throws -> Output) {
+        completedInput = input
         value = initial
         self.evaluate = evaluate
     }
@@ -53,25 +54,68 @@ struct TranscriptRow: Identifiable, Sendable {
     var isContext: Bool { events[0].kind == .context }
 }
 
+enum TranscriptEventFilter: String, CaseIterable, Identifiable, Sendable {
+    case all, tools, errors
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .all: return L10n.text("Все события")
+        case .tools: return L10n.text("Только вызовы")
+        case .errors: return L10n.text("Только ошибки")
+        }
+    }
+    func includes(_ event: TranscriptEvent) -> Bool {
+        switch self {
+        case .all: return true
+        case .tools: return event.kind == .tool
+        case .errors: return event.isError
+        }
+    }
+}
+
 struct TranscriptSearchRequest: Equatable, Sendable {
     var transcript: SessionTranscript?
     var query = ""
     var showContext = false
+    var day: UsageDay? = nil
+    var policy = ModelExclusionPolicy()
+    var filter = TranscriptEventFilter.all
     static func == (lhs: Self, rhs: Self) -> Bool {
         lhs.transcript?.id == rhs.transcript?.id && lhs.query == rhs.query && lhs.showContext == rhs.showContext
+            && lhs.day == rhs.day && lhs.policy == rhs.policy && lhs.filter == rhs.filter
     }
 }
 
 struct TranscriptSearchResult: Sendable {
     var rows: [TranscriptRow] = []
     var eventCount = 0
+    var analysis: TranscriptUsageSummary?
+    var requestsByID: [String: TranscriptRequest] = [:]
+    var requestsByUserID: [String: [TranscriptRequest]] = [:]
 
     static func evaluate(_ request: TranscriptSearchRequest) throws -> Self {
         var result = Self()
+        if let transcript = request.transcript {
+            result.analysis = TranscriptUsageSummary(transcript: transcript, day: request.day, policy: request.policy)
+            result.requestsByID = Dictionary(uniqueKeysWithValues: transcript.requests.map { ($0.id, $0) })
+            for request in result.analysis?.requests ?? [] {
+                if let user = request.userEventID { result.requestsByUserID[user, default: []].append(request) }
+            }
+        }
         var recordMatches: [UUID: Bool] = [:]
+        let requestEvents = Set(result.analysis?.requests.flatMap(\.eventIDs) ?? [])
         for event in request.transcript?.events ?? [] {
             try Task.checkCancellation()
-            guard request.showContext || event.kind != .context || !request.query.isEmpty else { continue }
+            if let day = request.day, !requestEvents.contains(event.id), result.requestsByUserID[event.id] == nil,
+               event.timestamp.map({ $0 >= day.date && $0 < day.end }) != true {
+                // A recorded operation can overlap the selected day even when its
+                // start and billing request belong to yesterday. Keep the full span.
+                guard let start = event.timing?.start, let end = event.timing?.end,
+                      start < day.end, end > day.date, end > start else { continue }
+            }
+            guard request.filter.includes(event) else { continue }
+            guard request.showContext || event.kind != .context || !request.query.isEmpty
+                || (request.filter == .errors && event.isError) else { continue }
             if !request.query.isEmpty {
                 var matches = [event.title, event.text, event.input, event.output]
                     .contains { $0.localizedCaseInsensitiveContains(request.query) }
@@ -95,6 +139,23 @@ struct TranscriptSearchResult: Sendable {
             } else { result.rows.append(TranscriptRow(events: [event])) }
         }
         return result
+    }
+}
+
+/// Shared presentation state lets legacy session links reveal an unfiltered list in Statistics.
+struct SessionListState: Equatable {
+    var isExpanded = false
+    var query = ""
+    var model = ""
+    var sort = SessionSort.cost
+
+    mutating func setExpanded(_ expanded: Bool) {
+        isExpanded = expanded
+        if !expanded {
+            query = ""
+            model = ""
+            if !SessionSort.compactCases.contains(sort) { sort = .cost }
+        }
     }
 }
 

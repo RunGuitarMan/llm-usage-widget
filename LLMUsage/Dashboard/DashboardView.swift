@@ -3,8 +3,9 @@ import SwiftUI
 /// Keep padding inside the native control so the toolbar capsule and its highlight share bounds.
 private struct PeriodToolbarMenu: NSViewRepresentable {
     @ObservedObject var store: UsageStore
+    var onCustomDate: () -> Void
 
-    func makeCoordinator() -> Coordinator { Coordinator(store: store) }
+    func makeCoordinator() -> Coordinator { Coordinator(store: store, onCustomDate: onCustomDate) }
 
     func makeNSView(context: Context) -> PeriodMenuHostView {
         let button = PeriodPopUpButton(frame: .zero, pullsDown: true)
@@ -31,6 +32,7 @@ private struct PeriodToolbarMenu: NSViewRepresentable {
     func updateNSView(_ host: PeriodMenuHostView, context: Context) {
         let button = host.button
         context.coordinator.store = store
+        context.coordinator.onCustomDate = onCustomDate
         button.menu?.items.first?.title = store.period.title
         button.synchronizeTitleAndSelectedItem()
         for (index, item) in (button.menu?.items.dropFirst() ?? []).enumerated() {
@@ -46,10 +48,15 @@ private struct PeriodToolbarMenu: NSViewRepresentable {
 
     @MainActor final class Coordinator {
         var store: UsageStore
-        init(store: UsageStore) { self.store = store }
+        var onCustomDate: () -> Void
+        init(store: UsageStore, onCustomDate: @escaping () -> Void) {
+            self.store = store
+            self.onCustomDate = onCustomDate
+        }
 
         @objc func selectPeriod(_ item: NSMenuItem) {
             let period = DataPeriod.allCases[item.tag]
+            if period == .custom { onCustomDate(); return }
             guard store.period != period else { return }
             store.period = period
             Task { await store.selectPeriod() }
@@ -83,6 +90,8 @@ struct DashboardView: View {
     @ObservedObject var store: UsageStore
     @State private var visibility = NavigationSplitViewVisibility.all
     @State private var showTokenDetails = false
+    @State private var datePopover: DatePopoverAnchor?
+    private enum DatePopoverAnchor { case period, date }
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Namespace private var summaryActions
 
@@ -127,7 +136,7 @@ struct DashboardView: View {
     private var sidebar: some View {
         VStack(spacing: 0) {
             List(selection: Binding<DashboardTab?>(get: { store.tab }, set: { if let tab = $0 { store.selectedSessionID = nil; store.tab = tab } })) {
-                ForEach([DashboardTab.overview, .sessions, .models]) { tab in
+                ForEach([DashboardTab.overview, .models]) { tab in
                     DashboardSidebarLabel(title: tab.title, symbol: tab.symbol, isSelected: store.tab == tab)
                         .background(DashboardSidebarSelectionBridge().allowsHitTesting(false).accessibilityHidden(true))
                         .listRowBackground(DashboardSidebarSelection(isSelected: store.tab == tab, horizontalInset: 10))
@@ -187,7 +196,6 @@ struct DashboardView: View {
                 if let snapshot = store.displaySnapshot {
                     switch store.tab {
                     case .overview: overview(snapshot)
-                    case .sessions: SessionsView(store: store)
                     case .models: ModelsView(store: store, snapshot: snapshot)
                     case .settings: EmptyView()
                     }
@@ -201,19 +209,22 @@ struct DashboardView: View {
         if store.tab != .settings {
             ToolbarItem(placement: .automatic) {
                 if store.period == .custom {
-                    DatePicker(L10n.text("Дата"), selection: Binding(get: { store.customDate }, set: { date in
-                        store.customDate = date
-                        Task { await store.selectPeriod() }
-                    }), in: ...Date(), displayedComponents: .date)
-                        .labelsHidden().frame(width: 115)
-                        .environment(\.timeZone, TimeZone(identifier: store.timezone)!)
+                    Button { datePopover = .date } label: {
+                        Label(UsageFormat.date(store.customDate, timezone: store.timezone), systemImage: "calendar")
+                            .labelStyle(.titleAndIcon).font(.system(size: 13)).fixedSize()
+                    }
+                    .disabled(store.isDemo)
+                    .help(L10n.text("Выбрать дату"))
+                    .accessibilityLabel(L10n.text("Выбрать дату: \(UsageFormat.date(store.customDate, timezone: store.timezone))"))
+                    .popover(isPresented: calendarPresented(at: .date)) { calendarPopover }
                 }
             }
             if store.period == .custom {
                 ToolbarSpacer(.fixed, placement: .primaryAction)
             }
             ToolbarItem(placement: .primaryAction) {
-                PeriodToolbarMenu(store: store).fixedSize()
+                PeriodToolbarMenu(store: store) { datePopover = .period }.fixedSize()
+                    .popover(isPresented: calendarPresented(at: .period)) { calendarPopover }
             }
             ToolbarSpacer(.fixed, placement: .primaryAction)
         }
@@ -224,6 +235,19 @@ struct DashboardView: View {
             }
             .keyboardShortcut("r").disabled(store.isRefreshing || store.isDemo)
             .help(L10n.text("Обновить статистику · ⌘R")).accessibilityLabel(L10n.text("Обновить статистику"))
+        }
+    }
+
+    private func calendarPresented(at anchor: DatePopoverAnchor) -> Binding<Bool> {
+        Binding(get: { datePopover == anchor }, set: { if !$0 && datePopover == anchor { datePopover = nil } })
+    }
+
+    private var calendarPopover: some View {
+        UsageDatePopover(date: store.selectedDay.date, timezone: store.timezone) { date in
+            datePopover = nil
+            Task { await store.selectCustomDate(date) }
+        } onCancel: {
+            datePopover = nil
         }
     }
 
@@ -248,52 +272,56 @@ struct DashboardView: View {
     }
 
     private func overview(_ snapshot: UsageSnapshot) -> some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
-                spendSummary(snapshot)
-                if snapshot.totals.costIsIncomplete == true {
-                    Label(L10n.text("Часть данных для расчёта недоступна. Показаны только учтённые токены и известная стоимость."), systemImage: "info.circle")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-                if showTokenDetails {
-                    DashboardSection {
-                        TokenUsageGrid(usage: snapshot.totals).padding(22)
-                    }
-                    .transition(.opacity.combined(with: .move(edge: .top)))
-                }
-                if store.sourceFilter.isEmpty, snapshot.sourceSummaries.count > 1 {
-                    sourceSpending(snapshot)
-                }
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack {
-                        Text(L10n.text("Основные расходы")).font(.system(size: 15, weight: .semibold))
-                        Spacer()
-                        Text(L10n.text("По стоимости")).font(.system(size: 12)).foregroundStyle(.secondary)
-                    }
-                    if snapshot.sessions.isEmpty {
-                        DashboardSection { EmptyUsageView() }
-                    } else {
-                        DashboardSection {
-                            let rows = Array(SessionSort.cost.sorted(snapshot.sessions).prefix(5))
-                            ForEach(Array(rows.enumerated()), id: \.element.id) { index, session in
-                                if index > 0 { Divider().padding(.leading, 56) }
-                                SessionSummaryRow(session: session, timezone: snapshot.day.timezone,
-                                                  selected: store.selectedSessionID == session.id,
-                                                  share: snapshot.totals.cost > 0 ? session.usage.cost / snapshot.totals.cost : 0) {
-                                    store.selectedSessionID = session.id
-                                }
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+                    spendSummary(snapshot) {
+                        if store.sessionList.isExpanded {
+                            scrollToSessions(using: proxy)
+                        } else {
+                            withAnimation(reduceMotion ? nil : DashboardSessionsSection.expansionAnimation,
+                                          completionCriteria: .removed) {
+                                store.sessionList.setExpanded(true)
+                            } completion: {
+                                if store.sessionList.isExpanded { scrollToSessions(using: proxy) }
                             }
-                        }.clipShape(RoundedRectangle(cornerRadius: 18))
+                        }
                     }
+                    if snapshot.totals.costIsIncomplete == true {
+                        Label(L10n.text("Часть данных для расчёта недоступна. Показаны только учтённые токены и известная стоимость."), systemImage: "info.circle")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                    if showTokenDetails {
+                        DashboardSection {
+                            TokenUsageGrid(usage: snapshot.totals).padding(22)
+                        }
+                        .transition(.opacity.combined(with: .move(edge: .top)))
+                    }
+                    if store.sourceFilter.isEmpty, snapshot.sourceSummaries.count > 1 {
+                        sourceSpending(snapshot)
+                    }
+                    DashboardSessionsSection(store: store) { scrollToSessions(using: proxy) }
+                        .id("session-list")
                 }
-                Text(L10n.text("Данные на этом Mac · Стоимость рассчитана по тарифам ccusage"))
-                    .font(.system(size: 10)).foregroundStyle(.tertiary)
+                .padding(30).frame(maxWidth: 1000, alignment: .leading).frame(maxWidth: .infinity)
             }
-            .padding(30).frame(maxWidth: 1000, alignment: .leading).frame(maxWidth: .infinity)
+            .task(id: store.sessionNavigationID) {
+                // Reveal explicit widget/deep links once; local toggles do not auto-scroll.
+                guard store.sessionList.isExpanded else { return }
+                await Task.yield()
+                guard !Task.isCancelled else { return }
+                proxy.scrollTo("session-list", anchor: .top)
+            }
         }
     }
 
-    private func spendSummary(_ snapshot: UsageSnapshot) -> some View {
+    private func scrollToSessions(using proxy: ScrollViewProxy) {
+        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) {
+            proxy.scrollTo("session-list", anchor: .top)
+        }
+    }
+
+    private func spendSummary(_ snapshot: UsageSnapshot, showSessions: @escaping () -> Void) -> some View {
         VStack(alignment: .leading, spacing: 26) {
             ViewThatFits(in: .horizontal) {
                 HStack(alignment: .center, spacing: 38) {
@@ -315,8 +343,8 @@ struct DashboardView: View {
                     }
                     .glassEffectID("tokens", in: summaryActions)
                     .accessibilityValue(showTokenDetails ? L10n.text("Развёрнуто") : L10n.text("Свёрнуто"))
-                    Button { store.tab = .sessions } label: {
-                        Label(L10n.text("Все сессии"), systemImage: "arrow.up.right")
+                    Button(action: showSessions) {
+                        Label(L10n.text("Все сессии"), systemImage: "list.bullet")
                     }.glassEffectID("sessions", in: summaryActions)
                 }
                 .buttonStyle(.glass).controlSize(.large)
