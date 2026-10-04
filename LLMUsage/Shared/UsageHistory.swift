@@ -105,6 +105,36 @@ enum MenuContentMode: String, CaseIterable, Identifiable {
     var title: String { self == .summary ? L10n.text("Сводка токенов") : L10n.text("Динамика за 7 дней") }
 }
 
+/// Calendar arithmetic stays in the report's time zone, including DST boundaries.
+struct UsageCalendarMonth {
+    let calendar: Calendar
+    let start: Date
+
+    init(containing date: Date, timezone: String, locale: Locale) {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.locale = locale
+        calendar.timeZone = TimeZone(identifier: timezone) ?? .gmt
+        self.calendar = calendar
+        start = calendar.dateInterval(of: .month, for: date)!.start
+    }
+
+    var days: [Date] {
+        let offset = (calendar.component(.weekday, from: start) - calendar.firstWeekday + 7) % 7
+        return (0..<42).map { calendar.date(byAdding: .day, value: $0 - offset, to: start)! }
+    }
+
+    var weekdays: [String] {
+        let symbols = calendar.shortStandaloneWeekdaySymbols
+        return (0..<7).map { symbols[(calendar.firstWeekday - 1 + $0) % 7] }
+    }
+
+    func moving(_ months: Int) -> Date { calendar.date(byAdding: .month, value: months, to: start)! }
+    func contains(_ date: Date) -> Bool { calendar.isDate(date, equalTo: start, toGranularity: .month) }
+    func isSelectable(_ date: Date, now: Date = Date()) -> Bool {
+        calendar.startOfDay(for: date) <= calendar.startOfDay(for: now)
+    }
+}
+
 struct DailyBudget: Equatable {
     var limit: Double
     var usage: TokenUsage

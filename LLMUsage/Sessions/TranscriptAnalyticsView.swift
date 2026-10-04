@@ -90,19 +90,21 @@ struct TranscriptUserUsageBadge: View {
 struct TranscriptUserUsageDetails: View {
     var requests: [TranscriptRequest]
     var policy: ModelExclusionPolicy
+    var title = L10n.text("Расход обработки сообщения")
+    var explanation = L10n.text("Связанные обращения за выбранный период, включая контекст и инструменты. Уже учтены в итоге сессии.")
     var jump: (String) -> Void = { _ in }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
-                Text(L10n.text("Расход обработки сообщения")).font(.system(size: 12, weight: .semibold))
+                Text(title).font(.system(size: 12, weight: .semibold))
                 TokenUsageDetails(usage: requests.reduce(.zero) { $0 + $1.usage })
                 HStack {
                     Text(L10n.text("Обращений: \(requests.count)")).foregroundStyle(.secondary)
                     Spacer()
                     Text(TranscriptUsageFormat.cost(requests.reduce(.zero) { $0 + $1.usage })).fontWeight(.semibold)
                 }.font(.system(size: 12)).monospacedDigit()
-                Text(L10n.text("Связанные обращения за выбранный период, включая контекст и инструменты. Уже учтены в итоге сессии."))
+                Text(explanation)
                     .font(.system(size: 10)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 Divider()
                 LazyVStack(alignment: .leading, spacing: 12) {
@@ -206,6 +208,7 @@ struct TranscriptMetricsView: View {
     var isLoading: Bool
     var error: String?
     @State private var details = false
+    @State private var tokenDetails = false
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             if !transcript.usageSupported {
@@ -216,7 +219,14 @@ struct TranscriptMetricsView: View {
                     VStack(alignment: .leading, spacing: 6) { amount; status }
                 }
                 if !summary.requests.isEmpty {
-                    TokenDistribution(usage: summary.reported, height: 6)
+                    Button { tokenDetails.toggle() } label: {
+                        TokenDistribution(usage: summary.reported, height: 6)
+                            .padding(.vertical, 4).contentShape(Rectangle())
+                    }.buttonStyle(.plain).accessibilityLabel(L10n.text("Состав токенов"))
+                        .help(L10n.text("Состав токенов"))
+                        .popover(isPresented: $tokenDetails) {
+                            TokenUsageDetails(usage: summary.reported).padding(18).frame(width: 300)
+                        }
                     TranscriptTokenLegend(usage: summary.reported)
                 }
                 if summary.included.total != summary.reported.total || summary.included.cost != summary.reported.cost {
@@ -308,7 +318,9 @@ struct TranscriptAnalysisView: View {
                                 Button { if let id = request.anchorID { jump(id) } } label: { Image(systemName: "arrow.up.forward") }
                                     .help(L10n.text("Перейти к сообщению"))
                             }.buttonStyle(.borderless)
-                            TranscriptTokenLine(usage: request.usage)
+                            Button { selected = request.id } label: {
+                                TranscriptTokenLine(usage: request.usage).padding(.vertical, 4).contentShape(Rectangle())
+                            }.buttonStyle(.plain).help(L10n.text("Состав расхода обращения"))
                         }.font(.system(size: 12)).padding(.vertical, 14)
                         Divider()
                     }
@@ -321,14 +333,36 @@ struct TranscriptAnalysisView: View {
                         HStack(alignment: .top, spacing: 16) {
                             Text(tool.id).fontWeight(.medium).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
                             Text(L10n.text("Вызовов: \(tool.count)")).monospacedDigit()
-                            Menu {
-                                ForEach(Array(tool.eventIDs.enumerated()), id: \.element) { index, id in
-                                    Button(L10n.text("Вызов \(index + 1)")) { jump(id) }
-                                }
-                            } label: { Image(systemName: "arrow.up.forward") }
-                                .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize().help(L10n.text("Перейти к вызову"))
+                            if tool.eventIDs.count == 1, let id = tool.eventIDs.first {
+                                Button { jump(id) } label: {
+                                    Image(systemName: "arrow.up.forward").frame(width: 28, height: 28).contentShape(Rectangle())
+                                }.buttonStyle(.borderless).help(L10n.text("Перейти к вызову"))
+                                    .accessibilityLabel(L10n.text("Перейти к вызову") + ": " + tool.id)
+                            } else {
+                                Menu {
+                                    ForEach(Array(tool.eventIDs.enumerated()), id: \.element) { index, id in
+                                        Button(L10n.text("Вызов \(index + 1)")) { jump(id) }
+                                    }
+                                } label: { Image(systemName: "arrow.up.forward").frame(width: 28, height: 28) }
+                                    .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+                                    .help(L10n.text("Перейти к вызову"))
+                                    .accessibilityLabel(L10n.text("Перейти к вызову") + ": " + tool.id)
+                            }
                         }
-                        if !tool.requestIDs.isEmpty { TranscriptTokenLine(usage: tool.usage) }
+                        if !tool.requestIDs.isEmpty {
+                            Button { selected = "tool-" + tool.id } label: {
+                                TranscriptTokenLine(usage: tool.usage).padding(.vertical, 4).contentShape(Rectangle())
+                            }.buttonStyle(.plain)
+                                .accessibilityLabel(L10n.text("Состав расхода обращения") + ": " + tool.id)
+                                .popover(isPresented: Binding(get: { selected == "tool-" + tool.id }, set: { if !$0 { selected = nil } })) {
+                                    TranscriptUserUsageDetails(requests: summary.requests.filter { tool.requestIDs.contains($0.id) },
+                                        policy: policy, title: tool.id,
+                                        explanation: L10n.text("Связанные обращения, не отдельная цена инструмента")) { id in
+                                            selected = nil
+                                            jump(id)
+                                        }
+                                }
+                        }
                         else { Text(L10n.text("Стоимость неизвестна")).foregroundStyle(.secondary) }
                         }.font(.system(size: 12)).padding(.vertical, 14)
                         Divider()

@@ -40,7 +40,7 @@ def main():
     if not all(asset.is_file() and asset.stat().st_size for asset in assets):
         raise SystemExit("Release ZIP or checksum is missing")
     if release is None:
-        notes = Path(".github/release-notes.md").read_text()
+        notes = Path("docs/release-notes.md").read_text()
         release = api(f"{root}/releases", "POST", {
             "tag_name": tag, "target_commitish": commit, "name": f"LLM Usage {tag[1:]}",
             "body": notes, "generate_release_notes": True, "draft": True,

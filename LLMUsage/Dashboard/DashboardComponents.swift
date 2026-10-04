@@ -207,50 +207,97 @@ struct TokenUsageGrid: View {
 /// invokes the callback. The footer also permits reselecting the initial day.
 struct UsageDatePopover: View {
     @State private var selection: Date
+    @State private var visibleMonth: Date
     var timezone: String
     var onSelect: (Date) -> Void
     var onCancel: () -> Void
 
     init(date: Date, timezone: String, onSelect: @escaping (Date) -> Void, onCancel: @escaping () -> Void) {
         _selection = State(initialValue: date)
+        _visibleMonth = State(initialValue: date)
         self.timezone = timezone
         self.onSelect = onSelect
         self.onCancel = onCancel
     }
 
-    private var calendar: Calendar {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = TimeZone(identifier: timezone) ?? .gmt
-        calendar.locale = L10n.locale
-        return calendar
+    private var month: UsageCalendarMonth {
+        UsageCalendarMonth(containing: visibleMonth, timezone: timezone, locale: L10n.locale)
+    }
+
+    private var monthTitle: String {
+        let formatter = DateFormatter()
+        formatter.locale = L10n.locale
+        formatter.timeZone = month.calendar.timeZone
+        formatter.setLocalizedDateFormatFromTemplate("LLLL yyyy")
+        return formatter.string(from: month.start).localizedCapitalized
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(L10n.text("Выбрать дату")).font(.headline)
-            DatePicker(L10n.text("Дата"), selection: Binding(get: { selection }, set: { date in
-                selection = date
-                onSelect(date)
-            }), in: ...Date(), displayedComponents: .date)
-                .datePickerStyle(.graphical).labelsHidden()
-                .environment(\.calendar, calendar)
-                .environment(\.timeZone, calendar.timeZone)
-                .environment(\.locale, L10n.locale)
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(spacing: 8) {
+                Text(monthTitle).font(.system(size: 15, weight: .semibold))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                monthButton(-1, symbol: "chevron.left", title: "Предыдущий месяц")
+                monthButton(1, symbol: "chevron.right", title: "Следующий месяц")
+                    .disabled(!month.isSelectable(month.moving(1)))
+            }
+            VStack(spacing: 6) {
+                HStack(spacing: 4) {
+                    ForEach(Array(month.weekdays.enumerated()), id: \.offset) { _, title in
+                        Text(title).font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(.secondary).frame(width: 32, height: 22)
+                    }
+                }.accessibilityHidden(true)
+                LazyVGrid(columns: Array(repeating: GridItem(.fixed(32), spacing: 4), count: 7), spacing: 4) {
+                    ForEach(month.days, id: \.self) { date in dayButton(date) }
+                }
+            }
+            Divider()
             HStack {
-                Button(L10n.text("Сегодня")) { onSelect(calendar.startOfDay(for: Date())) }
+                Button(L10n.text("Сегодня")) { onSelect(month.calendar.startOfDay(for: Date())) }
                     .buttonStyle(.borderless)
                 Spacer()
                 Button(L10n.text("Готово")) { onSelect(selection) }
                     .keyboardShortcut(.defaultAction)
             }
-        }.padding(16).fixedSize()
+        }.padding(18).frame(width: 284)
             .onExitCommand(perform: onCancel)
+    }
+
+    private func monthButton(_ offset: Int, symbol: String, title: LocalizedPhrase) -> some View {
+        Button { visibleMonth = month.moving(offset) } label: {
+            Image(systemName: symbol).font(.system(size: 11, weight: .semibold)).frame(width: 26, height: 26)
+                .contentShape(Circle())
+        }.buttonStyle(.plain)
+            .background(Color.primary.opacity(0.045), in: Circle())
+            .accessibilityLabel(L10n.text(title)).help(L10n.text(title))
+    }
+
+    private func dayButton(_ date: Date) -> some View {
+        let selected = month.calendar.isDate(date, inSameDayAs: selection)
+        let today = month.calendar.isDateInToday(date)
+        return Button {
+            selection = date
+            onSelect(date)
+        } label: {
+            Text(String(month.calendar.component(.day, from: date)))
+                .font(.system(size: 12, weight: selected || today ? .semibold : .regular)).monospacedDigit()
+                .foregroundStyle(selected ? Color.white : month.contains(date) ? Color.primary : Color.secondary)
+                .frame(width: 32, height: 32)
+                .background(selected ? Color.accentColor : .clear, in: RoundedRectangle(cornerRadius: 9))
+                .overlay { RoundedRectangle(cornerRadius: 9).stroke(today && !selected ? Color.accentColor.opacity(0.6) : .clear) }
+                .contentShape(RoundedRectangle(cornerRadius: 9))
+        }.buttonStyle(.plain).disabled(!month.isSelectable(date))
+            .opacity(month.isSelectable(date) ? 1 : 0.3)
+            .accessibilityLabel(UsageFormat.date(date, timezone: timezone))
+            .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
 
 /// Bundled SVGs stay vector at every display scale and follow the system label color.
 struct ProviderLogo: View {
     var provider: ModelProvider
+    var helpText: String? = nil
 
     static let images: [ModelProvider: NSImage] = {
         var result: [ModelProvider: NSImage] = [:]
@@ -276,8 +323,27 @@ struct ProviderLogo: View {
         .foregroundStyle(.primary.opacity(0.8))
         .frame(width: 30, height: 30)
         .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 7))
-        .help(L10n.text("Провайдер модели: \(provider.title)"))
+        .help(helpText ?? L10n.text("Провайдер модели: \(provider.title)"))
         .accessibilityHidden(true)
+    }
+}
+
+/// Mixed sessions retain the individual brands instead of a generic layers icon.
+struct ProviderLogos: View {
+    var models: [String]
+    var sources: [String]
+    private var providers: [ModelProvider] { ModelProvider.logos(models: models, sources: sources) }
+    private var description: String {
+        if ModelProvider.resolve(models: models) == .custom, providers != [.custom] {
+            return L10n.text("Источники") + ": " + sources.map(UsageSource.label).joined(separator: ", ")
+        }
+        return providers.map(\.title).joined(separator: ", ")
+    }
+
+    var body: some View {
+        HStack(spacing: 3) {
+            ForEach(providers, id: \.rawValue) { ProviderLogo(provider: $0, helpText: description) }
+        }.help(description).accessibilityElement(children: .ignore).accessibilityLabel(description)
     }
 }
 
@@ -317,7 +383,7 @@ struct SessionSummaryRow: View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 12) {
-                    ProviderLogo(provider: session.modelProvider)
+                    ProviderLogos(models: session.models + session.modelBreakdowns.map(\.id), sources: [session.sourceID])
                     VStack(alignment: .leading, spacing: 3) {
                         Text(session.modelLabel).font(.system(size: 14, weight: .medium)).lineLimit(1)
                             .help(session.modelLabel)

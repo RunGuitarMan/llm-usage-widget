@@ -10,12 +10,11 @@ python3 Scripts/package-bundle.py app "$APP"
 "$LLM_SWIFTC" -sdk "$SDK_PATH" -module-cache-path "$PWD/build/ModuleCache" Scripts/GenerateIcon.swift LLMUsage/Shared/BrandGeometry.swift -o build/generate-icon
 build/generate-icon "$PWD"
 iconutil --convert icns build/LLMUsage.iconset --output build/LLMUsage.icns
-SOURCES=(LLMUsage/App/*.swift LLMUsage/Data/*.swift LLMUsage/Services/*.swift
-         LLMUsage/Shared/*.swift LLMUsage/Dashboard/*.swift LLMUsage/Sessions/*.swift
-         LLMUsage/Models/*.swift LLMUsage/Settings/*.swift LLMUsage/Widget/UsageWidgetViews.swift LLMUsage/Widget/UsageVariantViews.swift)
+source Scripts/app-sources.sh
 "$LLM_SWIFTC" -parse-as-library -module-name LLMUsage -sdk "$SDK_PATH" \
   -target "$(uname -m)-apple-macosx26.0" -module-cache-path "$PWD/build/ModuleCache" \
-  "${SOURCES[@]}" -o "$APP/Contents/MacOS/LLM Usage"
+  "${LLM_APP_SOURCES[@]}" -o "$APP/Contents/MacOS/LLM Usage"
+python3 Scripts/verify-review-boundary.py "$APP/Contents/MacOS/LLM Usage"
 if [ -f build/LLMUsage.icns ]; then cp build/LLMUsage.icns "$APP/Contents/Resources/LLMUsage.icns"; fi
 bash Scripts/build-widget.sh
 mkdir -p "$APP/Contents/PlugIns"
