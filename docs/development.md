@@ -79,6 +79,8 @@ The separate development bundle ID protects installed preferences. Synthetic ser
 
 The launcher stages a fresh signed bundle, retires only known review copies under this workspace and verifies the launched PID, executable and source fingerprint. The catalogue displays that fingerprint. See [Testing](testing.md) for operation and report recovery.
 
+Automated window checks use this same bundle: `check.sh` → `check-windows.sh` → `manual-review.sh --self-check`. Assertions live in `Scripts/ManualReview` and inspect the connected production window and its actual chat sheets. The launcher also retires the obsolete standalone window-check executables; saved notes in `build/UIReview` are preserved. Content-only PNG exports are separate and cannot verify native window chrome.
+
 ## App updates
 
 `AppUpdateCoordinator` owns consent, persisted update preferences and the user-visible state. Development and review builds do not query the production feed. Release builds check a signed Sparkle appcast hosted as a GitHub Release asset. Both feed and ZIP require the pinned Ed25519 key. Release notes are plain text.

@@ -52,8 +52,6 @@ jobs:
         run: build/portable-checks --bundled-cli
       - name: Exercise signed app updates and download-only policy
         run: bash Scripts/check-updates.sh
-      - name: Compile private UI review mode
-        run: bash Scripts/manual-review.sh --build-only
 
   release:
     name: Release

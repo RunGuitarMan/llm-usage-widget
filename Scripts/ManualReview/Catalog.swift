@@ -3,11 +3,12 @@ import SwiftUI
 import WidgetKit
 
 enum ReviewFixture: String, CaseIterable {
-    case normal, many, empty, loading, missing, failure, refreshing, stale, partial, huge, zero, gaps, storage
+    case normal, many, navigation, empty, loading, missing, failure, refreshing, stale, partial, huge, zero, gaps, storage
     var title: String {
         switch self {
         case .normal: return "Обычные данные"
         case .many: return "40 сессий"
+        case .navigation: return "Переходы к сессиям"
         case .empty: return "Нет сессий"
         case .loading: return "Первая загрузка"
         case .missing: return "Нет подключения"
@@ -25,6 +26,12 @@ enum ReviewFixture: String, CaseIterable {
         if [.loading, .missing, .storage].contains(self) { return nil }
         var data = SampleData.multiSourceSnapshot()
         data.day = day
+        if self == .navigation {
+            data.sessions = (0..<20).map { index in
+                UsageSession(id: "navigation-\(index)", models: ["claude-navigation-\(index)"],
+                             usage: .init(input: 100, cost: Double(20 - index)))
+            }
+        }
         if self == .stale { data.generatedAt = Date().addingTimeInterval(-7200) }
         if self == .empty { data.sessions = [] }
         if self == .many {
@@ -89,6 +96,7 @@ struct ReviewScenario: Identifiable {
                       option: fixture == .many ? "expanded" : "")
         }
         dashboard("search", "Поиск и фильтр модели", "Введи модель, проект или ID. Выбери модель и сортировку. Проверь ⌘F, очистку поиска и единственный скролл.", fixture: .many, option: "expanded")
+        dashboard("session-links", "Переходы к сессиям", "Проверь поиск, фильтры, раскрытие списка и повторный переход к выбранной сессии.", fixture: .navigation, option: "expanded")
         dashboard("search-empty", "Поиск · ничего не найдено", "Очисти запрос и проверь возвращение строк. Переключи фильтр модели.", option: "no-results")
         dashboard("source", "Один источник", "Выбран Codex. Переключи источники слева и верни «Все источники».", option: "source")
         dashboard("yesterday", "Вчера", "Проверь подпись дня и выбор периода. Выбери «Сегодня» и «Другая дата».", option: "yesterday")
