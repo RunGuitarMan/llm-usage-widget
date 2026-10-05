@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """Fail a build if the host and its WidgetKit extension aren't a usable bundle pair."""
 from pathlib import Path
+import base64
+import hashlib
+import json
 import plistlib
 import subprocess
 import sys
@@ -21,6 +24,21 @@ def inspect(bundle):
     return info, entitlements
 
 host, _ = inspect(app)
+runtime = json.loads((app / "Contents/Resources/CCUsageRuntime.json").read_text())
+lock = json.loads((Path(__file__).resolve().parent.parent / "Configuration/Dependencies.json").read_text())["ccusage"]
+helper = app / "Contents/Helpers/ccusage"
+assert not helper.is_symlink(), "ccusage must be a bundled regular executable"
+assert runtime["version"] == lock["version"] and runtime["contractVersion"] == lock["contractVersion"]
+assert runtime["binarySHA256"] == hashlib.sha256(helper.read_bytes()).hexdigest(), "Bundled ccusage digest mismatch"
+assert subprocess.check_output([str(helper), "--version"], text=True).strip() == "ccusage " + lock["version"]
+subprocess.run(["codesign", "--verify", "--strict", str(helper)], check=True)
+subprocess.run(["codesign", "--verify", "--deep", "--strict", str(app / "Contents/Frameworks/Sparkle.framework")], check=True)
+assert host["SURequireSignedFeed"] and host["SUVerifyUpdateBeforeExtraction"]
+assert host["SUAutomaticallyUpdate"] is False and host["SUAllowsAutomaticUpdates"] is False
+assert host["SUSignedFeedFailureExpirationInterval"] == 0
+assert len(base64.b64decode(host["SUPublicEDKey"], validate=True)) == 32, "Missing update verification key"
+assert host["UsageUpdateChannel"] in ("release", "development")
+print("PASS Bundled ccusage version/digest/signature and signed-update configuration")
 for provider in ["anthropic", "openai", "google"]:
     assert (app / "Contents/Resources/Providers" / f"{provider}.svg").is_file(), f"Missing provider logo: {provider}"
 extension, entitlements = inspect(widget)

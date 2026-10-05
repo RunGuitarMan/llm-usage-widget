@@ -10,7 +10,7 @@ let package = Package(
     targets: [
         .target(name: "LLMUsageCore", path: "LLMUsage", exclude: [
             "Dashboard", "Sessions", "Models", "Settings", "Widget", "Resources", "Tests",
-            "App/AppIconAppearance.swift", "App/AppMenuLocalization.swift", "App/LLMUsageApp.swift", "App/MenuBarBadge.swift", "App/MenuBarUsageView.swift", "App/MenuBarController.swift", "Shared/UsageStyle.swift", "Shared/UsageHistoryViews.swift", "Shared/BrandGeometry.swift"
+            "App/AppUpdateCoordinator.swift", "App/AppIconAppearance.swift", "App/AppMenuLocalization.swift", "App/LLMUsageApp.swift", "App/MenuBarBadge.swift", "App/MenuBarUsageView.swift", "App/MenuBarController.swift", "Shared/UsageStyle.swift", "Shared/UsageHistoryViews.swift", "Shared/BrandGeometry.swift"
         ], sources: ["Data", "Services", "Shared/UsageModels.swift", "Shared/Localization.swift", "Shared/UsageFormatting.swift",
                      "Shared/UsageRoute.swift", "Shared/UsageHistory.swift", "Shared/SnapshotStorage.swift", "Shared/SampleData.swift",
                      "App/RefreshSchedule.swift", "App/UsageStore.swift"]),

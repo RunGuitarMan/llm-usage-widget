@@ -91,6 +91,9 @@ final class MenuBarController: NSObject, NSPopoverDelegate {
         let settings = menu.addItem(withTitle: L10n.text("Настройки…"),
                                     action: #selector(openSettings), keyEquivalent: ",")
         settings.target = self
+        let updates = menu.addItem(withTitle: L10n.text("Проверить обновления…"),
+                                   action: #selector(checkUpdates), keyEquivalent: "")
+        updates.target = self
         menu.addItem(.separator())
         let quit = menu.addItem(withTitle: L10n.text("Завершить LLM Usage"),
                                 action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
@@ -101,6 +104,8 @@ final class MenuBarController: NSObject, NSPopoverDelegate {
         defer { statusItem.menu = nil }
         button.performClick(nil)
     }
+
+    @objc private func checkUpdates() { AppUpdateCoordinator.shared.check() }
 
     @objc private func openOverview() { open(.overview) }
     @objc private func openSettings() { open(.settings) }

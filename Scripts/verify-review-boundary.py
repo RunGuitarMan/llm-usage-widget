@@ -3,7 +3,7 @@
 from pathlib import Path
 import sys
 binary = Path(sys.argv[1]).read_bytes()
-for marker in [b'ManualReviewController', b'ManualReviewPanel', b'--manual-review', b'review-launch-token', b'ReviewFixtureService']:
+for marker in [b'ManualReviewController', b'ManualReviewPanel', b'--manual-review', b'review-launch-token', b'ReviewFixtureService', b'UpdateIntegration', b'IntegrationOutput']:
     if marker in binary:
         raise SystemExit(f'FAIL: development review code in shipping executable: {marker.decode()}')
 print('PASS Shipping executable contains no manual review entry point or catalogue')

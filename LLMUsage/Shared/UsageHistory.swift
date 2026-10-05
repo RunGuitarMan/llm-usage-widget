@@ -13,6 +13,13 @@ struct UsageDataContext: Codable, Equatable, Sendable {
     // Missing in old caches, whose unified Claude totals may be incorrect.
     // Synthesized decoding keeps that absence as nil, distinct from either new mode.
     var updateMode: UsageUpdateMode? = .claudeOnly
+    var engineID: String? = nil
+
+    /// Old engine results remain displayable, never reusable for a fresh calculation.
+    func canDisplay(alongside other: Self) -> Bool {
+        timezone == other.timezone && updateMode == other.updateMode
+            && (customPath == other.customPath || engineID == nil && other.engineID != nil)
+    }
 }
 
 struct DailyUsageTotal: Codable, Equatable, Identifiable, Sendable {
@@ -22,6 +29,7 @@ struct DailyUsageTotal: Codable, Equatable, Identifiable, Sendable {
     var capturedAt: Date
     var usageComponents: [ModelUsageComponent]? = nil
     var reportedUsage: TokenUsage? = nil
+    var engineID: String? = nil
     var id: String { day.cacheKey }
     // A snapshot collected before midnight is never promoted to a complete day at rollover.
     var isPartialDay: Bool { capturedAt < day.end }
@@ -31,6 +39,7 @@ struct DailyUsageTotal: Codable, Equatable, Identifiable, Sendable {
         usage = snapshot.totals
         sessionCount = snapshot.sessions.count
         capturedAt = snapshot.generatedAt
+        engineID = snapshot.dataContext?.engineID
         reportedUsage = snapshot.sessions.reduce(.zero) { $0 + $1.usage.reported }
         // Keep model allocations, not session IDs, paths or transcripts, in history.
         var grouped: [[String]: TokenUsage] = [:]
@@ -93,6 +102,7 @@ struct UsageHistory: Codable, Equatable, Sendable {
     func missingCompletedDays(ending today: UsageDay, now: Date = Date()) -> [UsageDay] {
         points(ending: today).reversed().filter { point in
             point.day != today && (point.total == nil || point.total?.isPartialDay == true
+                || point.total?.engineID != context.engineID
                 || point.total!.capturedAt > now
                 || now.timeIntervalSince(point.total!.capturedAt) >= Self.completedDayRefreshInterval)
         }.map(\.day)

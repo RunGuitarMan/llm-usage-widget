@@ -8,6 +8,7 @@ Run from the repository root with macOS SDK 26+ selected (see [Development](deve
 | --- | --- |
 | `bash Scripts/check.sh` | Shared core scenarios, SwiftPM module boundary, native menu checks, app/widget typechecking and isolated window checks |
 | `bash Scripts/check-icons.sh` | Icon geometry, assets and appearance |
+| `bash Scripts/check-updates.sh` | Real signed Sparkle replacement/relaunch of disposable apps; manual, download-only quit, invalid signature and automatic modes |
 | `python3 -m unittest discover -s Scripts -p 'test_*.py' -v` | Installer rollback/concurrency, release versions and safe release publication |
 | `swift test` | Core XCTest suite; requires full Xcode |
 | `bash Scripts/check-ui.sh` | App and widget typechecking only |
@@ -56,3 +57,5 @@ Before a UI release, verify:
 - Sidebar: active/inactive windows, dark/light appearance, increased contrast and reduced transparency.
 
 Install the app to check WidgetKit placement, gallery registration, refreshes and dated links. The review catalogue shows actual widget content but does not reproduce the system WidgetKit host. Cross-machine installation and interrupted system-level installation are also separate manual checks.
+
+Update integration checks require a logged-in macOS GUI session. They use fresh test keys, isolated bundle IDs and synthetic services; they never install over LLM Usage or read agent logs. Portable runtime scenarios cover consent, exact-version and digest rejection, active-work quiescence, the verified loopback handoff and engine provenance. `verify-bundle.py` checks the final signed helper and Sparkle configuration.

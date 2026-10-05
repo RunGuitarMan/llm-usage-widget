@@ -12,7 +12,8 @@ struct UsageWidgetContent: View {
     var storageUnavailable = false
 
     private var stale: Bool {
-        snapshot?.isStale(now: date, interval: status?.refreshInterval ?? 180) ?? false
+        (status?.dataContext != nil && snapshot?.dataContext != status?.dataContext)
+            || (snapshot?.isStale(now: date, interval: status?.refreshInterval ?? 180) ?? false)
     }
     private var incompleteCost: Bool { snapshot?.totals.costIsIncomplete == true }
     private var notice: String? {

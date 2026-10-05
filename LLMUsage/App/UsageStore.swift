@@ -62,7 +62,30 @@ final class UsageStore: ObservableObject {
     @Published private(set) var budgetAmount: Double
     @Published private(set) var modelExclusionPolicy: ModelExclusionPolicy
     var dailyBudget: Double? { budgetEnabled ? DailyBudget.validAmount(budgetAmount) : nil }
-    var dataContext: UsageDataContext { .init(timezone: timezone, customPath: customPath, updateMode: updateMode) }
+    var dataContext: UsageDataContext {
+        .init(timezone: timezone, customPath: service.engineID == nil ? customPath : "",
+              updateMode: updateMode, engineID: service.engineID)
+    }
+    @Published private(set) var maintenanceInProgress = false
+
+    func restoreSavedData() async { await restore() }
+    func prepareForAppUpdate() async throws {
+        maintenanceInProgress = true
+        refreshLoop?.cancel()
+        historyTask?.cancel()
+        startupTask?.cancel()
+        await historyTask?.value
+        await startupTask?.value
+        let deadline = ContinuousClock.now.advanced(by: .seconds(120))
+        while isRefreshing {
+            guard ContinuousClock.now < deadline else { throw UsageError.timedOut }
+            try await Task.sleep(for: .milliseconds(50))
+        }
+    }
+    func resumeAfterAppUpdate() {
+        maintenanceInProgress = false
+        if started { scheduleAutomaticRefresh() }
+    }
 
     let isDemo: Bool
     #if MANUAL_REVIEW
@@ -186,7 +209,7 @@ final class UsageStore: ObservableObject {
     /// The timer task only owns the sleep. Rescheduling it never cancels a CLI
     /// request in progress (manual or automatic).
     private func scheduleAutomaticRefresh() {
-        guard started, !isDemo else { return }
+        guard started, !isDemo, !maintenanceInProgress else { return }
         refreshLoop?.cancel()
         let date = now()
         let day = UsageDay(date: date, timezone: timezone)
@@ -244,18 +267,18 @@ final class UsageStore: ObservableObject {
         do {
             let savedHistory = try await repository.readHistory()
             guard context == dataContext else { return }
-            if savedHistory?.context == context { history = savedHistory?.applyingExclusions(modelExclusionPolicy) }
+            if savedHistory?.context.canDisplay(alongside: context) == true { history = savedHistory?.applyingExclusions(modelExclusionPolicy) }
         } catch { if context == dataContext { storageError = Self.presentable(error) } }
         for slot in [SnapshotSlot.today, .yesterday] {
             do {
                 let saved = try await repository.read(slot)
                 guard context == dataContext else { return }
-                guard let raw = saved, raw.dataContext == context else { continue }
+                guard let raw = saved, raw.dataContext?.canDisplay(alongside: context) == true else { continue }
                 let data = raw.applyingExclusions(modelExclusionPolicy)
-                cacheSnapshot(data)
+                if data.dataContext == context { cacheSnapshot(data) }
                 if slot == .today {
                     todaySnapshot = data
-                    if data.day == selectedDay { snapshot = data; state = data.isStale(now: now(), interval: refreshInterval) ? .stale : .loaded }
+                    if data.day == selectedDay { snapshot = data; state = data.dataContext != context || data.isStale(now: now(), interval: refreshInterval) ? .stale : .loaded }
                 } else { previousSnapshot = data }
             } catch { if context == dataContext { storageError = Self.presentable(error) } }
         }
@@ -329,7 +352,7 @@ final class UsageStore: ObservableObject {
     }
 
     func refresh(reason: RefreshReason = .manual) async {
-        guard !isDemo, !isRefreshing else { return }
+        guard !isDemo, !isRefreshing, !maintenanceInProgress else { return }
         schedule.prepare(day: UsageDay(date: now(), timezone: timezone), at: now())
         if reason == .manual { schedule.manualRefreshStarted() }
         refreshMode = schedule.mode
@@ -423,7 +446,9 @@ final class UsageStore: ObservableObject {
     }
 
     private func recordHistory(_ data: UsageSnapshot) {
-        var updated = history ?? UsageHistory(context: dataContext)
+        var updated = history?.context.canDisplay(alongside: dataContext) == true ? history! : UsageHistory(context: dataContext)
+        // Keep older totals visible while each day is recalculated by the new engine.
+        updated.context = dataContext
         let timestamp = now()
         updated.record(data, today: UsageDay(date: timestamp, timezone: timezone), now: timestamp)
         history = updated
@@ -447,6 +472,7 @@ final class UsageStore: ObservableObject {
     /// Foreground and backfill results share publication and persistence. Request
     /// order, not completion order, decides which successful response is current.
     private func loadHistorical(_ day: UsageDay, context: UsageDataContext, revision: Int, force: Bool) async throws -> UsageSnapshot? {
+        guard !maintenanceInProgress else { throw UsageError.maintenanceInProgress }
         var data = cache[day.cacheKey]
         if force || data?.canReuse(for: day, now: now(), liveInterval: refreshInterval) != true {
             historicalRequest += 1
@@ -476,7 +502,7 @@ final class UsageStore: ObservableObject {
     }
 
     private func scheduleHistoryBackfill() {
-        guard historyTask == nil else { return }
+        guard historyTask == nil, !maintenanceInProgress else { return }
         let revision = generation
         let context = dataContext
         let today = UsageDay(date: now(), timezone: context.timezone)
@@ -567,7 +593,7 @@ final class UsageStore: ObservableObject {
         snapshot = cache[requested.cacheKey] ?? (todaySnapshot?.day == requested ? todaySnapshot : nil)
         selectedSessionID = id
         sessionNavigationID = UUID()
-        if !isDemo, snapshot?.canReuse(for: requested, now: now(), liveInterval: refreshInterval) != true {
+        if !isDemo, snapshot?.dataContext != dataContext || snapshot?.canReuse(for: requested, now: now(), liveInterval: refreshInterval) != true {
             Task { await self.refresh(reason: .selection) }
         }
     }

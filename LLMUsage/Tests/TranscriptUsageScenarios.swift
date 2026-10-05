@@ -366,7 +366,7 @@ private struct TranscriptUsageFailure: Error, CustomStringConvertible { var desc
         }
     }
 
-    static func liveCheck() async throws {
+    static func liveCheck(executablePath: String = "") async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }
         let archive = TranscriptPricingArchive(directory: directory)
@@ -376,7 +376,7 @@ private struct TranscriptUsageFailure: Error, CustomStringConvertible { var desc
         let models = ["claude-chat-fixture", "gpt-chat-fixture", "gemini-chat-fixture"]
         let config = try JSONSerialization.data(withJSONObject: ["defaults": ["pricingOverrides": Dictionary(uniqueKeysWithValues: models.map { ($0, rates) })]])
         let key = try archive.save(configuration: config)
-        let service = TranscriptCostService(archive: archive)
+        let service = TranscriptCostService(runtime: nil, archive: archive)
         let cacheWrite = #"""
         {"type":"turn_context","payload":{"model":"gpt-chat-fixture"}}
         {"type":"event_msg","timestamp":"2026-10-01T12:00:00Z","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":1000,"cached_input_tokens":400,"cache_write_input_tokens":200,"output_tokens":100,"total_tokens":1100}}}}
@@ -386,7 +386,7 @@ private struct TranscriptUsageFailure: Error, CustomStringConvertible { var desc
         for (source, fixture, expected) in [("claude", claude, 0.00022), ("codex", codex, 0.00265), ("gemini", gemini, 0.0011),
                                             ("codex", cacheWrite, 0.00105), ("claude", oneHour, 0.00089), ("claude", long, 0.8004)] {
             let original = try decode(source, #"{"role":"user","content":"Billing prompt"}"# + "\n" + fixture)
-            let priced = try await service.price(original, source: source, customPath: "", pricingKey: key)
+            let priced = try await service.price(original, source: source, customPath: executablePath, pricingKey: key)
             let summary = TranscriptUsageSummary(transcript: priced, day: nil, policy: .init())
             let user = priced.events.first { $0.kind == .user }!
             let userRequests = try TranscriptSearchResult.evaluate(.init(transcript: priced)).requestsByUserID[user.id] ?? []
@@ -395,7 +395,7 @@ private struct TranscriptUsageFailure: Error, CustomStringConvertible { var desc
             if !priced.requests.allSatisfy(\.priced) {
                 let debug = directory.appendingPathComponent("debug")
                 try TranscriptCostService.prepare(original.requests, source: source, root: debug, configuration: archive.configuration(key: key, source: source))
-                let executable = try await CCUsageExecutableResolver().resolve(customPath: "")
+                let executable = try await CCUsageExecutableResolver().resolve(customPath: executablePath)
                 var environment = ProcessRunner.environment(for: executable)
                 environment[TranscriptSource.all[source]!.variable] = debug.path
                 let result = try await ProcessRunner().run(executable: executable, arguments: [source, "session", "--json", "--offline", "--config", debug.appendingPathComponent("ccusage.json").path], environment: environment)
@@ -413,7 +413,7 @@ private struct TranscriptUsageFailure: Error, CustomStringConvertible { var desc
             try Data(fixture.utf8).write(to: logs.appendingPathComponent("request-reference.jsonl"))
             let config = try archive.configuration(key: key, source: source)
             try config.write(to: reference.appendingPathComponent("ccusage.json"))
-            let executable = try await CCUsageExecutableResolver().resolve(customPath: "")
+            let executable = try await CCUsageExecutableResolver().resolve(customPath: executablePath)
             var environment = ProcessRunner.environment(for: executable)
             environment[TranscriptSource.all[source]!.variable] = reference.path
             var arguments = [source, "session", "--json", "--offline", "--config", reference.appendingPathComponent("ccusage.json").path]

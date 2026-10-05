@@ -50,11 +50,11 @@ struct UsageTimelineProvider: TimelineProvider {
             let policy = status?.modelExclusionPolicy ?? ModelExclusionPolicy()
             L10n.preference = status?.interfaceLanguage ?? .system
             let stored = try SnapshotFiles.read(.today, directory: directory)
-            let snapshot = status?.dataContext == nil || stored?.dataContext == status?.dataContext ? stored : nil
+            let snapshot = status?.dataContext == nil || status?.dataContext.map { stored?.dataContext?.canDisplay(alongside: $0) == true } == true ? stored : nil
             let savedPrevious = try? SnapshotFiles.read(.yesterday, directory: directory)
-            let previous = status?.dataContext == nil || savedPrevious?.dataContext == status?.dataContext ? savedPrevious : nil
+            let previous = status?.dataContext == nil || status?.dataContext.map { savedPrevious?.dataContext?.canDisplay(alongside: $0) == true } == true ? savedPrevious : nil
             let savedHistory = try? SnapshotFiles.history(directory: directory)
-            let history = savedHistory?.context == status?.dataContext ? savedHistory : nil
+            let history = status?.dataContext.map { savedHistory?.context.canDisplay(alongside: $0) == true } == true ? savedHistory : nil
             Self.logger.notice("Snapshot read: present=\(snapshot != nil), sessions=\(snapshot?.sessions.count ?? 0), generatedAt=\(snapshot?.generatedAt.timeIntervalSince1970 ?? 0), localFiles=\(SharedConfiguration.usesLocalWidgetStorage), historyDays=\(history?.days.count ?? 0), language=\(L10n.preference.rawValue, privacy: .public), resolvedLanguage=\(L10n.language.rawValue, privacy: .public)")
             return .init(date: Date(), snapshot: snapshot?.applyingExclusions(policy),
                          previous: previous?.applyingExclusions(policy),

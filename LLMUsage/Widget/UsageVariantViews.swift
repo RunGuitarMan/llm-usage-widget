@@ -38,7 +38,9 @@ struct UsageSessionsWidget: View {
             HStack(spacing: 4) {
                 Text(small ? L10n.text("По стоимости") : L10n.text("Сессии: \(snapshot.sessions.count) · по стоимости"))
                 Spacer(minLength: 2)
-                if snapshot.totals.costIsIncomplete == true || status?.message != nil || snapshot.isStale(now: date, interval: status?.refreshInterval ?? 180) {
+                if snapshot.totals.costIsIncomplete == true || status?.message != nil
+                    || (status?.dataContext != nil && snapshot.dataContext != status?.dataContext)
+                    || snapshot.isStale(now: date, interval: status?.refreshInterval ?? 180) {
                     Image(systemName: "exclamationmark.triangle").foregroundStyle(.orange)
                         .accessibilityLabel(L10n.text("Данные неполные или устарели"))
                 } else { Text(UsageFormat.time(snapshot.generatedAt)) }

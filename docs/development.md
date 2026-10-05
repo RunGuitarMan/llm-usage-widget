@@ -41,7 +41,9 @@ The tested CLI is `ccusage@20.0.26`:
 - **All agents** runs the unified `ccusage session --json --all` report and the focused Claude report concurrently, then replaces the unified Claude rows. This corrects the tested CLI's Claude day-boundary errors. Both commands must succeed before saving the result.
 - Switching modes invalidates incompatible caches. Historical days expire after six hours; the in-memory report cache is bounded. Failed refreshes preserve the last successful data and identify its actual date.
 
-The app searches for the CLI, including `~/.local/bin`; Settings can select an explicit executable. Node.js is needed for the npm installation. Replacing or embedding ccusage is not implemented.
+The app uses only `Contents/Helpers/ccusage`, a native arm64 executable pinned in `Configuration/Dependencies.json`. It requires no Node.js or npm. `CCUsageRuntime` gates execution on explicit consent, validates the final signed binary digest and exact version, and shares a lease across reports and transcript pricing. Existing custom-path preferences are preserved but ignored by the managed runtime; the legacy resolver remains only for injected test services.
+
+Build scripts and the generated Xcode project use the same checksum-verified dependency cache. To upgrade ccusage, update its version, archive URL, SHA-512 and unsigned binary SHA-256 in the lock file; review upstream changes and run the synthetic CLI and pricing checks. Increment `contractVersion` when adapter semantics change. The embedded manifest records the digest after signing. Dependency versions never float at build or launch time.
 
 ## Pricing and accounting
 
@@ -49,7 +51,7 @@ Usage and transcripts are processed locally. Pricing refreshes use the public Li
 
 The last valid Claude, GPT/o-series and Gemini rates persist in `~/Library/Application Support/LLMUsage/Pricing/chat-pricing-v1.json`; older `claude-pricing-v1.json` files remain readable. Invalid/network responses preserve usable rates. A first successful download is needed for models absent from the CLI's embedded catalog.
 
-Rates reach ccusage through private temporary `pricingOverrides` configuration. Explicit user overrides retain priority, and user configuration is not edited. The CLI handles cache categories, long context and Fast mode. Immutable receipts under `Pricing/Reports` record effective rates and the Codex fallback speed used for each report. A report without a receipt cannot claim tariff parity until refreshed.
+Rates reach ccusage through private temporary `pricingOverrides` configuration. Explicit user overrides retain priority, and user configuration is not edited. The CLI handles cache categories, long context and Fast mode. Immutable receipts under `Pricing/Reports` record effective rates and the Codex fallback speed used for each report. Receipts include the engine version/adapter contract. A report without a matching receipt cannot claim tariff parity until refreshed. Legacy snapshots remain displayable during migration but are not reused as fresh calculations.
 
 Model exclusions match exact names without case sensitivity; Z.ai / GLM are excluded by default. Exclusions affect Statistics, history, menu bar and widgets while preserving session records. Models shows original amounts for reference, marks excluded rows and keeps its included-spending total separate. A mixed session without a complete per-model breakdown is excluded as a whole if any of its models is excluded.
 
@@ -63,7 +65,7 @@ A recorded model request is charged once even when it contains several text/tool
 
 Daily reconciliation compares token categories and unrounded cost with the session report. Entire-session totals come from available logs and do not claim daily reconciliation. Unknown tariffs, damaged/undated logs and unverified fork history remain explicit. Verified Codex replay prefixes are deduplicated; Claude subagent logs are labeled.
 
-For local offline pricing, only model names, timestamps, counters and billing metadata are passed to ccusage, never message text or tool arguments/results. Temporary files are private and removed on completion, failure or cancellation. The installed CLI catalog still affects fallback estimates.
+For local offline pricing, only model names, timestamps, counters and billing metadata are passed to ccusage, never message text or tool arguments/results. Temporary files are private and removed on completion, failure or cancellation. The bundled CLI catalog still affects fallback estimates.
 
 Timing comes from recorded intervals. Request duration and TTFT remain request-level values; inferred prompt/tool intervals are marked approximate. End-to-end token throughput includes tools and waits, and is not pure generation speed. Missing timing is not reconstructed from gaps between adjacent messages. Timing is calculated before date/search filtering and included in text exports.
 
@@ -76,3 +78,11 @@ Long messages have bounded inline previews; the full text opens in a native text
 The separate development bundle ID protects installed preferences. Synthetic services and in-memory storage replace external I/O while the normal `UsageStore` refresh/cache/error paths remain active. Login-item changes are simulated. The build requires an explicit `--manual-review` argument; shipping builds contain neither that entry point nor the catalogue. `verify-review-boundary.py` checks the shipping executable during each build.
 
 The launcher stages a fresh signed bundle, retires only known review copies under this workspace and verifies the launched PID, executable and source fingerprint. The catalogue displays that fingerprint. See [Testing](testing.md) for operation and report recovery.
+
+## App updates
+
+`AppUpdateCoordinator` owns consent, persisted update preferences and the user-visible state. Development and review builds do not query the production feed. Release builds check a signed Sparkle appcast hosted as a GitHub Release asset. Both feed and ZIP require the pinned Ed25519 key. Release notes are plain text.
+
+Sparkle automatic downloads are deliberately disabled: its installer can install downloaded updates when the app quits. `UpdateDownloadCache` downloads and verifies an archive without starting the installer. On an install click or the visible automatic countdown, the store pauses refresh/backfill and waits for active work, the shared runtime blocks new calculations, and a short-lived loopback server hands the verified archive to Sparkle. Sparkle independently verifies it again before extraction and replacement. Failures resume the current app; successful updates relaunch it. No usage data is stored inside the replaceable app bundle.
+
+Settings can postpone installation or revoke component consent. Update archives are limited to 256 MiB, redirects require HTTPS, and at most two complete archives are retained. Test-only loopback download permissions compile only under `UPDATE_TESTING`; normal builds accept GitHub release ZIPs over HTTPS.

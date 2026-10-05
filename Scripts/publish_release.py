@@ -36,9 +36,9 @@ def main():
     if release and not release["draft"]:
         print(f"Release already published: {release['html_url']}")
         return
-    assets = [Path(f"build/release/LLM-Usage-{tag}-macOS-arm64.zip"), Path("build/release/SHA256SUMS.txt")]
+    assets = [Path(f"build/release/LLM-Usage-{tag}-macOS-arm64.zip"), Path("build/release/SHA256SUMS.txt"), Path("build/release/appcast.xml")]
     if not all(asset.is_file() and asset.stat().st_size for asset in assets):
-        raise SystemExit("Release ZIP or checksum is missing")
+        raise SystemExit("Release ZIP, checksum, or signed appcast is missing")
     if release is None:
         notes = Path("docs/release-notes.md").read_text()
         release = api(f"{root}/releases", "POST", {

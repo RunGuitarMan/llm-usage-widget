@@ -5,6 +5,7 @@ cd "$(dirname "$0")/.."
 case "${1:-}" in ""|--build-only|--self-check) ;; *) echo 'Usage: bash Scripts/manual-review.sh [--build-only|--self-check]' >&2; exit 2 ;; esac
 source Scripts/toolchain.sh
 source Scripts/app-sources.sh
+source Scripts/dependencies.sh
 mkdir -p build/manual-review build/ModuleCache
 LOCK="$PWD/build/manual-review/.build-lock"
 if ! mkdir "$LOCK" 2>/dev/null; then echo 'Another manual review build is running.' >&2; exit 1; fi
@@ -30,8 +31,9 @@ info_file.write_bytes(plistlib.dumps(info))
 PY
 "$LLM_SWIFTC" -parse-as-library -D MANUAL_REVIEW -module-name LLMUsage -sdk "$SDK_PATH" \
   -target "$(uname -m)-apple-macosx26.0" -module-cache-path "$PWD/build/ModuleCache" \
-  "${LLM_APP_SOURCES[@]}" Scripts/ManualReview/*.swift -o "$REVIEW_APP/Contents/MacOS/LLM Usage"
+  "${LLM_APP_SOURCES[@]}" Scripts/ManualReview/*.swift "${LLM_SPARKLE_FLAGS[@]}" -o "$REVIEW_APP/Contents/MacOS/LLM Usage"
 if [ -f build/LLMUsage.icns ]; then cp build/LLMUsage.icns "$REVIEW_APP/Contents/Resources/LLMUsage.icns"; fi
+LLM_CODESIGN_IDENTITY=- python3 Scripts/embed-dependencies.py "$REVIEW_APP"
 codesign --force --sign - "$REVIEW_APP"
 codesign --verify --strict "$REVIEW_APP"
 python3 Scripts/launch-review.py "$REVIEW_APP" "${1:-}"

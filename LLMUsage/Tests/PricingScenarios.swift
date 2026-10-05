@@ -183,10 +183,10 @@ enum PricingScenarios {
     }
 
     /// Uses the installed CLI but only synthetic logs; proxy failure affects this child alone.
-    static func liveCheck() async throws {
+    static func liveCheck(executablePath: String = "") async throws {
         let directory = directory()
         defer { try? FileManager.default.removeItem(at: directory) }
-        let executable = try await CCUsageExecutableResolver().resolve(customPath: "")
+        let executable = try await CCUsageExecutableResolver().resolve(customPath: executablePath)
         let claude = directory.appendingPathComponent("claude")
         let project = claude.appendingPathComponent("projects/fixture")
         try FileManager.default.createDirectory(at: project, withIntermediateDirectories: true)
@@ -218,11 +218,11 @@ enum PricingScenarios {
         let day = UsageDay(date: ISO8601DateFormatter().date(from: "2026-09-29T12:00:00Z")!, timezone: "UTC")
         let server = PricingServer([.init(status: 200, data: catalog, etag: "v1")])
         let cacheDirectory = directory.appendingPathComponent("pricing")
-        let service = CCUsageService(pricing: ClaudePricingCache(directory: cacheDirectory, fetch: server.fetch))
+        let service = CCUsageService(runtime: nil, pricing: ClaudePricingCache(directory: cacheDirectory, fetch: server.fetch))
         let first = try await service.fetch(day: day, customPath: wrapper.path)
         try requirePricing(abs(first.totals.cost - 0.0147) < 0.0000001 && first.totals.costIsIncomplete != true,
                            "Real CLI ignored cached base/cache-read/cache-write rates")
-        let restarted = CCUsageService(pricing: ClaudePricingCache(directory: cacheDirectory, fetch: server.fetch))
+        let restarted = CCUsageService(runtime: nil, pricing: ClaudePricingCache(directory: cacheDirectory, fetch: server.fetch))
         let offline = try await restarted.fetch(day: day, customPath: wrapper.path)
         try requirePricing(offline.totals == first.totals, "Offline restart changed identical usage")
         try (entry(1) + entry(2)).write(to: log)
@@ -248,9 +248,9 @@ enum PricingScenarios {
         try requirePricing(online.totals.costIsIncomplete != true, "Live baseline has no prices; cannot verify parity")
         let liveDirectory = directory.appendingPathComponent("live-pricing")
         let liveCache = ClaudePricingCache(directory: liveDirectory)
-        let live = try await CCUsageService(pricing: liveCache).fetch(day: day, customPath: wrapper.path)
+        let live = try await CCUsageService(runtime: nil, pricing: liveCache).fetch(day: day, customPath: wrapper.path)
         let noNetwork = ClaudePricingCache(directory: liveDirectory) { _ in throw URLError(.notConnectedToInternet) }
-        let liveOffline = try await CCUsageService(pricing: noNetwork).fetch(day: day, customPath: wrapper.path)
+        let liveOffline = try await CCUsageService(runtime: nil, pricing: noNetwork).fetch(day: day, customPath: wrapper.path)
         try requirePricing(live.totals == liveOffline.totals && live.totals.total == online.totals.total
             && abs(live.totals.cost - online.totals.cost) < 0.0000001 && liveOffline.totals.costIsIncomplete != true,
                            "Online CLI and persisted public Claude tariffs disagree")

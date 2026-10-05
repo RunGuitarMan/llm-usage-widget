@@ -48,6 +48,10 @@ jobs:
         run: bash Scripts/check-icons.sh
       - name: Build and verify app with embedded widget
         run: bash Scripts/build-local.sh
+      - name: Verify bundled native CLI against synthetic pricing fixtures
+        run: build/portable-checks --bundled-cli
+      - name: Exercise signed app updates and download-only policy
+        run: bash Scripts/check-updates.sh
       - name: Compile private UI review mode
         run: bash Scripts/manual-review.sh --build-only
 
@@ -70,6 +74,7 @@ jobs:
         run: python3 Scripts/release_version.py --github-output
       - name: Build versioned app
         env:
+          LLM_UPDATE_CHANNEL: release
           MARKETING_VERSION: ${{ steps.version.outputs.version }}
           CURRENT_PROJECT_VERSION: ${{ steps.version.outputs.build }}
         run: |
@@ -84,6 +89,16 @@ jobs:
             'build/LLM Usage.app' "build/release/LLM-Usage-${RELEASE_TAG}-macOS-arm64.zip"
           cd build/release
           shasum -a 256 ./*.zip > SHA256SUMS.txt
+      - name: Sign update archive and feed
+        env:
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        run: |
+          test -n "$SPARKLE_PRIVATE_KEY"
+          source Scripts/toolchain.sh
+          "$LLM_SWIFTC" -sdk "$SDK_PATH" -module-cache-path "$PWD/build/ModuleCache" \
+            Scripts/VerifyUpdate.swift -o build/verify-update
+          python3 Scripts/sign_release.py
       - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ github.token }}

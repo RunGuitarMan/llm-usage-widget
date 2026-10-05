@@ -21,8 +21,9 @@ files.update({p: ref(p) for p in tests})
 fixture = ref('LLMUsage/Tests/Fixtures', 'folder')
 assets = ref('LLMUsage/Resources/Assets.xcassets', 'folder.assetcatalog')
 providers = ref('LLMUsage/Resources/Providers', 'folder')
+sparkle = ref('build/Dependencies/current/sparkle/Sparkle.framework', 'wrapper.framework')
 config = ref('Configuration/Shared.xcconfig', 'text.xcconfig')
-extras = [ref('README.md', 'net.daringfireball.markdown'), config, assets, providers]
+extras = [ref('README.md', 'net.daringfireball.markdown'), config, assets, providers, sparkle]
 extras += [ref('LLMUsage/Resources/Brand/' + name, 'image.svg') for name in ['LLMUsageIcon.svg', 'LLMUsageIcon-dark.svg', 'LLMUsageSymbol.svg', 'LLMUsageSymbol-dark.svg']]
 for p in ['App-Info.plist', 'Widget-Info.plist', 'App.entitlements', 'Widget.entitlements']:
     extras.append(ref('LLMUsage/Resources/' + p, 'text.plist.xml'))
@@ -68,7 +69,7 @@ for target in ['LLMUsage','LLMUsageWidget','LLMUsageTests']:
     paths = tests if target.endswith('Tests') else [p for p in sources if not p.endswith('Widget/LLMUsageWidget.swift')]
     if target.endswith('Widget'): paths = ['LLMUsage/'+p for p in shared_widget]
     source_phase = obj('sources:'+target, 'PBXSourcesBuildPhase', buildActionMask='2147483647', files=[build_file(target,p) for p in paths], runOnlyForDeploymentPostprocessing='0')
-    framework_phase = obj('frameworks:'+target, 'PBXFrameworksBuildPhase', buildActionMask='2147483647', files=[], runOnlyForDeploymentPostprocessing='0')
+    framework_phase = obj('frameworks:'+target, 'PBXFrameworksBuildPhase', buildActionMask='2147483647', files=[obj('sparkle-framework-build', 'PBXBuildFile', fileRef=sparkle)] if target == 'LLMUsage' else [], runOnlyForDeploymentPostprocessing='0')
     resource_files = []
     if target == 'LLMUsage':
         resource_files.append(obj('asset-build','PBXBuildFile',fileRef=assets))
@@ -80,7 +81,17 @@ for target in ['LLMUsage','LLMUsageWidget','LLMUsageTests']:
                     CODE_SIGN_STYLE='Automatic', GENERATE_INFOPLIST_FILE='NO', SKIP_INSTALL='YES')
     dependencies = []
     if target == 'LLMUsage':
-        settings.update(PRODUCT_NAME='LLM Usage', PRODUCT_MODULE_NAME='LLMUsage',
+        prepare = obj('prepare-dependencies', 'PBXShellScriptBuildPhase', buildActionMask='2147483647',
+                      files=[], inputPaths=[], outputPaths=[], runOnlyForDeploymentPostprocessing='0',
+                      shellPath='/bin/bash', shellScript='set -euo pipefail\ncd "$SRCROOT"\npython3 Scripts/prepare-dependencies.py\n',
+                      name='Prepare locked dependencies', alwaysOutOfDate='1')
+        phases.insert(0, prepare)
+        phases.append(obj('embed-dependencies', 'PBXShellScriptBuildPhase', buildActionMask='2147483647',
+                          files=[], inputPaths=[], outputPaths=[], runOnlyForDeploymentPostprocessing='0',
+                          shellPath='/bin/bash', shellScript='set -euo pipefail\ncd "$SRCROOT"\nLLM_CODESIGN_IDENTITY="${EXPANDED_CODE_SIGN_IDENTITY:--}" python3 Scripts/embed-dependencies.py "$TARGET_BUILD_DIR/$FULL_PRODUCT_NAME"\n',
+                          name='Embed locked dependencies', alwaysOutOfDate='1'))
+        settings.update(FRAMEWORK_SEARCH_PATHS=['$(inherited)', '$(SRCROOT)/build/Dependencies/current/sparkle'],
+                        ENABLE_USER_SCRIPT_SANDBOXING='NO', PRODUCT_NAME='LLM Usage', PRODUCT_MODULE_NAME='LLMUsage',
                         PRODUCT_BUNDLE_IDENTIFIER='local.ClaudeUsage', INFOPLIST_FILE='LLMUsage/Resources/App-Info.plist',
                         CODE_SIGN_ENTITLEMENTS='LLMUsage/Resources/App.entitlements', ENABLE_APP_SANDBOX='NO',
                         ASSETCATALOG_COMPILER_APPICON_NAME='AppIcon',
@@ -95,7 +106,7 @@ for target in ['LLMUsage','LLMUsageWidget','LLMUsageTests']:
                         APPLICATION_EXTENSION_API_ONLY='YES', LD_RUNPATH_SEARCH_PATHS=['$(inherited)','@executable_path/../Frameworks','@executable_path/../../../../Frameworks'])
         product_type = 'com.apple.product-type.app-extension'
     else:
-        settings.update(GENERATE_INFOPLIST_FILE='YES', PRODUCT_BUNDLE_IDENTIFIER='local.ClaudeUsage.Tests',
+        settings.update(FRAMEWORK_SEARCH_PATHS=['$(inherited)', '$(SRCROOT)/build/Dependencies/current/sparkle'], GENERATE_INFOPLIST_FILE='YES', PRODUCT_BUNDLE_IDENTIFIER='local.ClaudeUsage.Tests',
                         TEST_HOST='$(BUILT_PRODUCTS_DIR)/LLM Usage.app/Contents/MacOS/LLM Usage',
                         BUNDLE_LOADER='$(TEST_HOST)', LD_RUNPATH_SEARCH_PATHS=['$(inherited)','@executable_path/../Frameworks','@loader_path/../Frameworks'])
         dependencies = [app_dep]

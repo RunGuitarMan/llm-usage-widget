@@ -5,7 +5,6 @@ struct UsageSettingsView: View {
     @ObservedObject var store: UsageStore
     @State private var loginEnabled = SMAppService.mainApp.status == .enabled
     @State private var loginMessage: String?
-    @State private var showCLI = false
     @State private var showStorage = false
     @State private var budgetText = ""
     @State private var budgetError = false
@@ -112,35 +111,7 @@ struct UsageSettingsView: View {
                 Text(L10n.text("Скрывает надпись LLM, оставляя сумму за сегодня. Изменение применяется сразу."))
                     .font(.caption).foregroundStyle(.secondary)
             }
-            Section {
-                DisclosureGroup(L10n.text("Подключение ccusage"), isExpanded: $showCLI) {
-                    LabeledContent(L10n.text("Источники"), value: store.updateMode.title)
-                    if store.updateMode == .allAgents {
-                        Text(L10n.text("Claude Code, Codex, Gemini CLI, OpenCode, Copilot и другие локальные агенты. Новые источники подключаются по мере обновления ccusage. Веб-чаты без локальных логов не учитываются."))
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
-                    TextField(L10n.text("Путь к ccusage"), text: $store.customPath, prompt: Text(L10n.text("Автоматическое определение")))
-                        .font(.system(.body, design: .monospaced))
-                        .onSubmit { Task { await store.applyCLISettings() } }
-                    HStack {
-                        Button(L10n.text("Выбрать…")) { CLIExecutablePicker.choose(store: store) }
-                        Button(L10n.text("Найти автоматически")) { Task { await store.testCLI(autoDetect: true); await store.refresh(reason: .configuration) } }
-                        Button(L10n.text("Проверить")) { Task { await store.testCLI() } }
-                        Spacer()
-                        if store.isTesting { ProgressView().controlSize(.small) }
-                        Button(L10n.text("Применить")) { Task { await store.applyCLISettings() } }
-                    }.disabled(store.isTesting || store.isDemo)
-                    if let info = store.diagnostics {
-                        Label(info.version.isEmpty ? L10n.text("ccusage найден") : info.version, systemImage: "checkmark.circle.fill").foregroundStyle(.green)
-                        Text(info.path).font(.system(.caption, design: .monospaced)).foregroundStyle(.secondary).textSelection(.enabled)
-                    }
-                    if let error = store.diagnosticError {
-                        Label(error.errorDescription ?? L10n.text("Ошибка"), systemImage: "exclamationmark.circle").foregroundStyle(.orange)
-                    }
-                    Text(L10n.text("Статистика обрабатывается на этом Mac. ccusage проверяет тарифы в интернете; если источник недоступен, использует встроенные цены. Стоимость — оценка, а не счёт за подписку."))
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-            }
+            AppMaintenanceSettings(updates: .shared, disabled: store.isDemo)
             Section {
                 DisclosureGroup(L10n.text("Хранилище и диагностика"), isExpanded: $showStorage) {
                     LabeledContent(L10n.text("Последняя попытка"), value: store.lastAttempt.map { UsageFormat.date($0, includeTime: true) } ?? "—")
@@ -182,7 +153,6 @@ struct UsageSettingsView: View {
         .onAppear {
             updateLoginStatus()
             budgetText = UsageFormat.decimal(store.budgetAmount)
-            showCLI = store.snapshot == nil || store.diagnosticError != nil || store.error != nil
             showStorage = store.storageError != nil
         }
         .onChange(of: store.storageError?.errorDescription) { _, error in if error != nil { showStorage = true } }
@@ -221,23 +191,6 @@ struct UsageSettingsView: View {
         loginEnabled = status == .enabled || status == .requiresApproval
         if status == .requiresApproval { loginMessage = L10n.text("Разрешите запуск в System Settings → General → Login Items.") }
         else if status == .enabled { loginMessage = nil }
-    }
-}
-
-@MainActor
-enum CLIExecutablePicker {
-    static func choose(store: UsageStore) {
-        let panel = NSOpenPanel()
-        panel.title = L10n.text("Выберите ccusage")
-        panel.message = L10n.text("Выберите установленный executable или исполняемый скрипт ccusage.")
-        panel.prompt = L10n.key("Open")
-        panel.canChooseDirectories = false
-        panel.allowsMultipleSelection = false
-        panel.showsHiddenFiles = true
-        if panel.runModal() == .OK, let url = panel.url {
-            store.customPath = url.path
-            Task { await store.applyCLISettings() }
-        }
     }
 }
 
