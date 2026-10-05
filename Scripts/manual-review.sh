@@ -3,6 +3,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 case "${1:-}" in ""|--build-only|--self-check) ;; *) echo 'Usage: bash Scripts/manual-review.sh [--build-only|--self-check]' >&2; exit 2 ;; esac
+export LLM_UPDATE_CHANNEL=development
 source Scripts/toolchain.sh
 source Scripts/app-sources.sh
 source Scripts/dependencies.sh
@@ -34,6 +35,7 @@ PY
   "${LLM_APP_SOURCES[@]}" Scripts/ManualReview/*.swift "${LLM_SPARKLE_FLAGS[@]}" -o "$REVIEW_APP/Contents/MacOS/LLM Usage"
 if [ -f build/LLMUsage.icns ]; then cp build/LLMUsage.icns "$REVIEW_APP/Contents/Resources/LLMUsage.icns"; fi
 LLM_CODESIGN_IDENTITY=- python3 Scripts/embed-dependencies.py "$REVIEW_APP"
+python3 Scripts/build_version.py --verify-bundle "$REVIEW_APP"
 codesign --force --sign - "$REVIEW_APP"
 codesign --verify --strict "$REVIEW_APP"
 python3 Scripts/launch-review.py "$REVIEW_APP" "${1:-}"

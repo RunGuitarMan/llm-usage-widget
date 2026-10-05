@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import re
 import subprocess
+from release_artifacts import verify_release_assets
 
 
 def api(endpoint, method="GET", payload=None, missing_ok=False):
@@ -39,6 +40,8 @@ def main():
     assets = [Path(f"build/release/LLM-Usage-{tag}-macOS-arm64.zip"), Path("build/release/SHA256SUMS.txt"), Path("build/release/appcast.xml")]
     if not all(asset.is_file() and asset.stat().st_size for asset in assets):
         raise SystemExit("Release ZIP, checksum, or signed appcast is missing")
+    # Validate the actual ZIP and feed before any create/upload/publish mutation.
+    verify_release_assets(tag, commit, repository)
     if release is None:
         notes = Path("docs/release-notes.md").read_text()
         release = api(f"{root}/releases", "POST", {
@@ -50,7 +53,7 @@ def main():
                     "--repo", repository, "--clobber"], check=True)
     # GitHub chooses Latest by semantic version, even if two runs finish out of order.
     release = api(f"{root}/releases/{release['id']}", "PATCH", {
-        "draft": False, "make_latest": "legacy",
+        "draft": False, "make_latest": "legacy", "name": f"LLM Usage {tag[1:]}",
     })
     print(f"Published: {release['html_url']}")
 

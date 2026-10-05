@@ -19,7 +19,11 @@ Every merged PR produces a release, including maintenance. Branch commits do not
 
 `.github/release.json` records the already-published `1.3.1` commit as the baseline. `Scripts/release_version.py` reads subsequent first-parent commit titles in order, applying the table above. The same commit always receives the same version, regardless of job completion order or retries. Keep this baseline fixed; no per-release changes are needed.
 
-CI supplies `MARKETING_VERSION` and `CURRENT_PROJECT_VERSION` to packaging for both targets. The build number is the first-parent history length. `Configuration/Shared.xcconfig` contains a fallback version for local/Xcode builds; it does not control published versions.
+`Scripts/build_version.py` is the common source of bundle metadata for script builds, Xcode and the review catalogue. Release builds derive both version fields from the checked-out commit using `release_version.py`; the build number is the first-parent history length. There is no fallback version in `.xcconfig`, and conflicting manual version overrides fail the build. Xcode generates each target's Info.plist from this same calculation before processing it and verifies the result before signing.
+
+Development/review builds use the nearest release tag on their first-parent history as the base version and display **Test build** in Settings. They also record the actual source commit and whether the working tree was modified. Intermediate branch commits do not pretend to be future published releases. Builds require full Git history and tags; release builds additionally require a clean working tree.
+
+Before signing the feed, `release_artifacts.py` reads the app and widget metadata from the actual ZIP and compares their versions, build numbers, channel and source commit with the expected release identity. Before any publication mutation, it repeats that check and validates the checksum and appcast version/build/download URL/length. A stale ZIP cannot pass merely because the unpacked app beside it is correct. Missing, duplicate or inconsistent metadata stops publication.
 
 To inspect the version of a checked-out main commit with full Git history:
 

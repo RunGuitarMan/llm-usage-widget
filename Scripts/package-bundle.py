@@ -6,6 +6,7 @@ import plistlib
 import re
 import shutil
 import sys
+from build_version import build_identity, version_fields
 
 kind, destination = sys.argv[1:]
 root = Path(__file__).resolve().parent.parent
@@ -54,7 +55,9 @@ def expand(value):
 
 stem = "Widget" if is_widget else "App"
 resources = root / "LLMUsage/Resources"
-info = expand(plistlib.loads((resources / f"{stem}-Info.plist").read_bytes()))
+info = plistlib.loads((resources / f"{stem}-Info.plist").read_bytes())
+info.update(version_fields(build_identity(root, settings["LLM_UPDATE_CHANNEL"], settings)))
+info = expand(info)
 info["CFBundleSupportedPlatforms"] = ["MacOSX"]
 info["UsageWidgetStorageMode"] = storage_mode
 if storage_mode == "local-files":

@@ -3,11 +3,12 @@
 import json
 import os
 from pathlib import Path
-import plistlib
 import re
 import subprocess
 import tempfile
 import xml.etree.ElementTree as ET
+from release_artifacts import archive_file, release_identity, verify_archive
+from release_version import git
 
 ROOT = Path(__file__).resolve().parent.parent
 SPARKLE = "http://www.andymatuschak.org/xml-namespaces/sparkle"
@@ -45,11 +46,9 @@ def main():
     tag = os.environ["RELEASE_TAG"]
     if not re.fullmatch(r"v[0-9]+\.[0-9]+(?:\.[0-9]+)?", tag):
         raise SystemExit("Invalid release tag")
-    app = ROOT / "build/LLM Usage.app"
-    info = plistlib.loads((app / "Contents/Info.plist").read_bytes())
-    if info["CFBundleShortVersionString"] != tag[1:] or info.get("UsageUpdateChannel") != "release":
-        raise SystemExit("Release bundle version/channel does not match the release")
+    identity = release_identity(tag, os.environ.get("GITHUB_SHA", git(ROOT, "rev-parse", "HEAD")))
     archive = ROOT / f"build/release/LLM-Usage-{tag}-macOS-arm64.zip"
+    info = verify_archive(archive, identity)
     signer = ROOT / "build/Dependencies/current/sparkle/bin/sign_update"
     private_key = os.environ.get("SPARKLE_PRIVATE_KEY")
     signing_args = ["--ed-key-file", "-"] if private_key else ["--account", "llmusage-widget"]
@@ -76,7 +75,7 @@ def main():
             previous = ET.fromstring(old_feed.read_bytes())
         elif response.stdout != "404":
             raise RuntimeError("Could not retrieve the previous signed appcast")
-    manifest = json.loads((app / "Contents/Resources/CCUsageRuntime.json").read_text())
+    manifest = json.loads(archive_file(archive, "LLM Usage.app/Contents/Resources/CCUsageRuntime.json"))
     notes = subprocess.check_output(["git", "log", "-1", "--format=%s"], text=True).strip()
     notes += "\n\nBundled ccusage " + manifest["version"] + ". No Node.js or npm installation is required."
     feed = ROOT / "build/release/appcast.xml"

@@ -789,6 +789,30 @@
 			"name" = "Embed App Extensions";
 			"runOnlyForDeploymentPostprocessing" = "0";
 		};
+		"51D883ED1CDC51CDF89A9C32" = {
+			"isa" = "PBXShellScriptBuildPhase";
+			"buildActionMask" = "2147483647";
+			"files" = ();
+			"inputPaths" = ("$(SRCROOT)/LLMUsage/Resources/App-Info.plist");
+			"outputPaths" = ("$(DERIVED_FILE_DIR)/Versioned-App-Info.plist");
+			"alwaysOutOfDate" = "1";
+			"name" = "Generate versioned Info.plist from Git";
+			"shellPath" = "/bin/bash";
+			"shellScript" = "set -euo pipefail\npython3 \"$SRCROOT/Scripts/build_version.py\" --write-template \"$SCRIPT_INPUT_FILE_0\" \"$SCRIPT_OUTPUT_FILE_0\"\n";
+			"runOnlyForDeploymentPostprocessing" = "0";
+		};
+		"26CA86F8333FE83583D8D1F6" = {
+			"isa" = "PBXShellScriptBuildPhase";
+			"buildActionMask" = "2147483647";
+			"files" = ();
+			"inputPaths" = ("$(TARGET_BUILD_DIR)/$(INFOPLIST_PATH)");
+			"outputPaths" = ();
+			"alwaysOutOfDate" = "1";
+			"name" = "Verify built version against Git";
+			"shellPath" = "/bin/bash";
+			"shellScript" = "set -euo pipefail\npython3 \"$SRCROOT/Scripts/build_version.py\" --verify-bundle \"$TARGET_BUILD_DIR/$FULL_PRODUCT_NAME\" --with-widget\n";
+			"runOnlyForDeploymentPostprocessing" = "0";
+		};
 		"E613720CBB1E89126EFC79F2" = {
 			"isa" = "XCBuildConfiguration";
 			"baseConfigurationReference" = "806F0DB1775D6A7BC4BEE0C4";
@@ -801,7 +825,7 @@
 				"SKIP_INSTALL" = "NO";
 				"FRAMEWORK_SEARCH_PATHS" = ("$(inherited)", "$(SRCROOT)/build/Dependencies/current/sparkle");
 				"ENABLE_USER_SCRIPT_SANDBOXING" = "NO";
-				"INFOPLIST_FILE" = "LLMUsage/Resources/App-Info.plist";
+				"INFOPLIST_FILE" = "$(DERIVED_FILE_DIR)/Versioned-App-Info.plist";
 				"CODE_SIGN_ENTITLEMENTS" = "LLMUsage/Resources/App.entitlements";
 				"ENABLE_APP_SANDBOX" = "NO";
 				"ASSETCATALOG_COMPILER_APPICON_NAME" = "AppIcon";
@@ -826,7 +850,7 @@
 				"SKIP_INSTALL" = "NO";
 				"FRAMEWORK_SEARCH_PATHS" = ("$(inherited)", "$(SRCROOT)/build/Dependencies/current/sparkle");
 				"ENABLE_USER_SCRIPT_SANDBOXING" = "NO";
-				"INFOPLIST_FILE" = "LLMUsage/Resources/App-Info.plist";
+				"INFOPLIST_FILE" = "$(DERIVED_FILE_DIR)/Versioned-App-Info.plist";
 				"CODE_SIGN_ENTITLEMENTS" = "LLMUsage/Resources/App.entitlements";
 				"ENABLE_APP_SANDBOX" = "NO";
 				"ASSETCATALOG_COMPILER_APPICON_NAME" = "AppIcon";
@@ -846,7 +870,7 @@
 		"451854455C6F2EB24CA33C75" = {
 			"isa" = "PBXNativeTarget";
 			"buildConfigurationList" = "E40966D129D495EC06874199";
-			"buildPhases" = ("4FA49934272882C20F635BE4", "DA10442EC90EC57FA7F01B07", "088F3F05B607BF022B31C484", "F1B019A2CB7C8A212F2A4256", "29D10E42353740425593D22C", "BB27AD7BBFDDAC09C73BE453");
+			"buildPhases" = ("51D883ED1CDC51CDF89A9C32", "4FA49934272882C20F635BE4", "DA10442EC90EC57FA7F01B07", "088F3F05B607BF022B31C484", "F1B019A2CB7C8A212F2A4256", "29D10E42353740425593D22C", "BB27AD7BBFDDAC09C73BE453", "26CA86F8333FE83583D8D1F6");
 			"buildRules" = ();
 			"dependencies" = ("C50A5DAA7ADBFF0A0CD9C035");
 			"name" = "LLMUsage";
@@ -924,6 +948,30 @@
 			"files" = ();
 			"runOnlyForDeploymentPostprocessing" = "0";
 		};
+		"824C8F72EA1E72EA7536F515" = {
+			"isa" = "PBXShellScriptBuildPhase";
+			"buildActionMask" = "2147483647";
+			"files" = ();
+			"inputPaths" = ("$(SRCROOT)/LLMUsage/Resources/Widget-Info.plist");
+			"outputPaths" = ("$(DERIVED_FILE_DIR)/Versioned-Widget-Info.plist");
+			"alwaysOutOfDate" = "1";
+			"name" = "Generate versioned Info.plist from Git";
+			"shellPath" = "/bin/bash";
+			"shellScript" = "set -euo pipefail\npython3 \"$SRCROOT/Scripts/build_version.py\" --write-template \"$SCRIPT_INPUT_FILE_0\" \"$SCRIPT_OUTPUT_FILE_0\"\n";
+			"runOnlyForDeploymentPostprocessing" = "0";
+		};
+		"4ED24EAF70F21A08E45A5BF3" = {
+			"isa" = "PBXShellScriptBuildPhase";
+			"buildActionMask" = "2147483647";
+			"files" = ();
+			"inputPaths" = ("$(TARGET_BUILD_DIR)/$(INFOPLIST_PATH)");
+			"outputPaths" = ();
+			"alwaysOutOfDate" = "1";
+			"name" = "Verify built version against Git";
+			"shellPath" = "/bin/bash";
+			"shellScript" = "set -euo pipefail\npython3 \"$SRCROOT/Scripts/build_version.py\" --verify-bundle \"$TARGET_BUILD_DIR/$FULL_PRODUCT_NAME\"\n";
+			"runOnlyForDeploymentPostprocessing" = "0";
+		};
 		"D9F3706474865E4A4C6A13B6" = {
 			"isa" = "XCBuildConfiguration";
 			"baseConfigurationReference" = "806F0DB1775D6A7BC4BEE0C4";
@@ -934,11 +982,12 @@
 				"CODE_SIGN_STYLE" = "Automatic";
 				"GENERATE_INFOPLIST_FILE" = "NO";
 				"SKIP_INSTALL" = "YES";
-				"INFOPLIST_FILE" = "LLMUsage/Resources/Widget-Info.plist";
+				"INFOPLIST_FILE" = "$(DERIVED_FILE_DIR)/Versioned-Widget-Info.plist";
 				"CODE_SIGN_ENTITLEMENTS" = "LLMUsage/Resources/Widget.entitlements";
 				"ENABLE_APP_SANDBOX" = "YES";
 				"APPLICATION_EXTENSION_API_ONLY" = "YES";
 				"LD_RUNPATH_SEARCH_PATHS" = ("$(inherited)", "@executable_path/../Frameworks", "@executable_path/../../../../Frameworks");
+				"ENABLE_USER_SCRIPT_SANDBOXING" = "NO";
 				"SWIFT_OPTIMIZATION_LEVEL" = "-Onone";
 				"DEBUG_INFORMATION_FORMAT" = "dwarf";
 				"SWIFT_ACTIVE_COMPILATION_CONDITIONS" = "$(inherited) DEBUG";
@@ -956,11 +1005,12 @@
 				"CODE_SIGN_STYLE" = "Automatic";
 				"GENERATE_INFOPLIST_FILE" = "NO";
 				"SKIP_INSTALL" = "YES";
-				"INFOPLIST_FILE" = "LLMUsage/Resources/Widget-Info.plist";
+				"INFOPLIST_FILE" = "$(DERIVED_FILE_DIR)/Versioned-Widget-Info.plist";
 				"CODE_SIGN_ENTITLEMENTS" = "LLMUsage/Resources/Widget.entitlements";
 				"ENABLE_APP_SANDBOX" = "YES";
 				"APPLICATION_EXTENSION_API_ONLY" = "YES";
 				"LD_RUNPATH_SEARCH_PATHS" = ("$(inherited)", "@executable_path/../Frameworks", "@executable_path/../../../../Frameworks");
+				"ENABLE_USER_SCRIPT_SANDBOXING" = "NO";
 				"SWIFT_OPTIMIZATION_LEVEL" = "-O";
 				"DEBUG_INFORMATION_FORMAT" = "dwarf-with-dsym";
 			};
@@ -975,7 +1025,7 @@
 		"604E9A6EE9FC988EB63AA9D6" = {
 			"isa" = "PBXNativeTarget";
 			"buildConfigurationList" = "544DDE12B692D4F20395BB36";
-			"buildPhases" = ("1E520FE90224F517A01A305D", "57BB6EC548D30E1BF867018B", "151C865CC36C38AF2E2114C2");
+			"buildPhases" = ("824C8F72EA1E72EA7536F515", "1E520FE90224F517A01A305D", "57BB6EC548D30E1BF867018B", "151C865CC36C38AF2E2114C2", "4ED24EAF70F21A08E45A5BF3");
 			"buildRules" = ();
 			"dependencies" = ();
 			"name" = "LLMUsageWidget";

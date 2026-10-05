@@ -7,6 +7,7 @@ import json
 import plistlib
 import subprocess
 import sys
+from build_version import build_identity, verify_bundle
 
 app = Path(sys.argv[1]).resolve()
 widget = app / "Contents/PlugIns/LLMUsageWidget.appex"
@@ -24,6 +25,7 @@ def inspect(bundle):
     return info, entitlements
 
 host, _ = inspect(app)
+verify_bundle(app, build_identity(channel=host["UsageUpdateChannel"]), with_widget=True)
 runtime = json.loads((app / "Contents/Resources/CCUsageRuntime.json").read_text())
 lock = json.loads((Path(__file__).resolve().parent.parent / "Configuration/Dependencies.json").read_text())["ccusage"]
 helper = app / "Contents/Helpers/ccusage"

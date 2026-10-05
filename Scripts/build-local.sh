@@ -20,6 +20,7 @@ if [ -f build/LLMUsage.icns ]; then cp build/LLMUsage.icns "$APP/Contents/Resour
 bash Scripts/build-widget.sh
 mkdir -p "$APP/Contents/PlugIns"
 ditto build/LLMUsageWidget.appex "$APP/Contents/PlugIns/LLMUsageWidget.appex"
+python3 Scripts/build_version.py --verify-bundle "$APP" --with-widget
 python3 Scripts/embed-dependencies.py "$APP"
 codesign --force --sign "${LLM_CODESIGN_IDENTITY:--}" --entitlements build/app-build.entitlements "$APP"
 codesign --verify --deep --strict "$APP"

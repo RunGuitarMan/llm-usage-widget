@@ -14,6 +14,7 @@ class PublishReleaseTests(unittest.TestCase):
         self.enterContext(patch.dict(publish_release.os.environ, env))
         self.api = self.enterContext(patch.object(publish_release, "api"))
         self.run = self.enterContext(patch.object(publish_release.subprocess, "run"))
+        self.verify = self.enterContext(patch.object(publish_release, "verify_release_assets"))
         self.enterContext(patch.object(publish_release.Path, "is_file", return_value=True))
         self.enterContext(patch.object(publish_release.Path, "stat", return_value=SimpleNamespace(st_size=100)))
         self.enterContext(patch.object(publish_release.Path, "read_text", return_value="Install notes"))
@@ -41,7 +42,7 @@ class PublishReleaseTests(unittest.TestCase):
         self.assertTrue(create.args[2]["draft"])
         self.assertEqual(create.args[2]["target_commitish"], "a" * 40)
         self.run.assert_called_once()
-        self.assertEqual(self.api.call_args.args[2], {"draft": False, "make_latest": "legacy"})
+        self.assertEqual(self.api.call_args.args[2], {"draft": False, "make_latest": "legacy", "name": "LLM Usage 1.0"})
 
     def test_failed_upload_leaves_draft_for_retry(self):
         self.api.side_effect = [self.tag, self.draft]
@@ -62,6 +63,15 @@ class PublishReleaseTests(unittest.TestCase):
             with self.assertRaises(SystemExit):
                 publish_release.main()
         self.assertEqual(self.api.call_count, 2)
+        self.run.assert_not_called()
+
+    def test_mismatched_archive_prevents_all_publication_mutations(self):
+        self.api.side_effect = [None, None]
+        self.verify.side_effect = ValueError("Archived application has another version")
+        with self.assertRaisesRegex(ValueError, "another version"):
+            publish_release.main()
+        self.assertEqual([call.args[0] for call in self.api.call_args_list], [
+            "repos/example/project/git/ref/tags/v1.0", "repos/example/project/releases/tags/v1.0"])
         self.run.assert_not_called()
 
 

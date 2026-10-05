@@ -92,7 +92,7 @@ for target in ['LLMUsage','LLMUsageWidget','LLMUsageTests']:
                           name='Embed locked dependencies', alwaysOutOfDate='1'))
         settings.update(FRAMEWORK_SEARCH_PATHS=['$(inherited)', '$(SRCROOT)/build/Dependencies/current/sparkle'],
                         ENABLE_USER_SCRIPT_SANDBOXING='NO', PRODUCT_NAME='LLM Usage', PRODUCT_MODULE_NAME='LLMUsage',
-                        PRODUCT_BUNDLE_IDENTIFIER='local.ClaudeUsage', INFOPLIST_FILE='LLMUsage/Resources/App-Info.plist',
+                        PRODUCT_BUNDLE_IDENTIFIER='local.ClaudeUsage', INFOPLIST_FILE='$(DERIVED_FILE_DIR)/Versioned-App-Info.plist',
                         CODE_SIGN_ENTITLEMENTS='LLMUsage/Resources/App.entitlements', ENABLE_APP_SANDBOX='NO',
                         ASSETCATALOG_COMPILER_APPICON_NAME='AppIcon',
                         ENABLE_HARDENED_RUNTIME='YES', SKIP_INSTALL='NO', LD_RUNPATH_SEARCH_PATHS=['$(inherited)','@executable_path/../Frameworks'])
@@ -101,7 +101,7 @@ for target in ['LLMUsage','LLMUsageWidget','LLMUsageTests']:
         dependencies = [widget_dep]
         product_type = 'com.apple.product-type.application'
     elif target == 'LLMUsageWidget':
-        settings.update(PRODUCT_BUNDLE_IDENTIFIER='local.ClaudeUsage.Widget', INFOPLIST_FILE='LLMUsage/Resources/Widget-Info.plist',
+        settings.update(PRODUCT_BUNDLE_IDENTIFIER='local.ClaudeUsage.Widget', INFOPLIST_FILE='$(DERIVED_FILE_DIR)/Versioned-Widget-Info.plist',
                         CODE_SIGN_ENTITLEMENTS='LLMUsage/Resources/Widget.entitlements', ENABLE_APP_SANDBOX='YES',
                         APPLICATION_EXTENSION_API_ONLY='YES', LD_RUNPATH_SEARCH_PATHS=['$(inherited)','@executable_path/../Frameworks','@executable_path/../../../../Frameworks'])
         product_type = 'com.apple.product-type.app-extension'
@@ -111,6 +111,20 @@ for target in ['LLMUsage','LLMUsageWidget','LLMUsageTests']:
                         BUNDLE_LOADER='$(TEST_HOST)', LD_RUNPATH_SEARCH_PATHS=['$(inherited)','@executable_path/../Frameworks','@loader_path/../Frameworks'])
         dependencies = [app_dep]
         product_type = 'com.apple.product-type.bundle.unit-test'
+    if target in ('LLMUsage', 'LLMUsageWidget'):
+        settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
+        stem = 'App' if target == 'LLMUsage' else 'Widget'
+        phases.insert(0, obj('version:'+target, 'PBXShellScriptBuildPhase', buildActionMask='2147483647',
+            files=[], inputPaths=['$(SRCROOT)/LLMUsage/Resources/'+stem+'-Info.plist'],
+            outputPaths=['$(DERIVED_FILE_DIR)/Versioned-'+stem+'-Info.plist'],
+            alwaysOutOfDate='1', name='Generate versioned Info.plist from Git', shellPath='/bin/bash',
+            shellScript='set -euo pipefail\npython3 "$SRCROOT/Scripts/build_version.py" --write-template "$SCRIPT_INPUT_FILE_0" "$SCRIPT_OUTPUT_FILE_0"\n',
+            runOnlyForDeploymentPostprocessing='0'))
+        phases.append(obj('verify-version:'+target, 'PBXShellScriptBuildPhase', buildActionMask='2147483647',
+            files=[], inputPaths=['$(TARGET_BUILD_DIR)/$(INFOPLIST_PATH)'], outputPaths=[], alwaysOutOfDate='1',
+            name='Verify built version against Git', shellPath='/bin/bash',
+            shellScript='set -euo pipefail\npython3 "$SRCROOT/Scripts/build_version.py" --verify-bundle "$TARGET_BUILD_DIR/$FULL_PRODUCT_NAME"'+(' --with-widget' if target == 'LLMUsage' else '')+'\n',
+            runOnlyForDeploymentPostprocessing='0'))
     obj('target:'+target, 'PBXNativeTarget', buildConfigurationList=configs(target,settings), buildPhases=phases,
         buildRules=[], dependencies=dependencies, name=target, productName=target, productReference=products[target], productType=product_type)
 project_settings = dict(SDKROOT='macosx', MACOSX_DEPLOYMENT_TARGET='26.0', SWIFT_VERSION='5.0',

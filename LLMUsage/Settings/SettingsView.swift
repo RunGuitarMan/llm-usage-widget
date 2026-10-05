@@ -9,6 +9,12 @@ struct UsageSettingsView: View {
     @State private var budgetText = ""
     @State private var budgetError = false
     private var appVersion: String { Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "dev" }
+    private var versionLabel: String {
+        if Bundle.main.object(forInfoDictionaryKey: "UsageUpdateChannel") as? String == "release" {
+            return L10n.text("LLM Usage \(appVersion) · Данные на этом Mac")
+        }
+        return L10n.text("LLM Usage \(appVersion) · Тестовая сборка · Данные на этом Mac")
+    }
 
     var body: some View {
         Form {
@@ -145,7 +151,8 @@ struct UsageSettingsView: View {
                 HStack {
                     UsageBrand(compact: true)
                     Spacer()
-                    Text(L10n.text("LLM Usage \(appVersion) · Данные на этом Mac")).font(.caption).foregroundStyle(.secondary)
+                    Text(versionLabel).font(.caption).foregroundStyle(.secondary)
+                        .accessibilityIdentifier("app-version")
                 }
             }
         }
