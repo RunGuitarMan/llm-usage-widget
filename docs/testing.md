@@ -6,20 +6,21 @@ Run from the repository root with macOS SDK 26+ selected (see [Development](deve
 
 | Command | Coverage |
 | --- | --- |
-| `bash Scripts/check.sh` | Shared core scenarios, SwiftPM module boundary, native menu checks, app/widget typechecking and isolated window checks |
+| `bash Scripts/check.sh` | Shared core scenarios, SwiftPM module boundary, native menu checks, app/widget typechecking and production-scene window checks |
 | `bash Scripts/check-icons.sh` | Icon geometry, assets and appearance |
-| `python3 -m unittest discover -s Scripts -p 'test_*.py' -v` | Installer rollback/concurrency, release versions and safe release publication |
+| `bash Scripts/check-updates.sh` | Real signed Sparkle replacement/relaunch of disposable apps; manual, download-only quit, invalid signature and automatic modes |
+| `python3 -m unittest discover -s Scripts -p 'test_*.py' -v` | Installer rollback/concurrency, Git-derived versions, stale/tampered release artifacts and safe release publication |
 | `swift test` | Core XCTest suite; requires full Xcode |
 | `bash Scripts/check-ui.sh` | App and widget typechecking only |
-| `bash Scripts/check-windows.sh` | Native toolbar, sidebar, geometry, scrolling, inspector and session navigation with synthetic data |
+| `bash Scripts/check-windows.sh` | The production-app review self-check below; no separate window harness |
 | `bash Scripts/build-local.sh` | Complete app/widget build, signatures, bundle structure and absence of private review code |
-| `bash Scripts/manual-review.sh --self-check` | Real app scenes, catalogue scenarios, repeated toolbar/chat transitions, loading/error recovery and report persistence |
+| `bash Scripts/manual-review.sh --self-check` | Production window geometry, trailing toolbar, sidebar/focus, scrolling, session navigation, real chat sheets, catalogue scenarios, loading/error recovery and report persistence |
 
-CI runs the first four commands, the shipping build and a compile-only review build (`manual-review.sh --build-only`). Native window checks are visible on screen. They use isolated hosts for components; the review self-check uses the production app entry point. Neither substitutes for a manual system-widget check.
+CI runs the first four commands and the shipping build. `check.sh` calls `check-windows.sh`, which builds and runs the same application and catalogue used for manual review. Native checks are visible on screen and require a logged-in macOS GUI session. Product windows must come from `LLMUsageApp` and its scenes: do not add a separate `@main` or hand-built `NSWindow` around a product screen for regression checks. Windowless component measurements remain in the same process. These checks do not substitute for a manual system-widget check.
 
 `LLMUsage/Tests/*Scenarios.swift` contains the shared assertions used by both the portable harness and XCTest wrappers. Add checks there instead of duplicating them. Existing coverage includes date/timezone boundaries, model attribution and exclusions, stream/replay deduplication, pricing persistence, transcript timing, search cancellation, stale responses, cache validation, clock changes and CLI process cleanup.
 
-For optional CLI integration checks, use `bash Scripts/check.sh --live-cli` for saved/offline pricing or `bash Scripts/check.sh --chat-cli` for transcript calculations. Both use synthetic logs; the live pricing check also needs network access to the price catalog and the tested ccusage version. They do not validate every upstream CLI version.
+After building the app, run `build/portable-checks --bundled-cli` to verify the shipped native helper against synthetic logs and pricing fixtures. For optional system-CLI integration checks, use `bash Scripts/check.sh --live-cli` for saved/offline pricing or `bash Scripts/check.sh --chat-cli` for transcript calculations. Both use synthetic logs; the live pricing check also needs network access to the price catalog and the tested ccusage version. They do not validate every upstream CLI version.
 
 To test the Xcode app target with signing configured:
 
@@ -30,7 +31,9 @@ xcodebuild -project LLMUsage.xcodeproj -scheme LLMUsage \
 
 ## Manual review and saved notes
 
-Run `bash Scripts/manual-review.sh`. The catalogue offers 84 curated scenarios, RU/EN, light/dark appearance and width presets. It is a checklist, not exhaustive coverage of every UI combination. **⌘1** reopens the catalogue. Use Next/Back to navigate and record Passed, Problem or Skip with notes. Loading scenarios can be released with **Успешный ответ источника**.
+CI also builds the Xcode app and embedded widget without launching them and checks their version metadata against the same Git calculation as script builds.
+
+Run `bash Scripts/manual-review.sh`. The catalogue offers 85 curated scenarios, RU/EN, light/dark appearance and width presets. It is a checklist, not exhaustive coverage of every UI combination. **⌘1** reopens the catalogue. Use Next/Back to navigate and record Passed, Problem or Skip with notes. Loading scenarios can be released with **Успешный ответ источника**.
 
 Files under `build/UIReview/`:
 
@@ -56,3 +59,5 @@ Before a UI release, verify:
 - Sidebar: active/inactive windows, dark/light appearance, increased contrast and reduced transparency.
 
 Install the app to check WidgetKit placement, gallery registration, refreshes and dated links. The review catalogue shows actual widget content but does not reproduce the system WidgetKit host. Cross-machine installation and interrupted system-level installation are also separate manual checks.
+
+Update integration checks require a logged-in macOS GUI session. They use fresh test keys, isolated bundle IDs and synthetic services; they never install over LLM Usage or read agent logs. Portable runtime scenarios cover consent, exact-version and digest rejection, active-work quiescence, the verified loopback handoff and engine provenance. `verify-bundle.py` checks the final signed helper and Sparkle configuration.

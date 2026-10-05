@@ -6,19 +6,20 @@ import plistlib
 import re
 import shutil
 import sys
+from build_version import build_identity, version_fields
 
 kind, destination = sys.argv[1:]
 root = Path(__file__).resolve().parent.parent
 bundle = Path(destination)
 settings = {}
-for name in ["Shared.xcconfig", "Local.xcconfig"]:
+for name in ["Shared.xcconfig", "UpdateSigning.xcconfig", "Local.xcconfig"]:
     path = root / "Configuration" / name
     if path.exists():
         for line in path.read_text().splitlines():
             match = re.match(r"^([A-Z_]+)\s*=\s*(.*?)\s*$", line.split("//", 1)[0])
             if match:
                 settings[match[1]] = match[2]
-for key in ["LLM_USAGE_APP_GROUP", "CLAUDE_USAGE_APP_GROUP", "MARKETING_VERSION", "CURRENT_PROJECT_VERSION"]:
+for key in ["LLM_USAGE_APP_GROUP", "CLAUDE_USAGE_APP_GROUP", "MARKETING_VERSION", "CURRENT_PROJECT_VERSION", "LLM_UPDATE_CHANNEL", "LLM_UPDATE_PUBLIC_KEY"]:
     if key in os.environ:
         settings[key] = os.environ[key]
 app_id = os.environ.get("LLM_APP_BUNDLE_ID", "local.ClaudeUsage.Development")
@@ -54,7 +55,9 @@ def expand(value):
 
 stem = "Widget" if is_widget else "App"
 resources = root / "LLMUsage/Resources"
-info = expand(plistlib.loads((resources / f"{stem}-Info.plist").read_bytes()))
+info = plistlib.loads((resources / f"{stem}-Info.plist").read_bytes())
+info.update(version_fields(build_identity(root, settings["LLM_UPDATE_CHANNEL"], settings)))
+info = expand(info)
 info["CFBundleSupportedPlatforms"] = ["MacOSX"]
 info["UsageWidgetStorageMode"] = storage_mode
 if storage_mode == "local-files":

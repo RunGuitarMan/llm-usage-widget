@@ -1,0 +1,2 @@
+// Public Ed25519 key only. The private key belongs in Keychain and Actions secrets.
+LLM_UPDATE_PUBLIC_KEY = 16z3JyHVgPTXMJgXDIi76aRfcocVYKKe3FP9L2L7frM=

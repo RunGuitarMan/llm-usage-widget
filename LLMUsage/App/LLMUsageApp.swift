@@ -69,6 +69,7 @@ struct LLMUsageApp: App {
     var body: some Scene {
         Window("LLM Usage", id: "dashboard") {
             AppRootView(store: store, appDelegate: appDelegate)
+                .windowFullScreenBehavior(.enabled)
         }
         #if MANUAL_REVIEW
         .defaultLaunchBehavior(.presented)
@@ -79,9 +80,15 @@ struct LLMUsageApp: App {
         .defaultSize(width: 1080, height: 760)
         .windowToolbarStyle(.unified)
         .windowResizability(.contentMinSize)
+        // The dashboard is a primary window even though the app lives in the menu bar.
+        .windowManagerRole(.principal)
         .commands {
             CommandGroup(replacing: .appSettings) {
                 OpenUsageButton(store: store, route: .settings, title: L10n.text("Настройки…")).keyboardShortcut(",")
+            }
+            CommandGroup(after: .appSettings) {
+                Button(L10n.text("Проверить обновления…")) { AppUpdateCoordinator.shared.check() }
+                    .disabled(store.isDemo)
             }
             #if MANUAL_REVIEW
             CommandGroup(after: .appSettings) {
@@ -115,11 +122,13 @@ struct LLMUsageApp: App {
 
 struct AppRootView: View {
     @ObservedObject var store: UsageStore
+    @ObservedObject private var updates = AppUpdateCoordinator.shared
     var appDelegate: UsageAppDelegate
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         DashboardView(store: store)
+            .sheet(isPresented: $updates.presentsSetup) { AppMaintenanceSetup(updates: updates) }
             .environment(\.locale, store.interfaceLanguage.locale)
             .id(store.interfaceLanguage)
             .task {
@@ -128,7 +137,18 @@ struct AppRootView: View {
                     openWindow(id: "dashboard")
                     NSApp.activate(ignoringOtherApps: true)
                 }
+                #if MANUAL_REVIEW
                 store.start()
+                #else
+                if store.isDemo { store.start() }
+                else {
+                    updates.start(store: store) {
+                        store.navigate(.settings)
+                        openWindow(id: "dashboard")
+                        NSApp.activate(ignoringOtherApps: true)
+                    }
+                }
+                #endif
                 #if MANUAL_REVIEW
                 if let review = ManualReviewController.active {
                     print("REVIEW Production root appeared; windows: \(NSApp.windows.map { $0.identifier?.rawValue ?? $0.title })")

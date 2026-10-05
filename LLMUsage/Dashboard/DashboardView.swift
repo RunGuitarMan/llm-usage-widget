@@ -263,9 +263,9 @@ struct DashboardView: View {
                 EmptyUsageView(title: store.error?.errorDescription ?? L10n.text("Подключите ccusage"),
                                message: store.error?.recovery ?? L10n.text("Расходы и активность локальных AI-агентов появятся здесь."), symbol: "terminal")
                 HStack(spacing: 10) {
-                    Button(L10n.text("Найти автоматически")) { Task { await store.testCLI(autoDetect: true); await store.refresh(reason: .configuration) } }
+                    Button(L10n.text("Компонент расчёта")) { store.navigate(.settings) }
                         .buttonStyle(.borderedProminent)
-                    Button(L10n.text("Выбрать файл…")) { CLIExecutablePicker.choose(store: store) }
+                    Button(L10n.text("Повторить")) { Task { await store.refresh(reason: .manual) } }
                 }
                 Spacer()
             }.frame(maxWidth: .infinity)

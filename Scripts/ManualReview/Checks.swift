@@ -11,24 +11,23 @@ import AppKit
             review.select(id)
             await review.selectionTask?.value
             try await settle()
-        }
-        func menus(_ view: NSView) -> [NSPopUpButton] {
-            ((view as? NSPopUpButton).map { [$0] } ?? []) + view.subviews.flatMap(menus)
+            try await ReviewCheck.waitForToolbar(review)
         }
         func toolbar() throws {
-            guard let items = review.dashboard?.toolbar?.items else { try require(false, "Missing production toolbar"); return }
-            let periodMenus = items.compactMap(\.view).flatMap(menus)
-            try require(periodMenus.count == (review.store.tab == .settings ? 0 : 1), "Duplicate/missing period control: \(review.selectedID)")
-            if let menu = periodMenus.first {
-                try require(menu.isEnabled && menu.title == review.store.period.title, "Stale or disabled period control")
-            }
+            try ReviewCheck.toolbar(review)
         }
         try require(review.connectedToAppRoot, "Review did not attach to the production AppRootView")
         guard let window = review.dashboard else { try require(false, "Missing production scene"); return }
         try require(window.styleMask.contains([.titled, .closable, .miniaturizable, .resizable]), "Window lost production controls")
         try require(window.toolbarStyle == .unified, "Wrong production toolbar style")
+        try require(window.collectionBehavior.contains(.fullScreenPrimary)
+                    && !window.collectionBehavior.contains(.fullScreenAuxiliary)
+                    && !window.collectionBehavior.contains(.fullScreenNone),
+                    "Dashboard cannot enter its own full-screen Space")
         try require(!review.store.isDemo, "Review disabled product controls using demo mode")
         try require(Set(ReviewScenario.all.map(\.id)).count == ReviewScenario.all.count, "Duplicate scenario IDs")
+        try await WindowChecks.run(review)
+        try await SessionNavigationChecks.run(review)
         for scenario in ReviewScenario.all {
             try await select(scenario.id)
             try require(review.dashboard === window, "Scenario replaced the production window")

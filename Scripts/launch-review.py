@@ -16,10 +16,15 @@ root = Path(__file__).resolve().parent.parent
 stage = Path(sys.argv[1]).resolve()
 mode = sys.argv[2] if len(sys.argv) > 2 else ''
 target = root/'build/manual-review/LLM Usage.app'
-legacy = [root/'build'/name for name in ['LLM Usage UI Review.app', 'LLM Usage UI Review Final.app', 'LLM Usage Manual Review.app']]
+legacy = [root/'build'/name for name in [
+    'LLM Usage UI Review.app', 'LLM Usage UI Review Final.app', 'LLM Usage Manual Review.app',
+    'LLM Usage Chat Preview.app', 'Issue17 Preview.app',
+]]
+legacy_binaries = [root/'build'/name for name in ['window-checks', 'session-navigation-checks']]
 executables = [str(target/'Contents/MacOS/LLM Usage')]
 for app in legacy:
-    executables += [str(app/'Contents/MacOS'/name) for name in ['UIReview', 'LLMUsageUIReview']]
+    executables += [str(app/'Contents/MacOS'/name) for name in ['UIReview', 'LLMUsageUIReview', 'LLM Usage']]
+executables += [str(path) for path in legacy_binaries]
 # Stage must contain exactly the executable declared by its plist.
 info = plistlib.loads((stage/'Contents/Info.plist').read_bytes())
 assert info['CFBundleExecutable'] == 'LLM Usage'
@@ -49,6 +54,8 @@ for row in rows:
 for app in legacy:
     if app.exists():
         shutil.rmtree(app)
+for binary in legacy_binaries:
+    binary.unlink(missing_ok=True)
 backup = target.with_suffix('.previous')
 if backup.exists():
     shutil.rmtree(backup)
@@ -108,7 +115,7 @@ else:
             os.kill(int(fields[0]), signal.SIGTERM)
     raise SystemExit('App did not confirm the expected executable and production window. See '+str(log_path))
 if mode == '--self-check':
-    deadline = time.monotonic() + 180
+    deadline = time.monotonic() + 600
     while time.monotonic() < deadline:
         try:
             os.kill(app_pid, 0)

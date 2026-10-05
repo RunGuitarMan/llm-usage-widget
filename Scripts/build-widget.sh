@@ -12,6 +12,7 @@ python3 Scripts/package-bundle.py widget "$WIDGET"
   -module-cache-path "$PWD/build/ModuleCache" \
   -Xlinker -e -Xlinker _NSExtensionMain \
   LLMUsage/Shared/*.swift LLMUsage/Widget/*.swift -o "$WIDGET/Contents/MacOS/LLMUsageWidget"
+python3 Scripts/build_version.py --verify-bundle "$WIDGET"
 codesign --force --sign "${LLM_CODESIGN_IDENTITY:--}" --entitlements build/widget-build.entitlements "$WIDGET"
 codesign --verify --strict "$WIDGET"
 printf 'Built extension: %s\n' "$WIDGET"

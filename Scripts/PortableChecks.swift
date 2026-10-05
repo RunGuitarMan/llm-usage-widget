@@ -327,6 +327,7 @@ struct PortableChecks {
         await TranscriptTimingScenarios.run(check: check)
         await RegressionScenarios.run(check: check)
         await PricingScenarios.run(check: check)
+        await RuntimeScenarios.run(check: check)
         await LocalizationChecks.run(check: check)
         await check("Locale: preference publishes during failed refresh and preserves history") {
             let suite = "local.LLMUsage.LocaleCheck.\(UUID().uuidString)"
@@ -372,12 +373,21 @@ struct PortableChecks {
                 try await TranscriptUsageScenarios.liveCheck()
             }
         }
+        if ProcessInfo.processInfo.arguments.contains("--bundled-cli") {
+            let helper = root.appendingPathComponent("build/LLM Usage.app/Contents/Helpers/ccusage").path
+            await check("Bundled ccusage: isolated Claude, Codex and Gemini transcript pricing") {
+                try await TranscriptUsageScenarios.liveCheck(executablePath: helper)
+            }
+            await check("Bundled ccusage: cached rates survive restart and price new offline usage") {
+                try await PricingScenarios.liveCheck(executablePath: helper)
+            }
+        }
         if ProcessInfo.processInfo.arguments.contains("--live-cli") {
             await check("Installed ccusage: cached tariffs price new offline usage after restart") {
                 try await PricingScenarios.liveCheck()
             }
             await check("Installed ccusage: resolver, version, real query with online pricing enabled") {
-                let service = CCUsageService(pricing: ClaudePricingCache(directory: root.appendingPathComponent("build/PricingLiveChecks")))
+                let service = CCUsageService(runtime: nil, pricing: ClaudePricingCache(directory: root.appendingPathComponent("build/PricingLiveChecks")))
                 let version = try await service.diagnose(customPath: "", forceDetect: true)
                 let snapshot = try await service.fetch(day: UsageDay(), customPath: "")
                 try expect(!version.version.isEmpty && snapshot.day.isToday(), "Real CLI integration")

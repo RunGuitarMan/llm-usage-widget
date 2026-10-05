@@ -154,11 +154,16 @@ struct CLIDiagnostics: Sendable {
 }
 
 protocol CCUsageServing: Sendable {
+    var engineID: String? { get }
     func fetch(day: UsageDay, customPath: String, mode: UsageUpdateMode) async throws -> UsageSnapshot
     func diagnose(customPath: String, forceDetect: Bool) async throws -> CLIDiagnostics
 }
 
+extension CCUsageServing { var engineID: String? { nil } }
+
 struct CCUsageService: CCUsageServing {
+    var runtime: CCUsageRuntime? = .shared
+    var engineID: String? { runtime == nil ? nil : CCUsageManifest.bundled?.engineID }
     let resolver = CCUsageExecutableResolver()
     let runner = ProcessRunner()
     var pricing: any ClaudePricingProviding = ClaudePricingCache(includeTranscriptModels: true)
@@ -173,14 +178,21 @@ struct CCUsageService: CCUsageServing {
                           "--timezone", day.timezone, "--mode", "calculate", "--order", "desc", "--no-offline"]
     }
     func fetch(day: UsageDay, customPath: String, mode: UsageUpdateMode = .claudeOnly) async throws -> UsageSnapshot {
-        let executable = try await resolver.resolve(customPath: customPath)
+        if let runtime {
+            return try await runtime.withExecutable { executable in
+                try await fetch(day: day, mode: mode, executable: executable)
+            }
+        }
+        return try await fetch(day: day, mode: mode, executable: try await resolver.resolve(customPath: customPath))
+    }
+    private func fetch(day: UsageDay, mode: UsageUpdateMode, executable: URL) async throws -> UsageSnapshot {
         let prices = try await pricing.refresh()
         try Task.checkCancellation()
         let configurationDirectory = FileManager.default.temporaryDirectory.appendingPathComponent("llmusage-pricing-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: configurationDirectory) }
         var pricingArguments: [String] = []
-        let contents = try CCUsagePricingConfiguration.contents(prices: prices, environment: ProcessRunner.environment(for: executable))
-        let pricingKey = try? pricingArchive.save(configuration: contents, environment: ProcessRunner.environment(for: executable))
+        let contents = try CCUsagePricingConfiguration.contents(prices: prices, environment: (runtime == nil ? ProcessRunner.environment(for: executable) : CCUsageRuntime.environment()))
+        let pricingKey = try? pricingArchive.save(configuration: contents, environment: (runtime == nil ? ProcessRunner.environment(for: executable) : CCUsageRuntime.environment()), engineID: engineID)
         if !prices.isEmpty {
             try FileManager.default.createDirectory(at: configurationDirectory, withIntermediateDirectories: true,
                                                     attributes: [.posixPermissions: 0o700])
@@ -207,10 +219,15 @@ struct CCUsageService: CCUsageServing {
         return .init(generatedAt: Date(), day: day, sessions: sessions, pricingKey: pricingKey)
     }
     private func fetchReport(_ report: CCUsageDecoder.Report, day: UsageDay, executable: URL, extraArguments: [String]) async throws -> UsageSnapshot {
-        let result = try await runner.run(executable: executable, arguments: Self.arguments(for: day, report: report) + extraArguments)
+        let result = try await runner.run(executable: executable, arguments: Self.arguments(for: day, report: report) + extraArguments, environment: runtime == nil ? nil : CCUsageRuntime.environment())
         return try CCUsageDecoder.decode(result.stdout, day: day, report: report)
     }
     func diagnose(customPath: String, forceDetect: Bool = false) async throws -> CLIDiagnostics {
+        if let runtime {
+            return try await runtime.withExecutable { executable in
+                .init(path: executable.path, version: "ccusage " + (CCUsageManifest.bundled?.version ?? ""))
+            }
+        }
         let executable = try await resolver.resolve(customPath: customPath, force: forceDetect)
         let result = try await ProcessRunner(timeout: 10).run(executable: executable, arguments: ["--version"])
         return .init(path: executable.path, version: String(decoding: result.stdout, as: UTF8.self)

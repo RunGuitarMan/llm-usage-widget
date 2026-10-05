@@ -423,6 +423,9 @@ enum SessionSort: String, CaseIterable, Identifiable, Sendable {
 
 enum UsageError: Error, LocalizedError, Equatable, Sendable {
     case missingExecutable
+    case runtimeConsentRequired
+    case runtimeUnavailable
+    case maintenanceInProgress
     case invalidPath(String)
     case processFailed(Int32, String)
     case timedOut
@@ -432,6 +435,9 @@ enum UsageError: Error, LocalizedError, Equatable, Sendable {
 
     var errorDescription: String? {
         switch self {
+        case .runtimeConsentRequired: return L10n.text("Подключите встроенный ccusage")
+        case .runtimeUnavailable: return L10n.text("Встроенный ccusage повреждён или недоступен")
+        case .maintenanceInProgress: return L10n.text("Подготовка обновления приложения")
         case .missingExecutable: return L10n.text("ccusage не найден")
         case .invalidPath: return L10n.text("Проверьте путь к ccusage")
         case .processFailed: return L10n.text("Не удалось получить статистику")
@@ -443,6 +449,9 @@ enum UsageError: Error, LocalizedError, Equatable, Sendable {
     }
     var recovery: String {
         switch self {
+        case .runtimeConsentRequired: return L10n.text("Откройте настройки и разрешите использование встроенного компонента. Node.js и npm не нужны.")
+        case .runtimeUnavailable: return L10n.text("Установите целый релиз LLM Usage заново. Последние успешные данные сохранены.")
+        case .maintenanceInProgress: return L10n.text("Расчёты продолжатся после обновления приложения.")
         case .missingExecutable, .invalidPath: return L10n.text("Установите ccusage или укажите путь к существующему executable.")
         case .processFailed, .timedOut: return L10n.text("Проверьте ccusage в настройках и повторите обновление. Последние успешные данные сохранены.")
         case .malformedJSON: return L10n.text("Проверьте версию ccusage. Подробности доступны в настройках.")

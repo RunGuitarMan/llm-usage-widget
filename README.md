@@ -7,19 +7,17 @@ A native macOS app for local coding-agent token usage and estimated costs. It in
 
 ## Install
 
-Requires **macOS 26+ on Apple Silicon**, Node.js LTS and `ccusage`. Install Node.js from [nodejs.org](https://nodejs.org/en/download), then the tested CLI version:
-
-```sh
-npm install -g --prefix "$HOME/.local" ccusage@20.0.26
-```
+Requires **macOS 26+ on Apple Silicon**. A pinned native `ccusage` is included; Node.js, npm and a separate CLI installation are unnecessary.
 
 Download the ZIP from the [latest release](https://github.com/RunGuitarMan/llm-usage-widget/releases/latest), extract it and move **LLM Usage.app** to Applications. Releases are ad-hoc signed, without notarization: if macOS blocks a trusted download, use **System Settings → Privacy & Security → Open Anyway**.
 
-The app starts in the menu bar. Keep it running for updates; add widgets through macOS **Edit Widgets**. It uses local agent logs, so browser-only chats are not included. Costs are estimates. The default update mode is **Claude only**; enable **All agents** in Settings for Codex, Gemini and other sources supported by the installed CLI.
+On first launch, approve use of the bundled calculation component and choose the update policy. This introduction appears automatically only once, even if you choose **Later**; you can enable the component in Settings afterward. Automatic checks, downloads and installation are selected by default; nothing runs until you consent. Settings also offers download-and-ask and manual modes. Automatic installation shows a 15-second countdown with a **Later** action; download-and-ask never installs on quit.
+
+The app starts in the menu bar. Keep it running for updates; add widgets through macOS **Edit Widgets**. It uses local agent logs, so browser-only chats are not included. Costs are estimates. The default update mode is **Claude only**; enable **All agents** in Settings for Codex, Gemini and other sources supported by the bundled CLI.
 
 ## Build
 
-Requires Xcode or Command Line Tools with **macOS SDK 26+**, plus Python 3. No third-party Swift packages are required.
+Requires Xcode or Command Line Tools with **macOS SDK 26+**, plus Python 3.12+. The build downloads the checksum-pinned ccusage binary and Sparkle framework from `Configuration/Dependencies.json`; subsequent builds reuse a verified cache.
 
 ```sh
 bash Scripts/build-local.sh
@@ -50,4 +48,4 @@ Open a PR to `main` with a typed title:
 - `fix: …` for a bug fix → **patch**, e.g. `1.4.2 → 1.4.3`.
 - Maintenance types such as `docs:` and `ci:` also produce a patch.
 
-After **Tests** passes, squash-merge using the PR title. CI tests the merged commit, calculates the version, builds the app and widget, and publishes a ZIP and checksum. No manual version edit or tag is needed. See [Releases](docs/releases.md) for supported titles and retries.
+After **Tests** passes, squash-merge using the PR title. CI tests the merged commit, calculates the version, builds the app and widget, and publishes a ZIP, checksum and signed update feed. No manual version edit or tag is needed. See [Releases](docs/releases.md) for supported titles and retries.

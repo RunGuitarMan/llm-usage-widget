@@ -7,9 +7,10 @@ struct TranscriptPricingArchive: Sendable {
     var directory = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent("Library/Application Support/LLMUsage/Pricing/Reports", isDirectory: true)
 
-    func save(configuration: Data, environment: [String: String] = [:]) throws -> String {
+    func save(configuration: Data, environment: [String: String] = [:], engineID: String? = nil) throws -> String {
         let root = try JSONSerialization.jsonObject(with: configuration) as? [String: Any] ?? [:]
         var archive: [String: Any] = [:]
+        archive["_engineID"] = engineID
         for source in TranscriptUsageParser.supportedSources {
             var maps = [TranscriptJSON.object(root["defaults"])]
             let commands = TranscriptJSON.object(root["commands"])
@@ -65,38 +66,49 @@ struct TranscriptPricingArchive: Sendable {
         return "standard"
     }
 
-    func configuration(key: String, source: String) throws -> Data {
+    func configuration(key: String, source: String, expectedEngineID: String? = nil) throws -> Data {
         guard key.count == 64, key.allSatisfy({ $0.isHexDigit && !$0.isUppercase }) else { throw URLError(.cannotParseResponse) }
         let file = directory.appendingPathComponent(key + ".json")
         guard (try file.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0) <= ClaudePricingCache.maximumBytes else { throw UsageError.outputTooLarge }
         let data = try Data(contentsOf: file)
         guard SHA256.hash(data: data).map({ String(format: "%02x", $0) }).joined() == key,
               let root = try JSONSerialization.jsonObject(with: data) as? [String: Any], let config = root[source] else { throw URLError(.cannotParseResponse) }
+        if let expectedEngineID, root["_engineID"] as? String != expectedEngineID {
+            throw UsageError.runtimeUnavailable
+        }
         return try JSONSerialization.data(withJSONObject: config, options: [.sortedKeys])
     }
 }
 
 struct TranscriptCostService: Sendable {
+    var runtime: CCUsageRuntime? = .shared
     var archive = TranscriptPricingArchive()
     var resolver = CCUsageExecutableResolver()
     var runner = ProcessRunner(timeout: 90)
 
     func price(_ original: SessionTranscript, source: String, customPath: String, pricingKey: String?) async throws -> SessionTranscript {
         guard original.usageSupported, !original.requests.isEmpty else { return original }
-        let executable = try await resolver.resolve(customPath: customPath)
+        if let runtime {
+            return try await runtime.withExecutable { executable in
+                try await price(original, source: source, pricingKey: pricingKey, executable: executable)
+            }
+        }
+        return try await price(original, source: source, pricingKey: pricingKey, executable: try await resolver.resolve(customPath: customPath))
+    }
+    private func price(_ original: SessionTranscript, source: String, pricingKey: String?, executable: URL) async throws -> SessionTranscript {
         var transcript = original
         let configuration: Data
-        if let pricingKey, let saved = try? archive.configuration(key: pricingKey, source: source) {
+        if let pricingKey, let saved = try? archive.configuration(key: pricingKey, source: source, expectedEngineID: runtime == nil ? nil : CCUsageManifest.bundled?.engineID) {
             configuration = saved
         } else {
             // Old snapshots have no tariff receipt. They remain readable, but a
             // calculation at today's rates cannot claim to verify an old report.
             let prices = try await ClaudePricingCache(includeTranscriptModels: true).refresh()
-            let config = try CCUsagePricingConfiguration.contents(prices: prices, environment: ProcessRunner.environment(for: executable))
-            let key = try archive.save(configuration: config, environment: ProcessRunner.environment(for: executable))
+            let config = try CCUsagePricingConfiguration.contents(prices: prices, environment: (runtime == nil ? ProcessRunner.environment(for: executable) : CCUsageRuntime.environment()))
+            let key = try archive.save(configuration: config, environment: (runtime == nil ? ProcessRunner.environment(for: executable) : CCUsageRuntime.environment()), engineID: runtime == nil ? nil : CCUsageManifest.bundled?.engineID)
             configuration = try archive.configuration(key: key, source: source)
             transcript.usageUncertain = true
-            transcript.notices.append(L10n.text("Тарифы исходного отчёта не сохранены. Стоимость пересчитана по доступным тарифам; обновите статистику для сверки."))
+            transcript.notices.append(L10n.text("Версия расчёта или тарифы исходного отчёта отличаются. Стоимость пересчитана; обновите статистику для сверки."))
         }
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("llmusage-chat-\(UUID().uuidString)", isDirectory: true)
         defer { try? FileManager.default.removeItem(at: root) }
@@ -107,7 +119,7 @@ struct TranscriptCostService: Sendable {
         }
         try await withTaskCancellationHandler(operation: { try await preparation.value }, onCancel: { preparation.cancel() })
         try Task.checkCancellation()
-        var environment = ProcessRunner.environment(for: executable)
+        var environment = (runtime == nil ? ProcessRunner.environment(for: executable) : CCUsageRuntime.environment())
         environment[TranscriptSource.all[source]!.variable] = root.path
         environment["XDG_CACHE_HOME"] = root.appendingPathComponent("cache").path
         var arguments = [source, "session", "--json", "--offline", "--timezone", "UTC", "--config", root.appendingPathComponent("ccusage.json").path]
