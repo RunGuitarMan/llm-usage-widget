@@ -11,7 +11,7 @@ Requires **macOS 26+ on Apple Silicon**. A pinned native `ccusage` is included; 
 
 Download the ZIP from the [latest release](https://github.com/RunGuitarMan/llm-usage-widget/releases/latest), extract it and move **LLM Usage.app** to Applications. Releases are ad-hoc signed, without notarization: if macOS blocks a trusted download, use **System Settings → Privacy & Security → Open Anyway**.
 
-On first launch, approve use of the bundled calculation component and choose the update policy. Automatic checks, downloads and installation are selected by default; nothing runs until you consent. Settings also offers download-and-ask and manual modes. Automatic installation shows a 15-second countdown with a **Later** action; download-and-ask never installs on quit.
+On first launch, approve use of the bundled calculation component and choose the update policy. This introduction appears automatically only once, even if you choose **Later**; you can enable the component in Settings afterward. Automatic checks, downloads and installation are selected by default; nothing runs until you consent. Settings also offers download-and-ask and manual modes. Automatic installation shows a 15-second countdown with a **Later** action; download-and-ask never installs on quit.
 
 The app starts in the menu bar. Keep it running for updates; add widgets through macOS **Edit Widgets**. It uses local agent logs, so browser-only chats are not included. Costs are estimates. The default update mode is **Claude only**; enable **All agents** in Settings for Codex, Gemini and other sources supported by the bundled CLI.
 

@@ -26,7 +26,17 @@ struct CCUsageManifest: Codable, Equatable, Sendable {
 
 enum RuntimeConsent {
     static let key = "bundledCCUsageConsent.v1"
+    private static let setupPresentedKey = "bundledCCUsageSetupPresented.v1"
     static func isGranted(defaults: UserDefaults = .standard) -> Bool { defaults.bool(forKey: key) }
+
+    /// Remember the introduction separately from permission to execute the helper.
+    /// Dismissing it never grants consent and never prompts again on a later launch.
+    static func takeFirstLaunchPrompt(defaults: UserDefaults = .standard) -> Bool {
+        guard !defaults.bool(forKey: setupPresentedKey) else { return false }
+        defaults.set(true, forKey: setupPresentedKey)
+        // Existing users who already consented have also completed the introduction.
+        return !isGranted(defaults: defaults)
+    }
 }
 
 /// One immutable executable per app bundle, shared by reports and transcript pricing.

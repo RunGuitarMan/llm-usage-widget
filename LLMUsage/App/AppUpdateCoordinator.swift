@@ -66,11 +66,14 @@ final class AppUpdateCoordinator: NSObject, ObservableObject {
         started = true
         self.store = store
         self.present = present
+        let showSetup = RuntimeConsent.takeFirstLaunchPrompt(defaults: defaults)
         if enabled { store.start(); startUpdater() }
         else {
             Task { await store.restoreSavedData() }
-            presentsSetup = true
-            present()
+            if showSetup {
+                presentsSetup = true
+                present()
+            }
         }
     }
 

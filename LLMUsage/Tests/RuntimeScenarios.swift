@@ -42,6 +42,20 @@ struct RuntimeScenarios {
                 throw RuntimeCheckFailure(message: "Unauthorized execution")
             } catch UsageError.runtimeConsentRequired { }
         }
+        await check("Runtime: setup prompts once across launches without granting consent, including existing users") {
+            let suite = "LLMUsage.SetupCheck.\(UUID())"
+            let defaults = UserDefaults(suiteName: suite)!
+            defer { defaults.removePersistentDomain(forName: suite) }
+            try requireRuntime(RuntimeConsent.takeFirstLaunchPrompt(defaults: defaults), "First launch did not introduce the component")
+            let restarted = UserDefaults(suiteName: suite)!
+            try requireRuntime(!RuntimeConsent.takeFirstLaunchPrompt(defaults: restarted), "Later prompted again on relaunch")
+            try requireRuntime(!RuntimeConsent.isGranted(defaults: restarted), "Showing the introduction granted permission")
+            defaults.removePersistentDomain(forName: suite)
+            defaults.set(true, forKey: RuntimeConsent.key)
+            try requireRuntime(!RuntimeConsent.takeFirstLaunchPrompt(defaults: defaults), "An existing consent prompted again")
+            defaults.set(false, forKey: RuntimeConsent.key)
+            try requireRuntime(!RuntimeConsent.takeFirstLaunchPrompt(defaults: UserDefaults(suiteName: suite)!), "Revoking consent restarted onboarding")
+        }
         await check("Runtime: modified binary and wrong exact version fail closed") {
             let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
             try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
