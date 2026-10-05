@@ -30,7 +30,9 @@ def main():
     parser.add_argument("--mode", choices=["manual", "ask", "bad-signature", "install", "automatic"])
     options = parser.parse_args()
     keys = json.loads(run(str(ROOT / "build/update-integration"), "--keypair").stdout)
-    with tempfile.TemporaryDirectory(prefix="llm-update-integration-", dir=ROOT / "build") as temporary:
+    # Relaunched apps no longer inherit the terminal's Documents permission.
+    # A fresh identity must be able to write its result without a TCC prompt.
+    with tempfile.TemporaryDirectory(prefix="llm-update-integration-", dir="/private/tmp") as temporary:
         directory = Path(temporary)
         handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=str(directory))
         server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
