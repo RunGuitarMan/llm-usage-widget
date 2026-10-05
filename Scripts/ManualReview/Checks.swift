@@ -27,6 +27,10 @@ import AppKit
         guard let window = review.dashboard else { try require(false, "Missing production scene"); return }
         try require(window.styleMask.contains([.titled, .closable, .miniaturizable, .resizable]), "Window lost production controls")
         try require(window.toolbarStyle == .unified, "Wrong production toolbar style")
+        try require(window.collectionBehavior.contains(.fullScreenPrimary)
+                    && !window.collectionBehavior.contains(.fullScreenAuxiliary)
+                    && !window.collectionBehavior.contains(.fullScreenNone),
+                    "Dashboard cannot enter its own full-screen Space")
         try require(!review.store.isDemo, "Review disabled product controls using demo mode")
         try require(Set(ReviewScenario.all.map(\.id)).count == ReviewScenario.all.count, "Duplicate scenario IDs")
         for scenario in ReviewScenario.all {

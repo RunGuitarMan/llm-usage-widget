@@ -69,6 +69,7 @@ struct LLMUsageApp: App {
     var body: some Scene {
         Window("LLM Usage", id: "dashboard") {
             AppRootView(store: store, appDelegate: appDelegate)
+                .windowFullScreenBehavior(.enabled)
         }
         #if MANUAL_REVIEW
         .defaultLaunchBehavior(.presented)
@@ -79,6 +80,8 @@ struct LLMUsageApp: App {
         .defaultSize(width: 1080, height: 760)
         .windowToolbarStyle(.unified)
         .windowResizability(.contentMinSize)
+        // The dashboard is a primary window even though the app lives in the menu bar.
+        .windowManagerRole(.principal)
         .commands {
             CommandGroup(replacing: .appSettings) {
                 OpenUsageButton(store: store, route: .settings, title: L10n.text("Настройки…")).keyboardShortcut(",")
