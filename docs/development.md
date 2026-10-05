@@ -75,6 +75,8 @@ Long messages have bounded inline previews; the full text opens in a native text
 
 `MANUAL_REVIEW` is defined only by `Scripts/manual-review.sh`. The build uses the production `LLMUsageApp`, `AppRootView`, windows, toolbar and chat sheet. `Scripts/ManualReview` adds a catalogue, fixtures and injected external services; it does not copy product screens or provide a second app entry point.
 
+Use this single review build for diagnostic experiments as well as regression checks. Add temporary instrumentation to this mode and inspect its actual windows; do not create throwaway geometry/chrome apps or alternate product hosts, even under ignored `build/` or `/tmp`. The repository's [agent instructions](../AGENTS.md) enforce the same workflow.
+
 The separate development bundle ID protects installed preferences. Synthetic services and in-memory storage replace external I/O while the normal `UsageStore` refresh/cache/error paths remain active. Login-item changes are simulated. The build requires an explicit `--manual-review` argument; shipping builds contain neither that entry point nor the catalogue. `verify-review-boundary.py` checks the shipping executable during each build.
 
 The launcher stages a fresh signed bundle, retires only known review copies under this workspace and verifies the launched PID, executable and source fingerprint. The catalogue displays that fingerprint. See [Testing](testing.md) for operation and report recovery.
