@@ -33,6 +33,7 @@ enum ReviewFixture: String, CaseIterable {
                 ("tgpt", ["tgpt/super-mega-llm-999b"], "claude"),
                 ("glm", ["openrouter/z-ai/glm-5"], "claude"),
                 ("mixed", ["claude-sonnet-4.6", "tgpt/gpt-6", "unknown-model"], "codex"),
+                ("anthropic", ["claude-sonnet-4.6"], "claude"),
                 ("unknown", ["custom-model"], "claude"),
                 ("openai", ["gpt-6"], "claude"),
                 ("google", ["gemini-2.5-pro"], "codex"),
@@ -143,7 +144,7 @@ struct ReviewScenario: Identifiable {
         dashboard("models-empty", "Модели · пусто", "Проверь пустое состояние и переход к настройкам исключений.", tab: .models, fixture: .empty)
         dashboard("models-long", "Модели · длинные названия", "Проверь длинную и смешанную модель на узком окне.", tab: .models, fixture: .huge)
         dashboard("provider-sessions", "Логотипы · модели в разных инструментах", "Проверь GLM в Claude Code (Z.AI), префикс tgpt (щит Т-Банка), неизвестные модели (нейтральная иконка) и смешанные сессии. Название инструмента показано отдельно.", fixture: .providers, option: "expanded")
-        dashboard("provider-models", "Логотипы · все производители", "Проверь логотипы всех производителей в светлой и тёмной теме. В смешанной строке видны Anthropic, Т-Банк и нейтральная иконка. GLM сохраняет Z.AI при исключении из итогов.", tab: .models, fixture: .providers)
+        dashboard("provider-models", "Логотипы · все производители", "Проверь логотипы всех производителей в светлой и тёмной теме. В смешанной строке видны Anthropic, Т-Банк и нейтральная иконка. Сравни одиночный Anthropic и Anthropic в стеке: фон и яркость должны совпадать в обеих темах. GLM сохраняет Z.AI при исключении из итогов.", tab: .models, fixture: .providers)
         dashboard("provider-inspector", "Логотипы · подробности сессии", "Проверь щит с буквой Т и подпись Claude Code. Выбери GLM, смешанную сессию и сессию с неизвестной моделью; логотипы должны совпадать со списком.", fixture: .providers, option: "inspector")
         dashboard("settings", "Настройки · все разделы", "Раскрой подключение и хранилище. Измени язык, интервалы, вид меню и бюджет. Автозапуск здесь только имитируется.", tab: .settings)
         dashboard("settings-cli", "Настройки · ccusage не найден", "Проверь текст ошибки и технические подробности. «Найти автоматически» и «Проверить» используют тестовый сервис; выбор файла открывает системный диалог.", tab: .settings, fixture: .missing)

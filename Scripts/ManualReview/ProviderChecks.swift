@@ -39,6 +39,7 @@ struct ReviewProviderProbe: NSViewRepresentable {
                 let mixed: [ModelProvider] = [.anthropic, .tbank, .custom]
                 for (model, expected) in [("openrouter/z-ai/glm-5", [ModelProvider.zai]),
                                           ("tgpt/super-mega-llm-999b", [.tbank]),
+                                          ("claude-sonnet-4.6", [.anthropic]),
                                           ("unknown-model", mixed), ("custom-model", [.custom])] {
                     try await ReviewCheck.wait("Wrong production Models logos for \(model)") {
                         probes(in: window).contains { $0.models.contains(model) && $0.providers == expected }

@@ -298,7 +298,7 @@ struct UsageDatePopover: View {
 struct ProviderLogo: View {
     var provider: ModelProvider
     var helpText: String? = nil
-    var isStacked = false
+    static let cornerRadius: CGFloat = 8
 
     static let images: [ModelProvider: NSImage] = {
         var result: [ModelProvider: NSImage] = [:]
@@ -315,7 +315,7 @@ struct ProviderLogo: View {
     var body: some View {
         Group {
             if let image = Self.images[provider] {
-                Image(nsImage: image).resizable().scaledToFit().padding(isStacked ? 6 : 5)
+                Image(nsImage: image).resizable().scaledToFit().padding(5)
             } else {
                 Image(systemName: provider == .mixed ? "square.stack.3d.up" : "cpu")
                     .font(.system(size: 17, weight: .regular))
@@ -323,17 +323,7 @@ struct ProviderLogo: View {
         }
         .foregroundStyle(.primary.opacity(0.8))
         .frame(width: 30, height: 30)
-        .background {
-            let shape = RoundedRectangle(cornerRadius: 8)
-            if isStacked { shape.fill(Color(nsColor: .controlBackgroundColor)) }
-            shape.fill(Color.primary.opacity(0.04))
-        }
-        .overlay {
-            if isStacked {
-                RoundedRectangle(cornerRadius: 8)
-                    .strokeBorder(Color(nsColor: .controlBackgroundColor), lineWidth: 1.5)
-            }
-        }
+        .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: Self.cornerRadius))
         .help(helpText ?? L10n.text("Провайдер модели: \(provider.title)"))
         .accessibilityHidden(true)
     }
@@ -342,13 +332,19 @@ struct ProviderLogo: View {
 /// Mixed sessions keep their brands in a compact, leading-to-trailing stack.
 struct ProviderLogos: View {
     var models: [String]
+    private let overlap: CGFloat = 8
     private var providers: [ModelProvider] { ModelProvider.logos(models: models) }
     private var description: String { providers.map(\.title).joined(separator: ", ") }
 
     var body: some View {
-        HStack(spacing: providers.count > 1 ? -8 : 0) {
+        HStack(spacing: providers.count > 1 ? -overlap : 0) {
             ForEach(Array(providers.enumerated()), id: \.element.rawValue) { index, provider in
-                ProviderLogo(provider: provider, helpText: description, isStacked: providers.count > 1)
+                ProviderLogo(provider: provider, helpText: description)
+                    .mask {
+                        if index > 0 {
+                            StackCutout(overlap: overlap).fill(style: FillStyle(eoFill: true))
+                        } else { Rectangle() }
+                    }
                     .zIndex(Double(providers.count - index))
             }
         }
@@ -356,6 +352,20 @@ struct ProviderLogos: View {
         .background(ReviewProviderProbe(models: models, providers: providers, label: description))
         #endif
         .help(description).accessibilityElement(children: .ignore).accessibilityLabel(description)
+    }
+
+    /// Cut away the preceding tile and a narrow gap. Every visible tile retains
+    /// the same translucent fill as a solo logo, including over selected rows.
+    private struct StackCutout: Shape {
+        var overlap: CGFloat
+        private let gap: CGFloat = 1.5
+
+        func path(in rect: CGRect) -> Path {
+            var path = Path(rect)
+            let preceding = rect.offsetBy(dx: -(rect.width - overlap), dy: 0).insetBy(dx: -gap, dy: -gap)
+            path.addPath(RoundedRectangle(cornerRadius: ProviderLogo.cornerRadius + gap).path(in: preceding))
+            return path
+        }
     }
 }
 
