@@ -31,6 +31,14 @@ Use bundle identifiers and a shared App Group registered to your team. Xcode bui
 
 Keep build products, reports, downloaded tools and previews under ignored `build/`. Do not commit local logs, exported conversations, credentials or `Configuration/Local.xcconfig`. Existing `ClaudeUsage` bundle IDs, storage keys and URL aliases preserve compatibility with older installations.
 
+## Application version
+
+Manually choose the version for each PR in `.github/release.json`, for example `{"version": "1.5.1"}`. It must be strictly higher than the current `main` version; PR titles and commit counts do not select the visible version. Further commits in the same PR can keep that number while it remains higher than `main`.
+
+Script builds, Xcode, the widget and the review catalogue all read this same file through `Scripts/build_version.py`, including uncommitted version edits in development builds. Development/review builds retain the **Test build** label. The separate internal build number is the first-parent Git history length. Full Git history is required; release tags are not the version source. Do not set a different `MARKETING_VERSION` or `CURRENT_PROJECT_VERSION` in `Local.xcconfig` or the environment: conflicting overrides fail the build.
+
+Merging PRs only runs checks, so several versioned PRs can accumulate before publication. When ready, use **GitHub → Actions → Release → Run workflow** on **main**. The release uses the version of the commit selected at dispatch. See [Releases](releases.md) for validation, artifacts and retries.
+
 ## Data flow
 
 `UsageStore` coordinates refreshes, date/source selection, cached snapshots and model exclusions. `CCUsageService` runs the external CLI through `ProcessRunner`; the app aggregates its report, and WidgetKit reads saved snapshots. The widget does not scan logs or launch the CLI. Closing the dashboard hides the existing scene and keeps its toolbar ready for the next presentation; the menu bar process stays running and its context menu contains Quit. `DashboardWindowCoordinator` observes that same scene window, forwards its native delegate behavior, and prepares the window width before SwiftUI opens an inspector. The first toolbar layout releases the initial presentation so the titlebar-only frame is never shown.

@@ -47,7 +47,7 @@ def main():
                 app = scenario / "Update Test.app"
                 info = {"CFBundleIdentifier": identifier, "CFBundleExecutable": "Update Test",
                         "CFBundleName": "Update Test", "CFBundlePackageType": "APPL",
-                        "CFBundleVersion": "1", "CFBundleShortVersionString": "1.0",
+                        "CFBundleVersion": "1", "CFBundleShortVersionString": "1.0.0",
                         "LSMinimumSystemVersion": "26.0", "LSUIElement": True,
                         "UsageUpdateChannel": "release", "SUPublicEDKey": keys["public"],
                         "SUFeedURL": base_url + f"/{mode}/appcast.xml", "SUEnableAutomaticChecks": False,
@@ -67,7 +67,7 @@ def main():
                     run("/usr/bin/codesign", "--force", "--preserve-metadata=identifier,entitlements", "--sign", "-", str(framework / part))
 
                 def write_version(version):
-                    info.update(CFBundleVersion=str(version), CFBundleShortVersionString=f"{version}.0")
+                    info.update(CFBundleVersion=str(version), CFBundleShortVersionString=f"{version}.0.0")
                     (app / "Contents/Info.plist").write_bytes(plistlib.dumps(info))
                     run("/usr/bin/codesign", "--force", "--sign", "-", str(app))
 
@@ -78,7 +78,7 @@ def main():
                 if mode == "bad-signature":
                     signature = ("A" if signature[0] != "A" else "B") + signature[1:]
                 feed = scenario / "appcast.xml"
-                feed.write_bytes(make_feed("2.0", "2", base_url + f"/{mode}/update.zip", signature,
+                feed.write_bytes(make_feed("2.0.0", "2", base_url + f"/{mode}/update.zip", signature,
                                            archive.stat().st_size, "Synthetic signed update"))
                 run(str(SIGNER), "--ed-key-file", "-", str(feed), input=keys["private"], text=True)
                 write_version(1)

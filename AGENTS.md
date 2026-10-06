@@ -10,3 +10,12 @@ Use one test application for every interactive UI check, automated window check 
 - Preserve the user's notes and position in `build/UIReview`. Automated checks use the separate `build/manual-review/check-report` directory.
 
 Non-UI unit tests and command-line checks may remain separate. Content-only PNG exports do not validate native window behavior. See [docs/testing.md](docs/testing.md) for commands and coverage.
+
+# Versioning and releases
+
+- Every PR, including documentation-only changes, must manually increase `version` in `.github/release.json` above the current `main` version. Use the version selected by the user; ask for it when preparing a new PR if none was supplied. Do not infer a version from the PR title or change type.
+- Additional commits in the same PR keep its selected version while it remains greater than `main`. If another PR catches up with it, update from `main` and obtain a higher version from the user.
+- All app, widget, Xcode and review builds must use that exact repository version through `Scripts/build_version.py`. The separate internal build number comes from first-parent Git history. Do not add fallback versions or conflicting build-setting overrides.
+- Merging into `main` runs checks only. Publish only when the user requests a release, through **Actions → Release → Run workflow** on `main`; do not create release tags manually.
+
+See [docs/releases.md](docs/releases.md) for the full policy and retry behavior.

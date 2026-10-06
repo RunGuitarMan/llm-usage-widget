@@ -9,6 +9,8 @@
 
 For example, merge PRs carrying `1.5.1`, `1.5.2` and `1.6.0`, then publish just `1.6.0`. The intervening numbers need not have GitHub releases. Do not create release tags manually.
 
+Choose the version once per PR, not once per commit. Follow-up commits in that PR keep the chosen version unless `main` catches up with or overtakes it. Major, minor and patch changes are all manual choices; there are no required title prefixes.
+
 The first PR introducing this policy can compare with the old automatic version configuration on `main`. That compatibility code is only used to validate the migration; builds require the explicit `version` field.
 
 ## Publish when ready
@@ -54,6 +56,6 @@ Artifacts are Apple Silicon builds, ad-hoc signed without Developer ID notarizat
 
 Release builds set `LLM_UPDATE_CHANNEL=release`; local builds default to `development`. The stable feed URL is the latest release’s `appcast.xml` asset. `Scripts/sign_release.py` signs the ZIP and feed with Sparkle 2.10, verifies the archive against the public key embedded in the app, and verifies the previous feed before retaining up to 19 older items. Only an HTTP 404 is accepted for the first feed. Build numbers determine update order.
 
-The Ed25519 public key is committed in `Configuration/UpdateSigning.xcconfig`. The private key is stored in the maintainer’s Keychain under account `llmusage-widget` and in the repository’s Actions secret `SPARKLE_PRIVATE_KEY`. CI sends the secret to Sparkle through stdin; it must never be committed or put in command arguments. A missing/mismatched key stops publication. Back up the Keychain key securely: existing installations trust this public key, so replacing it requires a deliberate signed migration. PR checks use disposable keys and do not access the production secret.
+The Ed25519 public key is committed in `Configuration/UpdateSigning.xcconfig`. The private key is stored in the maintainer’s Keychain under account `llmusage-widget` and in the repository’s Actions secret `SPARKLE_PRIVATE_KEY`. The manual **Release** workflow sends the secret to Sparkle through stdin; it must never be committed or put in command arguments. A missing/mismatched key stops publication. Back up the Keychain key securely: existing installations trust this public key, so replacing it requires a deliberate signed migration. PR checks use disposable keys and do not access the production secret.
 
 The application remains ad-hoc signed, without notarization. Ed25519 authenticates updates independently of Gatekeeper. The first release containing this updater still requires the usual manual installation; later releases update through the app. Signing the feed does not remove first-install Gatekeeper warnings.
