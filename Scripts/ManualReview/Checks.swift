@@ -26,6 +26,7 @@ import AppKit
                     "Dashboard cannot enter its own full-screen Space")
         try require(!review.store.isDemo, "Review disabled product controls using demo mode")
         try require(Set(ReviewScenario.all.map(\.id)).count == ReviewScenario.all.count, "Duplicate scenario IDs")
+        try await WindowChromeChecks.run(review)
         try await WindowChecks.run(review)
         try await SessionNavigationChecks.run(review)
         for scenario in ReviewScenario.all {

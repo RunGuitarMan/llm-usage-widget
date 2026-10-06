@@ -33,7 +33,7 @@ Keep build products, reports, downloaded tools and previews under ignored `build
 
 ## Data flow
 
-`UsageStore` coordinates refreshes, date/source selection, cached snapshots and model exclusions. `CCUsageService` runs the external CLI through `ProcessRunner`; the app aggregates its report, and WidgetKit reads saved snapshots. The widget does not scan logs or launch the CLI. Closing the dashboard leaves the menu bar process running; its context menu contains Quit.
+`UsageStore` coordinates refreshes, date/source selection, cached snapshots and model exclusions. `CCUsageService` runs the external CLI through `ProcessRunner`; the app aggregates its report, and WidgetKit reads saved snapshots. The widget does not scan logs or launch the CLI. Closing the dashboard hides the existing scene and keeps its toolbar ready for the next presentation; the menu bar process stays running and its context menu contains Quit. `DashboardWindowCoordinator` observes that same scene window, forwards its native delegate behavior, and prepares the window width before SwiftUI opens an inspector. The first toolbar layout releases the initial presentation so the titlebar-only frame is never shown.
 
 The bundled CLI is `ccusage@20.0.26-llmusage.3`, built from upstream 20.0.26 with the reviewed response-boundary patch in `Configuration/Patches`:
 

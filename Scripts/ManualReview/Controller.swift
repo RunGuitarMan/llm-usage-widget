@@ -168,6 +168,7 @@ enum ReviewSize: String, CaseIterable, Identifiable {
                     cleanup()
                     exit(0)
                 } catch {
+                    WindowChromeChecks.saveFailure(self)
                     fputs("FAIL Manual review: \(error)\n", stderr)
                     cleanup()
                     exit(1)

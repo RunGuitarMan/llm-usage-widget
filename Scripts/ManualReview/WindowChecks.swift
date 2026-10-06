@@ -59,12 +59,14 @@ import SwiftUI
             store.tab = .overview
             store.sessionList.setExpanded(false)
             try await ReviewCheck.settle()
-            let compactScrolls = Set(ReviewCheck.views(NSScrollView.self, in: host).map(ObjectIdentifier.init))
+            let compactScrolls = Set(ReviewCheck.views(NSScrollView.self, in: host)
+                .filter { !$0.isHiddenOrHasHiddenAncestor }.map(ObjectIdentifier.init))
             try ReviewCheck.require(compactScrolls.count == 2, "Statistics should scroll only sidebar and main content")
             for expanded in [true, false, true] {
                 store.sessionList.setExpanded(expanded)
                 try await ReviewCheck.settle()
-                try ReviewCheck.require(compactScrolls == Set(ReviewCheck.views(NSScrollView.self, in: host).map(ObjectIdentifier.init)),
+                try ReviewCheck.require(compactScrolls == Set(ReviewCheck.views(NSScrollView.self, in: host)
+                    .filter { !$0.isHiddenOrHasHiddenAncestor }.map(ObjectIdentifier.init)),
                                         "Session expansion recreated or added a scroll view")
             }
             for width: CGFloat in [860, 1080] { try await ReviewCheck.resize(window, width: width) }
