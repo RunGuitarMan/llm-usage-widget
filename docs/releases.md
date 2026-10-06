@@ -17,7 +17,7 @@ The first PR introducing this policy can compare with the old automatic version 
 
 Open **GitHub → Actions → Release → Run workflow**, leave branch **main** selected, and click **Run workflow**. No version input or manual tag is needed.
 
-The workflow fixes the source commit at dispatch time, reruns the full CI checks for that commit, reads its repository version, builds the app and widget, signs the update archive/feed, and publishes:
+The workflow fixes the source commit at dispatch time, reruns the full CI checks for that commit, reads its repository version, builds the final app and widget once, runs normal/review window checks against that signed artifact, verifies its manifest again, then signs the update archive/feed and publishes:
 
 - Git tag `vMAJOR.MINOR.PATCH` and a GitHub Release with generated change notes covering the accumulated PRs.
 - `LLM-Usage-vMAJOR.MINOR.PATCH-macOS-arm64.zip`.

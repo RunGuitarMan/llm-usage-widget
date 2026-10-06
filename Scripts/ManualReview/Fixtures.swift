@@ -1,4 +1,3 @@
-#if MANUAL_REVIEW
 import Foundation
 
 /// Only external I/O is replaced. UsageStore still performs restore, refresh, cache and error handling.
@@ -60,4 +59,3 @@ import Foundation
     func readHistory() async throws -> UsageHistory? { try checkAccess(); return history }
     func writeHistory(_ history: UsageHistory) async throws { try checkAccess(); self.history = history }
 }
-#endif

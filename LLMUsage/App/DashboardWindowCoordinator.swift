@@ -1,6 +1,10 @@
 import AppKit
 import SwiftUI
 
+extension Notification.Name {
+    static let openUsageDashboard = Notification.Name("OpenUsageDashboard")
+}
+
 /// Owns presentation of the existing SwiftUI scene, never a second window or hosting view.
 @MainActor final class DashboardWindowCoordinator: ObservableObject {
     static let minimumWidth: CGFloat = 860
@@ -72,10 +76,9 @@ import SwiftUI
             window.contentView?.layoutSubtreeIfNeeded()
             window.displayIfNeeded()
             self.revealed = true
-            #if MANUAL_REVIEW
-            WindowChromeChecks.recordFirstPresentation(window)
-            #endif
+            if ManualReviewController.active != nil { WindowChromeChecks.recordFirstPresentation(window) }
             window.alphaValue = 1
+            AppLaunchReceipt.record(window)
         }
     }
 
@@ -146,6 +149,7 @@ struct DashboardWindowConnection: NSViewRepresentable {
         func report() {
             guard let window else { return }
             coordinator.attach(window)
+            AppLaunchReceipt.record(window)
             if toolbar, bounds.width > 0, bounds.height > 0 { coordinator.toolbarDidLayout(in: window) }
         }
     }

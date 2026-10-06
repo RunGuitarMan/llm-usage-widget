@@ -20,6 +20,11 @@ struct DashboardSidebarLabel: View {
         .fontWeight(isSelected ? .medium : .regular)
         .foregroundStyle(foreground)
         .accessibilityElement(children: .combine)
+        .onChange(of: appearsActive, initial: true) { _, active in
+            if let review = ManualReviewController.active {
+                review.observedSidebarAppearance[symbol] = active
+            }
+        }
     }
 }
 
@@ -348,9 +353,7 @@ struct ProviderLogos: View {
                     .zIndex(Double(providers.count - index))
             }
         }
-        #if MANUAL_REVIEW
         .background(ReviewProviderProbe(models: models, providers: providers, label: description))
-        #endif
         .help(description).accessibilityElement(children: .ignore).accessibilityLabel(description)
     }
 

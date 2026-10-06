@@ -47,11 +47,15 @@ jobs:
         run: |
           test "$(uname -m)" = arm64
           bash Scripts/build-local.sh
+      - name: Test the exact release app before packaging
+        if: steps.publication.outputs.published != 'true'
+        run: bash Scripts/check-windows.sh
       - name: Package app and checksum
         if: steps.publication.outputs.published != 'true'
         env:
           RELEASE_TAG: ${{ steps.version.outputs.tag }}
         run: |
+          python3 Scripts/app_artifact.py verify
           mkdir -p build/release
           ditto -c -k --sequesterRsrc --keepParent \
             'build/LLM Usage.app' "build/release/LLM-Usage-${RELEASE_TAG}-macOS-arm64.zip"

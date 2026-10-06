@@ -7,18 +7,16 @@ final class UsageAppDelegate: NSObject, NSApplicationDelegate, ObservableObject 
     private var menuBarController: MenuBarController?
     private let menuLocalization = AppMenuLocalization()
     private let iconAppearance = AppIconAppearance()
-    #if MANUAL_REVIEW
-    @Published var reviewLaunchReady = false
-    #endif
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         iconAppearance.start(application: .shared)
-        #if MANUAL_REVIEW
-        setbuf(stdout, nil)
-        print("REVIEW Production application did finish launching")
-        reviewLaunchReady = true
-        NSApp.activate(ignoringOtherApps: true)
-        #endif
+        if AppLaunchReceipt.requested {
+            setbuf(stdout, nil)
+            print("APP Application did finish launching")
+        }
+        if ManualReviewController.active == nil && !CommandLine.arguments.contains("--demo") {
+            Task { await WidgetExtensionLifecycle.reconcile() }
+        }
     }
 
     func installMenuBar(store: UsageStore, openRoute: @escaping (UsageRoute) -> Void) {
@@ -29,9 +27,7 @@ final class UsageAppDelegate: NSObject, NSApplicationDelegate, ObservableObject 
 
     func applicationWillTerminate(_ notification: Notification) {
         menuBarController?.tearDown()
-        #if MANUAL_REVIEW
         ManualReviewController.active?.cleanup()
-        #endif
     }
 
     func showMenuBarUsage() { menuBarController?.showPopover() }
@@ -43,26 +39,19 @@ final class UsageAppDelegate: NSObject, NSApplicationDelegate, ObservableObject 
     }
 }
 
-extension Notification.Name {
-    static let openUsageDashboard = Notification.Name("OpenUsageDashboard")
-}
-
 @main
 struct LLMUsageApp: App {
     @NSApplicationDelegateAdaptor(UsageAppDelegate.self) private var appDelegate
     @StateObject private var store = makeStore()
 
     private static func makeStore() -> UsageStore {
-        #if MANUAL_REVIEW
-        guard let review = ManualReviewController.active else {
-            fputs("This development build requires Scripts/manual-review.sh.\n", stderr)
-            exit(64)
-        }
-        return review.store
-        #else
+        if let review = ManualReviewController.active { return review.store }
         return UsageStore(demo: ProcessInfo.processInfo.arguments.contains("--demo")
             || ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil)
-        #endif
+    }
+
+    init() {
+        if AppLaunchReceipt.requested { fputs("APP Scene initialized\n", stderr) }
     }
 
     @Environment(\.openWindow) private var openWindow
@@ -72,12 +61,6 @@ struct LLMUsageApp: App {
             AppRootView(store: store, appDelegate: appDelegate)
                 .windowFullScreenBehavior(.enabled)
         }
-        #if MANUAL_REVIEW
-        .defaultLaunchBehavior(.presented)
-        .onChange(of: appDelegate.reviewLaunchReady, initial: true) { _, ready in
-            if ready { appDelegate.dashboard.show { openWindow(id: "dashboard") } }
-        }
-        #endif
         .defaultSize(width: 1080, height: 760)
         .windowToolbarStyle(.unified)
         .windowResizability(.contentMinSize)
@@ -89,35 +72,33 @@ struct LLMUsageApp: App {
             }
             CommandGroup(after: .appSettings) {
                 Button(L10n.text("Проверить обновления…")) { AppUpdateCoordinator.shared.check() }
-                    .disabled(store.isDemo)
+                    .disabled(store.isDemo || store.isManualReview)
             }
-            #if MANUAL_REVIEW
             CommandGroup(after: .appSettings) {
                 if ManualReviewController.active != nil {
                     Button("Каталог проверки UI") { openWindow(id: "manual-review") }.keyboardShortcut("1")
                 }
             }
-            #endif
             CommandGroup(after: .windowArrangement) {
                 OpenUsageButton(store: store, dashboard: appDelegate.dashboard, route: .overview, title: L10n.text("Открыть обзор"))
                 Button(L10n.text("Показать статистику в строке меню")) { appDelegate.showMenuBarUsage() }
                     .keyboardShortcut("u", modifiers: [.command, .shift])
             }
         }
-        #if MANUAL_REVIEW
         Window("Каталог проверки — LLM Usage", id: "manual-review") {
             if let review = ManualReviewController.active { ManualReviewPanel(review: review) }
         }
         .defaultSize(width: 500, height: 720)
         .defaultLaunchBehavior(.suppressed)
+        .restorationBehavior(.disabled)
         .commandsRemoved()
         Window("Содержимое виджетов — LLM Usage", id: "review-widgets") {
             if let review = ManualReviewController.active { ReviewWidgetsView(review: review, store: store) }
         }
         .defaultSize(width: 960, height: 760)
         .defaultLaunchBehavior(.suppressed)
+        .restorationBehavior(.disabled)
         .commandsRemoved()
-        #endif
     }
 }
 
@@ -138,42 +119,34 @@ struct AppRootView: View {
                     store.navigate(route)
                     appDelegate.dashboard.show { openWindow(id: "dashboard") }
                 }
-                #if MANUAL_REVIEW
-                store.start()
-                #else
-                if store.isDemo { store.start() }
+                if store.isDemo || store.isManualReview { store.start() }
                 else {
                     updates.start(store: store) {
                         store.navigate(.settings)
                         appDelegate.dashboard.show { openWindow(id: "dashboard") }
                     }
                 }
-                #endif
-                #if MANUAL_REVIEW
                 if let review = ManualReviewController.active {
                     print("REVIEW Production root appeared; windows: \(NSApp.windows.map { $0.identifier?.rawValue ?? $0.title })")
                     if let window = NSApp.windows.first(where: { $0.identifier?.rawValue == "dashboard" }) {
                         review.connect(window: window, openWindow: { openWindow(id: $0) },
+                                       showDashboard: { appDelegate.dashboard.show { openWindow(id: "dashboard") } },
                                        showMenu: { appDelegate.showMenuBarUsage() })
                     }
                 }
-                #endif
             }
-            #if MANUAL_REVIEW
             .environment(\.transcriptServices, ManualReviewController.active?.transcriptServices ?? .live)
             .background {
                 if let review = ManualReviewController.active {
                     ReviewWindowConnection { window in
                         review.connect(window: window, openWindow: { openWindow(id: $0) },
+                                       showDashboard: { appDelegate.dashboard.show { openWindow(id: "dashboard") } },
                                        showMenu: { appDelegate.showMenuBarUsage() })
                     }
                 }
             }
-            #endif
             .onChange(of: store.interfaceLanguage) { _, language in
-                #if MANUAL_REVIEW
                 ManualReviewController.active?.language = language
-                #endif
                 DispatchQueue.main.async { AppMenuLocalization.update() }
             }
             .onAppear { DispatchQueue.main.async { AppMenuLocalization.update() } }

@@ -4,8 +4,10 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 mkdir -p build/ModuleCache
 source Scripts/toolchain.sh
-WIDGET="$PWD/build/LLMUsageWidget.appex"
+WIDGET="${1:-$PWD/build/LLMUsageWidget.appex}"
 python3 Scripts/package-bundle.py widget "$WIDGET"
+bash Scripts/build-icons.sh
+python3 Scripts/package_icon.py "$WIDGET" build/LLMUsage.icns
 # Widget.main registers the widget; NSExtensionMain keeps the extension serving XPC.
 "$LLM_SWIFTC" -parse-as-library -application-extension -module-name LLMUsageWidget \
   -target "$(uname -m)-apple-macosx26.0" -sdk "$SDK_PATH" \

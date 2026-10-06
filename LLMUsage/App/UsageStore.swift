@@ -88,11 +88,9 @@ final class UsageStore: ObservableObject {
     }
 
     let isDemo: Bool
-    #if MANUAL_REVIEW
     var isManualReview = false
     @Published private(set) var reviewChatRevision = 0
     private(set) var reviewChatPresented = false
-    #endif
     private let service: any CCUsageServing
     private let repository: any SnapshotPersisting
     private let defaults: UserDefaults
@@ -614,7 +612,6 @@ final class UsageStore: ObservableObject {
     }
 }
 
-#if MANUAL_REVIEW
 extension UsageStore {
     func requestReviewChat(_ presented: Bool) {
         reviewChatPresented = presented
@@ -639,4 +636,3 @@ extension UsageStore {
         lastAttempt = nil
     }
 }
-#endif

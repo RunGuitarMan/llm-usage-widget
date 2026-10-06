@@ -1,5 +1,6 @@
 #!/bin/bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
-# Automated checks and interactive review share the production App/Scene and catalogue.
+# Both launches consume the exact artifact created by build-local.sh.
+bash Scripts/manual-review.sh --normal-smoke
 bash Scripts/manual-review.sh --self-check

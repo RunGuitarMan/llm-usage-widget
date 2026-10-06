@@ -47,12 +47,12 @@ jobs:
         run: python3 -m unittest discover -s Scripts -p 'test_*.py' -v
       - name: Run Swift unit tests
         run: swift test
-      - name: Run regression, menu and UI checks
-        run: bash Scripts/check.sh
       - name: Check icon appearance
         run: bash Scripts/check-icons.sh
-      - name: Build and verify app with embedded widget
+      - name: Build the common app with embedded widget once
         run: bash Scripts/build-local.sh
+      - name: Run regression, menu and UI checks against that artifact
+        run: bash Scripts/check.sh
       - name: Verify Xcode uses the same version source
         run: |
           python3 Scripts/generate_project.py

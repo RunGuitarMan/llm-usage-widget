@@ -1,4 +1,3 @@
-#if MANUAL_REVIEW
 import AppKit
 import SwiftUI
 
@@ -116,6 +115,3 @@ struct ManualReviewPanel: View {
         switch status { case "passed": return .green; case "issue": return .orange; default: return .secondary }
     }
 }
-
-
-#endif

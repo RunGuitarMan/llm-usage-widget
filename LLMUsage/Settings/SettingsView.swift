@@ -174,9 +174,7 @@ struct UsageSettingsView: View {
     }
 
     private func setLogin(_ enabled: Bool) {
-        #if MANUAL_REVIEW
         if store.isManualReview { loginEnabled = enabled; return }
-        #endif
         guard !store.isDemo else { return }
         do {
             if enabled { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }
@@ -191,9 +189,7 @@ struct UsageSettingsView: View {
     }
 
     private func updateLoginStatus() {
-        #if MANUAL_REVIEW
         if store.isManualReview { return }
-        #endif
         let status = SMAppService.mainApp.status
         loginEnabled = status == .enabled || status == .requiresApproval
         if status == .requiresApproval { loginMessage = L10n.text("Разрешите запуск в System Settings → General → Login Items.") }

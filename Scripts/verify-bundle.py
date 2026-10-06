@@ -46,6 +46,14 @@ print("PASS Bundled ccusage version/digest/signature and signed-update configura
 for provider in ["anthropic", "openai", "google"]:
     assert (app / "Contents/Resources/Providers" / f"{provider}.svg").is_file(), f"Missing provider logo: {provider}"
 extension, entitlements = inspect(widget)
+def icon_bytes(bundle, info):
+    name = info.get("CFBundleIconFile", "")
+    assert name and "/" not in name, "Missing gallery icon metadata"
+    data = (bundle / "Contents/Resources" / (name + ".icns")).read_bytes()
+    assert name == "LLMUsage-" + hashlib.sha256(data).hexdigest()[:16], "Stale gallery icon identity"
+    return data
+
+assert icon_bytes(app, host) == icon_bytes(widget, extension), "App and gallery extension icons differ"
 assert extension["NSExtension"]["NSExtensionPointIdentifier"] == "com.apple.widgetkit-extension"
 assert extension["CFBundlePackageType"] == "XPC!"
 assert extension["CFBundleIdentifier"].startswith(host["CFBundleIdentifier"] + "."), "Extension ID must extend host ID"
