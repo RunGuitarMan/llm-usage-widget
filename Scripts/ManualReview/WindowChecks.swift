@@ -128,7 +128,11 @@ import SwiftUI
                     // A key-window notification precedes SwiftUI's appearance update.
                     // Wait for the actual rendered state, not an arbitrary 200ms delay.
                     try await ReviewCheck.wait("Sidebar appearance did not settle") {
-                        guard NSApp.isActive == active, window.isKeyWindow == active, window.attachedSheet == nil,
+                        // Accessory apps may remain NSApp.isActive after resigning
+                        // their windows. Verify the window state and actual pixels.
+                        let focused = active ? (NSApp.isActive && window.isKeyWindow)
+                            : (!window.isKeyWindow && !window.isMainWindow)
+                        guard focused, window.attachedSheet == nil,
                               let host = window.contentView, let table = ReviewCheck.sidebar(in: host),
                               table.selectedRow >= 0,
                               let row = table.rowView(atRow: table.selectedRow, makeIfNecessary: true),

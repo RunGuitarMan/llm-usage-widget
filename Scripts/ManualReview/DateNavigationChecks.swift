@@ -36,6 +36,10 @@ import AppKit
                 review.changePresentation()
                 try await ReviewCheck.select("calendar", in: review)
                 try await ReviewCheck.resize(window, width: 860)
+                review.showDashboard()
+                try await ReviewCheck.wait("Calendar test requires the visible, active production window") {
+                    NSApp.isActive && window.isVisible && window.isKeyWindow && window.attachedSheet == nil
+                }
                 guard let control = navigation() else {
                     try ReviewCheck.require(false, "Custom date lost its native navigation capsule"); return
                 }

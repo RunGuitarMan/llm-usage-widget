@@ -58,6 +58,7 @@ enum ReviewSize: String, CaseIterable, Identifiable {
     weak var panel: NSWindow?
     private(set) weak var dashboard: NSWindow?
     private var openWindow: ((String) -> Void)?
+    private var presentDashboard: (() -> Void)?
     private var showMenu: (() -> Void)?
     private(set) var chatKind: String?
     private(set) var connectedToAppRoot = false
@@ -143,11 +144,13 @@ enum ReviewSize: String, CaseIterable, Identifiable {
         select(ReviewScenario.all[target].id)
     }
 
-    func connect(window: NSWindow, openWindow: @escaping (String) -> Void, showMenu: @escaping () -> Void) {
+    func connect(window: NSWindow, openWindow: @escaping (String) -> Void,
+                 showDashboard: @escaping () -> Void, showMenu: @escaping () -> Void) {
         guard dashboard !== window else { return }
         dashboard = window
         print("REVIEW Attached to production dashboard scene")
         self.openWindow = openWindow
+        self.presentDashboard = showDashboard
         self.showMenu = showMenu
         guard !connectedToAppRoot else { return }
         connectedToAppRoot = true
@@ -314,9 +317,8 @@ enum ReviewSize: String, CaseIterable, Identifiable {
     }
 
     func showDashboard() {
-        openWindow?("dashboard")
+        presentDashboard?()
         resizeDashboard()
-        dashboard?.makeKeyAndOrderFront(nil)
     }
 
     private func resizeDashboard() {

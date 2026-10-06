@@ -90,12 +90,14 @@ struct LLMUsageApp: App {
         }
         .defaultSize(width: 500, height: 720)
         .defaultLaunchBehavior(.suppressed)
+        .restorationBehavior(.disabled)
         .commandsRemoved()
         Window("Содержимое виджетов — LLM Usage", id: "review-widgets") {
             if let review = ManualReviewController.active { ReviewWidgetsView(review: review, store: store) }
         }
         .defaultSize(width: 960, height: 760)
         .defaultLaunchBehavior(.suppressed)
+        .restorationBehavior(.disabled)
         .commandsRemoved()
     }
 }
@@ -128,6 +130,7 @@ struct AppRootView: View {
                     print("REVIEW Production root appeared; windows: \(NSApp.windows.map { $0.identifier?.rawValue ?? $0.title })")
                     if let window = NSApp.windows.first(where: { $0.identifier?.rawValue == "dashboard" }) {
                         review.connect(window: window, openWindow: { openWindow(id: $0) },
+                                       showDashboard: { appDelegate.dashboard.show { openWindow(id: "dashboard") } },
                                        showMenu: { appDelegate.showMenuBarUsage() })
                     }
                 }
@@ -137,6 +140,7 @@ struct AppRootView: View {
                 if let review = ManualReviewController.active {
                     ReviewWindowConnection { window in
                         review.connect(window: window, openWindow: { openWindow(id: $0) },
+                                       showDashboard: { appDelegate.dashboard.show { openWindow(id: "dashboard") } },
                                        showMenu: { appDelegate.showMenuBarUsage() })
                     }
                 }
