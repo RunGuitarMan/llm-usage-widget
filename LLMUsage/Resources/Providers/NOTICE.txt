@@ -4,6 +4,19 @@ https://github.com/simple-icons/simple-icons/blob/14.0.0/icons/anthropic.svg
 https://github.com/simple-icons/simple-icons/blob/14.0.0/icons/openai.svg
 https://github.com/simple-icons/simple-icons/blob/14.0.0/icons/google.svg
 
+Additional marks: Lobe Icons / @lobehub/icons-static-svg 1.95.1, MIT License
+(LICENSE-LobeHub.txt), https://github.com/lobehub/lobe-icons.
+Source package: https://registry.npmjs.org/@lobehub/icons-static-svg/-/icons-static-svg-1.95.1.tgz
+zai.svg, deepseek.svg, qwen.svg, moonshot.svg, minimax.svg, mistral.svg, meta.svg
+retain their original paths; root dimensions/fill are normalized for AppKit SVG loading.
+
+tbank.svg: official T-Bank artwork from https://www.tbank.ru/about/brand/
+Source: https://cdn.tbank.ru/static/pfa-multimedia/images/e3283f8b-eeb6-4471-9ea7-965ff52435f1.svg
+Only the original shield and T paths are retained, with a square viewBox and
+an even-odd transparent T cutout for monochrome template rendering.
+The T-Bank mark is not covered by the icon collections' CC0 or MIT licenses.
+
 Brand names and marks belong to their respective owners. Their use identifies
-model providers and does not imply endorsement. The app renders the marks as
-monochrome templates so they remain legible in light and dark appearances.
+model providers (or the explicitly branded tgpt prefix) and does not imply
+endorsement. The app renders the marks as monochrome templates so they remain
+legible in light and dark appearances.

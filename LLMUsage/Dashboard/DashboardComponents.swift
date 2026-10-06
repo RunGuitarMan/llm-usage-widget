@@ -298,10 +298,11 @@ struct UsageDatePopover: View {
 struct ProviderLogo: View {
     var provider: ModelProvider
     var helpText: String? = nil
+    static let cornerRadius: CGFloat = 8
 
     static let images: [ModelProvider: NSImage] = {
         var result: [ModelProvider: NSImage] = [:]
-        for provider in [ModelProvider.anthropic, .openai, .google] {
+        for provider in ModelProvider.brandedCases {
             if let url = Bundle.main.url(forResource: provider.rawValue, withExtension: "svg", subdirectory: "Providers"),
                let image = NSImage(contentsOf: url), image.isValid {
                 image.isTemplate = true
@@ -322,28 +323,49 @@ struct ProviderLogo: View {
         }
         .foregroundStyle(.primary.opacity(0.8))
         .frame(width: 30, height: 30)
-        .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 7))
+        .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: Self.cornerRadius))
         .help(helpText ?? L10n.text("Провайдер модели: \(provider.title)"))
         .accessibilityHidden(true)
     }
 }
 
-/// Mixed sessions retain the individual brands instead of a generic layers icon.
+/// Mixed sessions keep their brands in a compact, leading-to-trailing stack.
 struct ProviderLogos: View {
     var models: [String]
-    var sources: [String]
-    private var providers: [ModelProvider] { ModelProvider.logos(models: models, sources: sources) }
-    private var description: String {
-        if ModelProvider.resolve(models: models) == .custom, providers != [.custom] {
-            return L10n.text("Источники") + ": " + sources.map(UsageSource.label).joined(separator: ", ")
-        }
-        return providers.map(\.title).joined(separator: ", ")
-    }
+    private let overlap: CGFloat = 8
+    private var providers: [ModelProvider] { ModelProvider.logos(models: models) }
+    private var description: String { providers.map(\.title).joined(separator: ", ") }
 
     var body: some View {
-        HStack(spacing: 3) {
-            ForEach(providers, id: \.rawValue) { ProviderLogo(provider: $0, helpText: description) }
-        }.help(description).accessibilityElement(children: .ignore).accessibilityLabel(description)
+        HStack(spacing: providers.count > 1 ? -overlap : 0) {
+            ForEach(Array(providers.enumerated()), id: \.element.rawValue) { index, provider in
+                ProviderLogo(provider: provider, helpText: description)
+                    .mask {
+                        if index > 0 {
+                            StackCutout(overlap: overlap).fill(style: FillStyle(eoFill: true))
+                        } else { Rectangle() }
+                    }
+                    .zIndex(Double(providers.count - index))
+            }
+        }
+        #if MANUAL_REVIEW
+        .background(ReviewProviderProbe(models: models, providers: providers, label: description))
+        #endif
+        .help(description).accessibilityElement(children: .ignore).accessibilityLabel(description)
+    }
+
+    /// Cut away the preceding tile and a narrow gap. Every visible tile retains
+    /// the same translucent fill as a solo logo, including over selected rows.
+    private struct StackCutout: Shape {
+        var overlap: CGFloat
+        private let gap: CGFloat = 1.5
+
+        func path(in rect: CGRect) -> Path {
+            var path = Path(rect)
+            let preceding = rect.offsetBy(dx: -(rect.width - overlap), dy: 0).insetBy(dx: -gap, dy: -gap)
+            path.addPath(RoundedRectangle(cornerRadius: ProviderLogo.cornerRadius + gap).path(in: preceding))
+            return path
+        }
     }
 }
 
@@ -376,14 +398,15 @@ struct SessionSummaryRow: View {
         .accessibilityElement(children: .ignore)
         .accessibilityAddTraits(selected ? [.isButton, .isSelected] : [.isButton])
         .accessibilityLabel(L10n.text("\(session.sourceLabel), \(session.shortID), \(UsageFormat.cost(session.usage)), \(UsageFormat.tokens(session.usage.total)) токенов. Подробности"))
-        .accessibilityValue(session.modelLabel + ". " + session.modelProvider.title + ". " + tokenDescription)
+        .accessibilityValue(session.modelLabel + ". " + ModelProvider.logos(models: session.models + session.modelBreakdowns.map(\.id))
+            .map(\.title).joined(separator: ", ") + ". " + tokenDescription)
     }
 
     private func row(compact: Bool) -> some View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 12) {
-                    ProviderLogos(models: session.models + session.modelBreakdowns.map(\.id), sources: [session.sourceID])
+                    ProviderLogos(models: session.models + session.modelBreakdowns.map(\.id))
                     VStack(alignment: .leading, spacing: 3) {
                         Text(session.modelLabel).font(.system(size: 14, weight: .medium)).lineLimit(1)
                             .help(session.modelLabel)

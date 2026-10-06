@@ -1,12 +1,40 @@
 {
   "schemaVersion": 1,
   "ccusage": {
-    "version": "20.0.26",
-    "contractVersion": 1,
+    "version": "20.0.26-llmusage.3",
+    "upstreamVersion": "20.0.26",
+    "contractVersion": 2,
     "architecture": "arm64",
-    "url": "https://registry.npmjs.org/@ccusage/ccusage-darwin-arm64/-/ccusage-darwin-arm64-20.0.26.tgz",
-    "sha512": "c1cd847747a53c04694727d0912ad25ee5f5dfac8310638b90cab1400ff781d366fbf8718003787ca799b1ac0529e9687cba02bd6232f909146d227bd41c0dc7",
-    "binarySHA256": "6d816ab7e989d475f19b8178330435209b31b7714496f1fcbc9bdf6951082d03"
+    "source": {
+      "commit": "d9821088b98aa536c7a385aa1a4579d6fa02269b",
+      "url": "https://api.github.com/repos/ccusage/ccusage/tarball/d9821088b98aa536c7a385aa1a4579d6fa02269b",
+      "sha256": "4541da613755c1e71289620e2c9f5fa2461cad1ca00bf4054847b1c4133444ce"
+    },
+    "patch": {
+      "path": "Configuration/Patches/ccusage-20.0.26-response-boundaries.patch",
+      "sha256": "648e9cdbd005b03feedd00c28eb2315739e9beb29c24e312963fc692437119a6"
+    },
+    "rust": {
+      "version": "1.97.1",
+      "components": [
+        {
+          "url": "https://static.rust-lang.org/dist/2026-07-16/cargo-1.97.1-aarch64-apple-darwin.tar.xz",
+          "sha256": "2d84a74e9558192a7de674aca6aa3ab7464bed2df97e0377156ddb7e09a0fd7a"
+        },
+        {
+          "url": "https://static.rust-lang.org/dist/2026-07-16/rustc-1.97.1-aarch64-apple-darwin.tar.xz",
+          "sha256": "6076cad38ccabaa24325f26a74080a363a2633a9cd34c473a8977255d8a593cb"
+        },
+        {
+          "url": "https://static.rust-lang.org/dist/2026-07-16/rust-std-1.97.1-aarch64-apple-darwin.tar.xz",
+          "sha256": "a4895f5c6995e83cab8687e46b14324592398049def71ce75ca308c981cf200d"
+        }
+      ]
+    },
+    "pricing": {
+      "url": "https://raw.githubusercontent.com/BerriAI/litellm/e73abe6c72785ad91d4927da26de3a5d1b54300b/model_prices_and_context_window.json",
+      "sha256": "fbb16319dc9b1e1ced94cd532ee7a8cb8edbdb22e311b12514872633067f7537"
+    }
   },
   "sparkle": {
     "version": "2.10.0",

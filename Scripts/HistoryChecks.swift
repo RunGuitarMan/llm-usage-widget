@@ -6,6 +6,8 @@ private func requireHistory(_ condition: @autoclosure () -> Bool, _ message: Str
 }
 
 private actor HistoryFixtureService: CCUsageServing {
+    nonisolated let engineID: String?
+    init(engineID: String? = nil) { self.engineID = engineID }
     var requests: [(UsageDay, String)] = []
     var historicalDelay: Duration = .zero
     var todayDelay: Duration = .zero
@@ -43,6 +45,33 @@ private actor HistoryMemoryRepository: SnapshotPersisting {
 
 enum HistoryChecks {
     @MainActor static func run(check: (String, () async throws -> Void) async -> Void) async {
+        await check("History: patched engine recalculates every cached day and republishes widget data") {
+            let suite = "LLMUsage.EngineMigration.\(UUID())"
+            let defaults = UserDefaults(suiteName: suite)!
+            defer { defaults.removePersistentDomain(forName: suite) }
+            let repository = HistoryMemoryRepository()
+            let oldService = HistoryFixtureService(engineID: "ccusage/20.0.26/contract-1")
+            let old = UsageStore(service: oldService, repository: repository, defaults: defaults, reloadWidget: {})
+            await old.refresh()
+            await old.waitForHistoryBackfill()
+            let newService = HistoryFixtureService(engineID: "ccusage/20.0.26-llmusage.3/contract-2")
+            var reloads = 0
+            let updated = UsageStore(service: newService, repository: repository, defaults: defaults, reloadWidget: { reloads += 1 })
+            await updated.refresh()
+            await updated.waitForHistoryBackfill()
+            let count = await newService.requestCount()
+            let today = await repository.read(.today)
+            let yesterday = await repository.read(.yesterday)
+            let history = await repository.readHistory()
+            try requireHistory(count == 7 && history?.days.count == 7, "Old engine totals skipped recalculation")
+            try requireHistory(today?.dataContext == updated.dataContext && yesterday?.dataContext == updated.dataContext
+                               && history?.context == updated.dataContext && reloads >= 7, "Widget files or invalidations kept the old engine")
+            let restarted = UsageStore(service: newService, repository: repository, defaults: defaults, reloadWidget: {})
+            await restarted.refresh()
+            await restarted.waitForHistoryBackfill()
+            let afterRestart = await newService.requestCount()
+            try requireHistory(afterRestart == 8, "Recalculated history was not reusable after restart")
+        }
         await check("History: missing differs from zero; partial yesterday must be refetched") {
             let now = ISO8601DateFormatter().date(from: "2026-09-29T10:00:00Z")!
             let today = UsageDay(date: now)

@@ -3,6 +3,7 @@ import AppKit
 
 @MainActor
 final class UsageAppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
+    let dashboard = DashboardWindowCoordinator()
     private var menuBarController: MenuBarController?
     private let menuLocalization = AppMenuLocalization()
     private let iconAppearance = AppIconAppearance()
@@ -74,7 +75,7 @@ struct LLMUsageApp: App {
         #if MANUAL_REVIEW
         .defaultLaunchBehavior(.presented)
         .onChange(of: appDelegate.reviewLaunchReady, initial: true) { _, ready in
-            if ready { openWindow(id: "dashboard"); NSApp.activate(ignoringOtherApps: true) }
+            if ready { appDelegate.dashboard.show { openWindow(id: "dashboard") } }
         }
         #endif
         .defaultSize(width: 1080, height: 760)
@@ -84,7 +85,7 @@ struct LLMUsageApp: App {
         .windowManagerRole(.principal)
         .commands {
             CommandGroup(replacing: .appSettings) {
-                OpenUsageButton(store: store, route: .settings, title: L10n.text("Настройки…")).keyboardShortcut(",")
+                OpenUsageButton(store: store, dashboard: appDelegate.dashboard, route: .settings, title: L10n.text("Настройки…")).keyboardShortcut(",")
             }
             CommandGroup(after: .appSettings) {
                 Button(L10n.text("Проверить обновления…")) { AppUpdateCoordinator.shared.check() }
@@ -98,7 +99,7 @@ struct LLMUsageApp: App {
             }
             #endif
             CommandGroup(after: .windowArrangement) {
-                OpenUsageButton(store: store, route: .overview, title: L10n.text("Открыть Dashboard"))
+                OpenUsageButton(store: store, dashboard: appDelegate.dashboard, route: .overview, title: L10n.text("Открыть обзор"))
                 Button(L10n.text("Показать статистику в строке меню")) { appDelegate.showMenuBarUsage() }
                     .keyboardShortcut("u", modifiers: [.command, .shift])
             }
@@ -127,15 +128,15 @@ struct AppRootView: View {
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
-        DashboardView(store: store)
+        DashboardView(store: store, dashboardWindow: appDelegate.dashboard)
             .sheet(isPresented: $updates.presentsSetup) { AppMaintenanceSetup(updates: updates) }
             .environment(\.locale, store.interfaceLanguage.locale)
             .id(store.interfaceLanguage)
+            .background { DashboardWindowConnection(coordinator: appDelegate.dashboard) }
             .task {
                 appDelegate.installMenuBar(store: store) { [store, openWindow] route in
                     store.navigate(route)
-                    openWindow(id: "dashboard")
-                    NSApp.activate(ignoringOtherApps: true)
+                    appDelegate.dashboard.show { openWindow(id: "dashboard") }
                 }
                 #if MANUAL_REVIEW
                 store.start()
@@ -144,8 +145,7 @@ struct AppRootView: View {
                 else {
                     updates.start(store: store) {
                         store.navigate(.settings)
-                        openWindow(id: "dashboard")
-                        NSApp.activate(ignoringOtherApps: true)
+                        appDelegate.dashboard.show { openWindow(id: "dashboard") }
                     }
                 }
                 #endif
@@ -180,26 +180,24 @@ struct AppRootView: View {
             .onOpenURL { url in
                 guard let route = UsageRoute(url: url) else { return }
                 store.navigate(route)
-                openWindow(id: "dashboard")
-                NSApp.activate(ignoringOtherApps: true)
+                appDelegate.dashboard.show { openWindow(id: "dashboard") }
             }
             .onReceive(NotificationCenter.default.publisher(for: .openUsageDashboard)) { _ in
-                openWindow(id: "dashboard")
-                NSApp.activate(ignoringOtherApps: true)
+                appDelegate.dashboard.show { openWindow(id: "dashboard") }
             }
     }
 }
 
 struct OpenUsageButton: View {
     @ObservedObject var store: UsageStore
+    var dashboard: DashboardWindowCoordinator
     var route: UsageRoute
     var title: String
     @Environment(\.openWindow) private var openWindow
     var body: some View {
         Button(title) {
             store.navigate(route)
-            openWindow(id: "dashboard")
-            NSApp.activate(ignoringOtherApps: true)
+            dashboard.show { openWindow(id: "dashboard") }
         }
     }
 }

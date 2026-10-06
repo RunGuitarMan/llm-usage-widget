@@ -3,12 +3,14 @@ import SwiftUI
 import WidgetKit
 
 enum ReviewFixture: String, CaseIterable {
-    case normal, many, navigation, empty, loading, missing, failure, refreshing, stale, partial, huge, zero, gaps, storage
+    case normal, many, navigation, dailyCosts, providers, empty, loading, missing, failure, refreshing, stale, partial, huge, zero, gaps, storage
     var title: String {
         switch self {
         case .normal: return "Обычные данные"
         case .many: return "40 сессий"
         case .navigation: return "Переходы к сессиям"
+        case .dailyCosts: return "Расходы по дням"
+        case .providers: return "Логотипы моделей и TGPT"
         case .empty: return "Нет сессий"
         case .loading: return "Первая загрузка"
         case .missing: return "Нет подключения"
@@ -26,6 +28,38 @@ enum ReviewFixture: String, CaseIterable {
         if [.loading, .missing, .storage].contains(self) { return nil }
         var data = SampleData.multiSourceSnapshot()
         data.day = day
+        if self == .providers {
+            let rows: [(String, [String], String)] = [
+                ("tgpt", ["tgpt/super-mega-llm-999b"], "claude"),
+                ("glm", ["openrouter/z-ai/glm-5"], "claude"),
+                ("mixed", ["claude-sonnet-4.6", "tgpt/gpt-6", "unknown-model"], "codex"),
+                ("anthropic", ["claude-sonnet-4.6"], "claude"),
+                ("unknown", ["custom-model"], "claude"),
+                ("openai", ["gpt-6"], "claude"),
+                ("google", ["gemini-2.5-pro"], "codex"),
+                ("deepseek", ["deepseek-chat"], "claude"),
+                ("qwen", ["Qwen/Qwen3-32B"], "opencode"),
+                ("moonshot", ["moonshotai/kimi-k2"], "claude"),
+                ("minimax", ["MiniMax-M2"], "opencode"),
+                ("mistral", ["mistralai/codestral-latest"], "claude"),
+                ("meta", ["meta-llama/Llama-3.3-70B-Instruct"], "codex"),
+                ("empty", [], "claude"),
+                ("breakdown", [], "claude")
+            ]
+            data.sessions = rows.enumerated().map { index, row in
+                UsageSession(id: "provider-" + row.0, models: row.1,
+                             usage: .init(input: Int64(1_000 * (rows.count - index)), cost: Double(rows.count - index)),
+                             agent: row.2)
+            }
+            data.sessions[data.sessions.count - 1].modelBreakdowns = [
+                .init(id: "zhipuai/glm4.7", usage: .init(input: 500, cost: 0.5)),
+                .init(id: "tgpt/claude-opus", usage: .init(input: 500, cost: 0.5))
+            ]
+        }
+        if self == .dailyCosts {
+            let multiplier = Double((Int(day.key.suffix(2)) ?? 1) % 7 + 1) / 4
+            for index in data.sessions.indices { data.sessions[index].usage.cost *= multiplier }
+        }
         if self == .navigation {
             data.sessions = (0..<20).map { index in
                 UsageSession(id: "navigation-\(index)", models: ["claude-navigation-\(index)"],
@@ -90,6 +124,7 @@ struct ReviewScenario: Identifiable {
                               title: title, instructions: instructions, target: .dashboard(tab, fixture, option)))
         }
         dashboard("overview", "Статистика · обычный день", "Раскрой состав токенов и список сессий. Проверь сортировку, выбор источника и подсказки при наведении.")
+        dashboard("window-chrome", "Окно · скругления и повторное открытие", "Сузь окно до минимума и выбери сессию: окно расширится, скругление левого меню должно остаться согласованным с краем окна. Закрой подробности, снова сузь окно и повтори. Закрой дашборд красной кнопкой или ⌘W и открой через строку меню: края и шапка не должны скачком менять форму.")
         for fixture in [ReviewFixture.many, .empty, .loading, .missing, .failure, .refreshing, .partial, .huge, .zero] {
             dashboard("overview-" + fixture.rawValue, fixture.title,
                       "Проверь заголовки, числа и сообщения. Измени размер окна. Состояние сохраняется до следующего шага; Кнопка обновления использует обычную загрузку. «Успешный ответ источника» снимает ошибку или завершает удерживаемую загрузку.", fixture: fixture,
@@ -100,7 +135,7 @@ struct ReviewScenario: Identifiable {
         dashboard("search-empty", "Поиск · ничего не найдено", "Очисти запрос и проверь возвращение строк. Переключи фильтр модели.", option: "no-results")
         dashboard("source", "Один источник", "Выбран Codex. Переключи источники слева и верни «Все источники».", option: "source")
         dashboard("yesterday", "Вчера", "Проверь подпись дня и выбор периода. Выбери «Сегодня» и «Другая дата».", option: "yesterday")
-        dashboard("calendar", "Календарь и другая дата", "Нажми дату в шапке. Проверь выбор дня, кнопки смены месяца, «Сегодня» и Escape для отмены.", option: "calendar")
+        dashboard("calendar", "Календарь и другая дата", "Листай дни стрелками в капсуле даты, в том числе быстрыми кликами: дата и бюджет должны совпадать, кнопки — оставаться на месте. Дойди до сегодня: правая стрелка отключается. Нажми дату, проверь месяцы, выбор дня, «Сегодня» и Escape. При открытом календаре стрелка дня закрывает его и сразу переключает отчёт.", fixture: .dailyCosts, option: "calendar")
         dashboard("budget", "Бюджет · превышение", "Проверь индикатор бюджета. В настройках можно изменить лимит и вернуться сюда.", option: "budget")
         dashboard("inspector", "Инспектор и окно чата", "Раскрой дополнительную информацию, скопируй ID. Нажми значок чата: откроется настоящий sheet с тестовым разговором. Закрой его и инспектор.", option: "inspector")
         dashboard("inspector-long", "Инспектор · длинные значения", "Раскрой ID и путь проекта. Проверь переносы, копирование и сужение окна.", fixture: .huge, option: "inspector")
@@ -108,6 +143,9 @@ struct ReviewScenario: Identifiable {
         dashboard("models-excluded", "Исключённая модель", "Включи исключённую модель и проверь изменение сумм. Исключи её снова.", tab: .models, option: "excluded")
         dashboard("models-empty", "Модели · пусто", "Проверь пустое состояние и переход к настройкам исключений.", tab: .models, fixture: .empty)
         dashboard("models-long", "Модели · длинные названия", "Проверь длинную и смешанную модель на узком окне.", tab: .models, fixture: .huge)
+        dashboard("provider-sessions", "Логотипы · модели в разных инструментах", "Проверь GLM в Claude Code (Z.AI), префикс tgpt (щит Т-Банка), неизвестные модели (нейтральная иконка) и смешанные сессии. Название инструмента показано отдельно.", fixture: .providers, option: "expanded")
+        dashboard("provider-models", "Логотипы · все производители", "Проверь логотипы всех производителей в светлой и тёмной теме. В смешанной строке видны Anthropic, Т-Банк и нейтральная иконка. Сравни одиночный Anthropic и Anthropic в стеке: фон и яркость должны совпадать в обеих темах. GLM сохраняет Z.AI при исключении из итогов.", tab: .models, fixture: .providers)
+        dashboard("provider-inspector", "Логотипы · подробности сессии", "Проверь щит с буквой Т и подпись Claude Code. Выбери GLM, смешанную сессию и сессию с неизвестной моделью; логотипы должны совпадать со списком.", fixture: .providers, option: "inspector")
         dashboard("settings", "Настройки · все разделы", "Раскрой подключение и хранилище. Измени язык, интервалы, вид меню и бюджет. Автозапуск здесь только имитируется.", tab: .settings)
         dashboard("settings-cli", "Настройки · ccusage не найден", "Проверь текст ошибки и технические подробности. «Найти автоматически» и «Проверить» используют тестовый сервис; выбор файла открывает системный диалог.", tab: .settings, fixture: .missing)
         dashboard("settings-storage", "Настройки · ошибка хранилища", "Раскрой диагностику и технические подробности. Проверь текст ошибки.", tab: .settings, fixture: .storage)

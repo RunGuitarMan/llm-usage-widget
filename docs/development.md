@@ -31,11 +31,19 @@ Use bundle identifiers and a shared App Group registered to your team. Xcode bui
 
 Keep build products, reports, downloaded tools and previews under ignored `build/`. Do not commit local logs, exported conversations, credentials or `Configuration/Local.xcconfig`. Existing `ClaudeUsage` bundle IDs, storage keys and URL aliases preserve compatibility with older installations.
 
+## Application version
+
+Manually choose the version for each PR in `.github/release.json`, for example `{"version": "1.5.1"}`. It must be strictly higher than the current `main` version; PR titles and commit counts do not select the visible version. Further commits in the same PR can keep that number while it remains higher than `main`.
+
+Script builds, Xcode, the widget and the review catalogue all read this same file through `Scripts/build_version.py`, including uncommitted version edits in development builds. Development/review builds retain the **Test build** label. The separate internal build number is the first-parent Git history length. Full Git history is required; release tags are not the version source. Do not set a different `MARKETING_VERSION` or `CURRENT_PROJECT_VERSION` in `Local.xcconfig` or the environment: conflicting overrides fail the build.
+
+Merging PRs only runs checks, so several versioned PRs can accumulate before publication. When ready, use **GitHub → Actions → Release → Run workflow** on **main**. The release uses the version of the commit selected at dispatch. See [Releases](releases.md) for validation, artifacts and retries.
+
 ## Data flow
 
-`UsageStore` coordinates refreshes, date/source selection, cached snapshots and model exclusions. `CCUsageService` runs the external CLI through `ProcessRunner`; the app aggregates its report, and WidgetKit reads saved snapshots. The widget does not scan logs or launch the CLI. Closing the dashboard leaves the menu bar process running; its context menu contains Quit.
+`UsageStore` coordinates refreshes, date/source selection, cached snapshots and model exclusions. `CCUsageService` runs the external CLI through `ProcessRunner`; the app aggregates its report, and WidgetKit reads saved snapshots. The widget does not scan logs or launch the CLI. Closing the dashboard hides the existing scene and keeps its toolbar ready for the next presentation; the menu bar process stays running and its context menu contains Quit. `DashboardWindowCoordinator` observes that same scene window, forwards its native delegate behavior, and prepares the window width before SwiftUI opens an inspector. The first toolbar layout releases the initial presentation so the titlebar-only frame is never shown.
 
-The tested CLI is `ccusage@20.0.26`:
+The bundled CLI is `ccusage@20.0.26-llmusage.3`, built from upstream 20.0.26 with the reviewed response-boundary patch in `Configuration/Patches`:
 
 - **Claude only** runs the focused `ccusage claude session --json` report for the requested day.
 - **All agents** runs the unified `ccusage session --json --all` report and the focused Claude report concurrently, then replaces the unified Claude rows. This corrects the tested CLI's Claude day-boundary errors. Both commands must succeed before saving the result.
@@ -43,7 +51,11 @@ The tested CLI is `ccusage@20.0.26`:
 
 The app uses only `Contents/Helpers/ccusage`, a native arm64 executable pinned in `Configuration/Dependencies.json`. It requires no Node.js or npm. `CCUsageRuntime` gates execution on explicit consent, validates the final signed binary digest and exact version, and shares a lease across reports and transcript pricing. Existing custom-path preferences are preserved but ignored by the managed runtime; the legacy resolver remains only for injected test services.
 
-Build scripts and the generated Xcode project use the same checksum-verified dependency cache. To upgrade ccusage, update its version, archive URL, SHA-512 and unsigned binary SHA-256 in the lock file; review upstream changes and run the synthetic CLI and pricing checks. Increment `contractVersion` when adapter semantics change. The embedded manifest records the digest after signing. Dependency versions never float at build or launch time.
+Build scripts and the generated Xcode project use the same checksum-verified dependency cache. `Configuration/Dependencies.json` pins the upstream commit/archive, patch, Rust 1.97.1 components, and upstream LiteLLM snapshot by SHA-256. Cargo uses the upstream lockfile with `--locked`. Build tools stay under `build/Dependencies`; end users still need no compiler or package manager. This portable build recipe uses pinned Cargo directly, without requiring upstream's Nix developer shell.
+
+To update the patch, review the diff, update its digest and helper version in the lock, and run the synthetic CLI and pricing checks. Increment `contractVersion` when accounting semantics change (this patch uses contract 2). A build receipt binds the compiled helper's digest to the locked inputs; embedding verifies that receipt and records the final signed digest and source/patch provenance in the app. The SDK/linker remain supplied by the selected Apple toolchain, so source reproducibility does not claim identical Mach-O bytes across different SDKs. Dependency versions never float at launch.
+
+The Claude patch coalesces consecutive requestless assistant fragments only when `parentUuid` links to the previous assistant `uuid`, their session/message/model and input/cache counters agree, output does not decrease, and speed/sidechain status match. `stop_reason` is deliberately ignored: real Claude transcripts repeat `tool_use` and `end_turn` on fragments of one response. Interleaved tool blocks can also share one charge when the UUID chain passes only through results owned by the preceding tool fragment and optional `hook_success` attachments. This narrower path requires identical counters, tool-only assistant content, and disjoint tool IDs. User prompts, mixed user input, foreign tool results, unknown attachments, new text answers, changed counters or broken ancestry establish a new response. Without a trustworthy request ID, this is a structural inference: a proxy that also repeats every usage counter on distinct tool responses can make those responses indistinguishable from fragments. It is not a global message-ID deduplication rule. Unlinked gateway exports retain upstream timestamp-based counting. Both CLI loaders and chat inspection follow this rule. Deduplication precedes day filtering; a completed fragment crossing midnight belongs to the day of its most complete record. Raw logs are never rewritten.
 
 ## Pricing and accounting
 
@@ -55,7 +67,9 @@ Rates reach ccusage through private temporary `pricingOverrides` configuration. 
 
 Model exclusions match exact names without case sensitivity; Z.ai / GLM are excluded by default. Exclusions affect Statistics, history, menu bar and widgets while preserving session records. Models shows original amounts for reference, marks excluded rows and keeps its included-spending total separate. A mixed session without a complete per-model breakdown is excluded as a whole if any of its models is excluded.
 
-Provider logos follow known model names independently of the coding agent. Mixed sessions show their known providers; an unknown model falls back to its source logo with a source tooltip. The daily budget uses the day's included total across sources, even when the screen is filtered to one source.
+Provider logos follow model families independently of the coding agent: Anthropic, OpenAI, Google, Z.AI (GLM/ChatGLM), DeepSeek, Qwen, Moonshot AI (Kimi), MiniMax, Mistral AI and Meta (Llama). After trimming whitespace and ignoring case, a model ID starting with `tgpt` takes priority and displays the T-Bank shield, including `tgpt/gpt-…`. Router namespaces and versioned model names are supported; opaque aliases remain unknown. Mixed sessions show deduplicated logos in a stable, overlapping stack with cutout separators and the same translucent backgrounds as solo icons, including a neutral icon for unknown models. The tooltip and accessibility label list every provider. Empty metadata uses the neutral icon only when no model names are available. Tool names remain separate source labels. Logo recognition is independent of model exclusions and pricing. Logo sources and adaptations are recorded in `LLMUsage/Resources/Providers/NOTICE.txt`.
+
+The daily budget uses the day's included total across sources, even when the screen is filtered to one source.
 
 ## Chat inspection
 

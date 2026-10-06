@@ -7,14 +7,14 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read
 
-# Cancel outdated PR checks, but preserve every main commit's release run.
-# Different main commits have independent groups and deterministic version numbers.
+# Cancel outdated PR checks; retain checks for each main or manual commit.
 concurrency:
-  group: ci-${{ github.event.pull_request.number || github.sha }}
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -34,11 +34,15 @@ jobs:
           xcodebuild -version
           swift --version
           test "$(uname -m)" = arm64
-      - name: Validate release type in PR title
-        if: github.event_name == 'pull_request'
+      - name: Require a manually increased repository version
         env:
-          PR_TITLE: ${{ github.event.pull_request.title }}
-        run: python3 Scripts/release_version.py --check-title "$PR_TITLE"
+          VERSION_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          if [ -n "$VERSION_BASE" ]; then
+            python3 Scripts/release_version.py --check-increase "$VERSION_BASE"
+          else
+            python3 Scripts/release_version.py
+          fi
       - name: Test release versioning
         run: python3 -m unittest discover -s Scripts -p 'test_*.py' -v
       - name: Run Swift unit tests
@@ -58,54 +62,8 @@ jobs:
           python3 Scripts/build_version.py --verify-bundle \
             'build/XcodeVersionCheck/Build/Products/Debug/LLM Usage.app' --with-widget
       - name: Verify bundled native CLI against synthetic pricing fixtures
-        run: build/portable-checks --bundled-cli
+        run: |
+          python3 Scripts/check-claude-streams.py
+          build/portable-checks --bundled-cli
       - name: Exercise signed app updates and download-only policy
         run: bash Scripts/check-updates.sh
-
-  release:
-    name: Release
-    needs: tests
-    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-    runs-on: macos-26
-    timeout-minutes: 30
-    permissions:
-      contents: write
-    steps:
-      - name: Check out tested commit and full history
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-      - name: Calculate version
-        id: version
-        run: python3 Scripts/release_version.py --github-output
-      - name: Build versioned app
-        env:
-          LLM_UPDATE_CHANNEL: release
-        run: |
-          test "$(uname -m)" = arm64
-          bash Scripts/build-local.sh
-      - name: Package app and checksum
-        env:
-          RELEASE_TAG: ${{ steps.version.outputs.tag }}
-        run: |
-          mkdir -p build/release
-          ditto -c -k --sequesterRsrc --keepParent \
-            'build/LLM Usage.app' "build/release/LLM-Usage-${RELEASE_TAG}-macOS-arm64.zip"
-          cd build/release
-          shasum -a 256 "LLM-Usage-${RELEASE_TAG}-macOS-arm64.zip" > SHA256SUMS.txt
-      - name: Sign update archive and feed
-        env:
-          RELEASE_TAG: ${{ steps.version.outputs.tag }}
-          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
-        run: |
-          test -n "$SPARKLE_PRIVATE_KEY"
-          source Scripts/toolchain.sh
-          "$LLM_SWIFTC" -sdk "$SDK_PATH" -module-cache-path "$PWD/build/ModuleCache" \
-            Scripts/VerifyUpdate.swift -o build/verify-update
-          python3 Scripts/sign_release.py
-      - name: Publish GitHub release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ steps.version.outputs.tag }}
-        run: python3 Scripts/publish_release.py

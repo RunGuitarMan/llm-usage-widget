@@ -1,0 +1,76 @@
+name: Release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Serialize publications so an older run cannot replace a newer update feed.
+concurrency:
+  group: manual-release
+  cancel-in-progress: false
+
+jobs:
+  tests:
+    name: Verify release commit
+    if: github.ref == 'refs/heads/main'
+    uses: ./.github/workflows/ci.yml
+
+  release:
+    name: Release
+    needs: tests
+    if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'
+    runs-on: macos-26
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    steps:
+      - name: Check out tested commit and full history
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Read repository version and Git build number
+        id: version
+        run: python3 Scripts/release_version.py --github-output
+      - name: Check publication eligibility
+        id: publication
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+        run: python3 Scripts/publish_release.py --check --github-output
+      - name: Build versioned app
+        if: steps.publication.outputs.published != 'true'
+        env:
+          LLM_UPDATE_CHANNEL: release
+        run: |
+          test "$(uname -m)" = arm64
+          bash Scripts/build-local.sh
+      - name: Package app and checksum
+        if: steps.publication.outputs.published != 'true'
+        env:
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          mkdir -p build/release
+          ditto -c -k --sequesterRsrc --keepParent \
+            'build/LLM Usage.app' "build/release/LLM-Usage-${RELEASE_TAG}-macOS-arm64.zip"
+          cd build/release
+          shasum -a 256 "LLM-Usage-${RELEASE_TAG}-macOS-arm64.zip" > SHA256SUMS.txt
+      - name: Sign update archive and feed
+        if: steps.publication.outputs.published != 'true'
+        env:
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        run: |
+          test -n "$SPARKLE_PRIVATE_KEY"
+          source Scripts/toolchain.sh
+          "$LLM_SWIFTC" -sdk "$SDK_PATH" -module-cache-path "$PWD/build/ModuleCache" \
+            Scripts/VerifyUpdate.swift -o build/verify-update
+          python3 Scripts/sign_release.py
+      - name: Publish GitHub release
+        if: steps.publication.outputs.published != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+        run: python3 Scripts/publish_release.py

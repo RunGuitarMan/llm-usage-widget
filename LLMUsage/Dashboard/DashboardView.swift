@@ -86,10 +86,72 @@ private final class PeriodPopUpButton: NSPopUpButton {
     }
 }
 
+/// One native toolbar capsule; fixed segment widths keep both arrows under the cursor.
+private struct DateToolbarPicker: NSViewRepresentable {
+    @ObservedObject var store: UsageStore
+    var onCalendar: () -> Void
+    var onMove: (Int) -> Void
+
+    func makeCoordinator() -> Coordinator { Coordinator(onCalendar: onCalendar, onMove: onMove) }
+
+    func makeNSView(context: Context) -> NSSegmentedControl {
+        let control = NSSegmentedControl(frame: .zero)
+        control.identifier = NSUserInterfaceItemIdentifier("day-navigation")
+        control.segmentCount = 3
+        control.trackingMode = .momentary
+        control.segmentStyle = .automatic
+        control.controlSize = .large
+        control.font = .systemFont(ofSize: 13)
+        control.setWidth(32, forSegment: 0)
+        control.setWidth(160, forSegment: 1)
+        control.setWidth(32, forSegment: 2)
+        control.target = context.coordinator
+        control.action = #selector(Coordinator.selectSegment(_:))
+        updateNSView(control, context: context)
+        return control
+    }
+
+    func updateNSView(_ control: NSSegmentedControl, context: Context) {
+        context.coordinator.onCalendar = onCalendar
+        context.coordinator.onMove = onMove
+        let date = UsageFormat.date(store.customDate, timezone: store.timezone)
+        let titles = [L10n.text("Предыдущий день"), L10n.text("Выбрать дату: \(date)"), L10n.text("Следующий день")]
+        for (index, symbol) in ["chevron.left", "calendar", "chevron.right"].enumerated() {
+            control.setImage(NSImage(systemSymbolName: symbol, accessibilityDescription: titles[index]), forSegment: index)
+            control.setToolTip(titles[index], forSegment: index)
+        }
+        control.setLabel(date, forSegment: 1)
+        control.setEnabled(store.canMoveSelectedDay(by: -1), forSegment: 0)
+        control.setEnabled(!store.isDemo, forSegment: 1)
+        control.setEnabled(store.canMoveSelectedDay(by: 1), forSegment: 2)
+    }
+
+    @MainActor final class Coordinator {
+        var onCalendar: () -> Void
+        var onMove: (Int) -> Void
+        init(onCalendar: @escaping () -> Void, onMove: @escaping (Int) -> Void) {
+            self.onCalendar = onCalendar
+            self.onMove = onMove
+        }
+        @objc func selectSegment(_ control: NSSegmentedControl) {
+            let segment = control.selectedSegment
+            guard (0..<3).contains(segment), control.isEnabled(forSegment: segment) else { return }
+            switch segment {
+            case 0: onMove(-1)
+            case 2: onMove(1)
+            default: onCalendar()
+            }
+        }
+    }
+}
+
 struct DashboardView: View {
     @ObservedObject var store: UsageStore
+    @ObservedObject var dashboardWindow = DashboardWindowCoordinator()
     @State private var visibility = NavigationSplitViewVisibility.all
     @State private var showTokenDetails = false
+    @State private var inspectorSessionID: String?
+    @State private var inspectorPresented = false
     @State private var datePopover: DatePopoverAnchor?
     private enum DatePopoverAnchor { case period, date }
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -98,6 +160,11 @@ struct DashboardView: View {
     // Content-only image previews avoid bitmap-caching system-composited glass panels.
     var contentPreview: some View { detail }
     var sidebarPreview: some View { sidebar }
+    private var requestedSessionID: String? { store.tab == .settings ? nil : store.selectedSessionID }
+    private struct InspectorRequest: Equatable {
+        var sessionID: String?
+        var connected: Bool
+    }
 
     var body: some View {
         NavigationSplitView(columnVisibility: $visibility) {
@@ -111,20 +178,34 @@ struct DashboardView: View {
                 .navigationSplitViewColumnWidth(min: 520, ideal: 700)
                 .navigationTitle(store.tab.title)
                 .toolbar { dashboardToolbar }
-                .inspector(isPresented: Binding(
-                    get: { store.selectedSessionID != nil && store.tab != .settings },
-                    set: { if !$0 { store.selectedSessionID = nil } }
-                )) {
-                    if let id = store.selectedSessionID {
+                .inspector(isPresented: $inspectorPresented) {
+                    // Keep the column's content and width through its dismissal.
+                    // Removing them early leaves an empty native inspector at its
+                    // default width while SwiftUI is still collapsing the column.
+                    if let id = store.selectedSessionID ?? inspectorSessionID {
                         SessionDetailView(store: store, sessionID: id)
                             .inspectorColumnWidth(min: 280, ideal: 310, max: 360)
                     }
                 }
         }
         .navigationSplitViewStyle(.balanced)
-        // Reserve space for all three columns, including the user's widest sidebar
-        // and inspector. The scene's contentMinSize expands the window on selection.
-        .frame(minWidth: store.selectedSessionID != nil && store.tab != .settings ? 1160 : 860, minHeight: 560)
+        // The coordinator first expands the native window, then presents the
+        // inspector and reserves its width. Doing both in one layout breaks the
+        // system sidebar's concentric corners on Tahoe.
+        .frame(minWidth: inspectorPresented
+               ? DashboardWindowCoordinator.inspectorMinimumWidth : DashboardWindowCoordinator.minimumWidth, minHeight: 560)
+        .task(id: InspectorRequest(sessionID: requestedSessionID, connected: dashboardWindow.isConnected)) {
+            guard !Task.isCancelled else { return }
+            guard let id = requestedSessionID else { presentInspector(false); return }
+            guard dashboardWindow.isConnected else { return }
+            inspectorSessionID = id
+            await dashboardWindow.prepareForInspector()
+            guard !Task.isCancelled else { return }
+            presentInspector(true)
+        }
+        .onChange(of: inspectorPresented) { _, presented in
+            if !presented { store.selectedSessionID = nil }
+        }
         .onChange(of: store.tab) { _, tab in if tab == .settings { store.selectedSessionID = nil } }
         .onChange(of: store.sourceFilter) { _, _ in
             if let session = store.selectedSession, !store.sourceFilter.isEmpty,
@@ -132,6 +213,15 @@ struct DashboardView: View {
                 store.selectedSessionID = nil
             }
         }
+    }
+
+    private func presentInspector(_ presented: Bool) {
+        // Native split-view animation completions can write an obsolete `true`
+        // back after a quick dismissal. Match the nonanimated window resize and
+        // apply this structural transition without a second animation in flight.
+        var transaction = Transaction(animation: nil)
+        transaction.disablesAnimations = true
+        withTransaction(transaction) { inspectorPresented = presented }
     }
 
     private var sidebar: some View {
@@ -210,13 +300,10 @@ struct DashboardView: View {
         if store.tab != .settings {
             ToolbarItem(placement: .automatic) {
                 if store.period == .custom {
-                    Button { datePopover = .date } label: {
-                        Label(UsageFormat.date(store.customDate, timezone: store.timezone), systemImage: "calendar")
-                            .labelStyle(.titleAndIcon).font(.system(size: 13)).fixedSize()
-                    }
-                    .disabled(store.isDemo)
-                    .help(L10n.text("Выбрать дату"))
-                    .accessibilityLabel(L10n.text("Выбрать дату: \(UsageFormat.date(store.customDate, timezone: store.timezone))"))
+                    DateToolbarPicker(store: store, onCalendar: { datePopover = .date }) { offset in
+                        datePopover = nil
+                        Task { await store.moveSelectedDay(by: offset) }
+                    }.fixedSize()
                     .popover(isPresented: calendarPresented(at: .date)) { calendarPopover }
                 }
             }
@@ -236,6 +323,7 @@ struct DashboardView: View {
             }
             .keyboardShortcut("r").disabled(store.isRefreshing || store.isDemo)
             .help(L10n.text("Обновить статистику · ⌘R")).accessibilityLabel(L10n.text("Обновить статистику"))
+            .background { DashboardWindowConnection(coordinator: dashboardWindow, toolbar: true) }
         }
     }
 

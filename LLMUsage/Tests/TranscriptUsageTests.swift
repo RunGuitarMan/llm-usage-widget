@@ -6,5 +6,9 @@ final class TranscriptUsageTests: XCTestCase {
             do { try await action() }
             catch { XCTFail("\(name): \(error)") }
         }
+        await ClaudeResponseScenarios.run { name, action in
+            do { try await action() }
+            catch { XCTFail("\(name): \(error)") }
+        }
     }
 }

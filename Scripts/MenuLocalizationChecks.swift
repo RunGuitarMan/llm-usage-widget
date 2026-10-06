@@ -32,8 +32,10 @@ struct MenuLocalizationChecks {
         let view = append("Вид")
         let window = append("Окно")
         let help = append("Справка")
+        let overview = append("Открыть обзор")
         settle()
         try require([edit.title, view.title, window.title, help.title] == ["Edit", "View", "Window", "Help"], "Added menu titles did not use English")
+        try require(overview.title == "Open overview", "Dashboard command has an ambiguous English translation")
         // Models a SwiftUI command-tree update caused by an unrelated preference.
         edit.title = "Правка"; view.title = "Вид"; window.title = "Окно"; help.title = "Справка"
         settle()
@@ -61,6 +63,21 @@ struct MenuLocalizationChecks {
         AppMenuLocalization.update()
         settle()
         try require(edit.title == "Правка" && view.title == "Вид", "Explicit language change stopped working")
+        // A shared Russian title must resolve to one English title after a menu
+        // rebuild or language round trip, independently of Dictionary ordering.
+        for _ in 0..<3 {
+            L10n.preference = .english
+            AppMenuLocalization.update()
+            settle()
+            try require(overview.title == "Open overview", "Dashboard command changed during language round trip")
+            overview.title = "Открыть обзор"
+            settle()
+            try require(overview.title == "Open overview", "Rebuilt dashboard command used a different translation")
+            L10n.preference = .russian
+            AppMenuLocalization.update()
+            settle()
+            try require(overview.title == "Открыть обзор", "Dashboard command did not return to Russian")
+        }
         withExtendedLifetime(localizer) {}
         print("PASS AppKit menu add/change/replacement, preserved Services, idempotence and language switch")
     }

@@ -324,6 +324,7 @@ struct PortableChecks {
         L10n.preference = .russian // Existing transcript fixtures assert Russian helper labels.
         await TranscriptChecks.run(check: check)
         await TranscriptUsageScenarios.run(check: check)
+        await ClaudeResponseScenarios.run(check: check)
         await TranscriptTimingScenarios.run(check: check)
         await RegressionScenarios.run(check: check)
         await PricingScenarios.run(check: check)
@@ -375,6 +376,9 @@ struct PortableChecks {
         }
         if ProcessInfo.processInfo.arguments.contains("--bundled-cli") {
             let helper = root.appendingPathComponent("build/LLM Usage.app/Contents/Helpers/ccusage").path
+            await check("Bundled ccusage: response boundaries agree across daily reports, all agents and chat") {
+                try await ClaudeResponseScenarios.liveCheck(executablePath: helper)
+            }
             await check("Bundled ccusage: isolated Claude, Codex and Gemini transcript pricing") {
                 try await TranscriptUsageScenarios.liveCheck(executablePath: helper)
             }

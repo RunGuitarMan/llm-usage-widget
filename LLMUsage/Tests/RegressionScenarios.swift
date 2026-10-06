@@ -158,11 +158,28 @@ enum RegressionScenarios {
                 ("us.anthropic.claude-opus-4-6-v1:0", .anthropic), ("sonnet-4", .anthropic),
                 ("gpt-6-astra", .openai), ("azure/openai/gpt-5", .openai), ("openai:o3-mini", .openai),
                 ("chatgpt-4o-latest", .openai), ("google/gemini-2.5-pro", .google), ("gemma-3-27b", .google),
-                ("glm-5", .custom), ("my-claude-wrapper", .custom), ("gptish", .custom), ("o123wrapper", .custom)
+                ("GLM-5", .zai), ("glm4.7", .zai), ("zai/glm-5", .zai), ("z.ai:glm-4.5", .zai),
+                (" OpenRouter/z-ai/GLM-5 ", .zai), ("zhipuai/chatglm3-6b", .zai),
+                ("deepseek-chat", .deepseek), ("deepseek/deepseek-r1-distill-qwen-32b", .deepseek),
+                ("Qwen/Qwen3-235B-A22B", .qwen), ("qwen2.5-coder:32b", .qwen),
+                ("deepseek/Qwen3-32B", .qwen), ("qwen/DeepSeek-R1", .deepseek),
+                ("moonshotai/kimi-k2-instruct", .moonshot), ("moonshot-v1-128k", .moonshot),
+                ("minimax/MiniMax-M2", .minimax), ("mistralai/mistral-large", .mistral),
+                ("mixtral-8x7b", .mistral), ("codestral-latest", .mistral), ("devstral-small", .mistral),
+                ("meta-llama/Llama-3.3-70B-Instruct", .meta), ("meta.llama3-70b-instruct-v1:0", .meta),
+                ("tgpt/super-mega-llm-999b", .tbank), (" TGPT/gpt-6 ", .tbank),
+                ("tgpt/claude-opus", .tbank), ("tgpt/z-ai/glm-5", .tbank), ("tgpt-v2/custom", .tbank),
+                ("my-claude-wrapper", .custom), ("gptish", .custom), ("o123wrapper", .custom),
+                ("my-glm-wrapper", .custom), ("glmish", .custom), ("qwenish", .custom),
+                ("deepseekish", .custom), ("minimaximum", .custom), ("llamazing", .custom),
+                ("not-tgpt/custom", .custom), ("router/tgpt/custom", .custom)
             ]
             for (name, provider) in cases {
-                let session = UsageSession(id: "provider", models: [name], usage: .zero, agent: "opencode")
-                try requireRegression(session.modelProvider == provider, "Wrong provider for \(name)")
+                for agent in ["claude", "codex", "gemini", "opencode", "unknown-agent"] {
+                    let session = UsageSession(id: "provider", models: [name], usage: .zero, agent: agent)
+                    try requireRegression(session.modelProvider == provider, "Wrong provider for \(name) in \(agent)")
+                    try requireRegression(ModelProvider.logos(models: session.models) == [provider], "Wrong logo for \(name) in \(agent)")
+                }
             }
             try requireRegression(UsageSession(id: "empty", models: [], usage: .zero, agent: "claude").modelProvider == .custom,
                                   "Agent incorrectly substituted for unknown model provider")
@@ -172,12 +189,19 @@ enum RegressionScenarios {
             let breakdownOnly = UsageSession(id: "breakdown", models: [], usage: .zero,
                                              modelBreakdowns: [.init(id: "gemini-2.5-pro", usage: .zero)])
             try requireRegression(breakdownOnly.modelProvider == .google, "Model breakdown names ignored")
-            try requireRegression(ModelProvider.logos(models: ["claude-sonnet-4.6", "gpt-6-astra"], sources: ["claude"]) == [.anthropic, .openai],
+            try requireRegression(ModelProvider.logos(models: ["claude-sonnet-4.6", "gpt-6-astra"]) == [.anthropic, .openai],
                                   "Mixed session logos collapsed into generic icon")
-            try requireRegression(ModelProvider.logos(models: ["custom-model"], sources: ["claude"]) == [.anthropic],
-                                  "Unknown model lost its source logo")
-            try requireRegression(ModelProvider.logos(models: ["gpt-6-astra"], sources: ["claude"]) == [.openai],
-                                  "Known author replaced by source logo")
+            try requireRegression(ModelProvider.logos(models: ["custom-model"]) == [.custom]
+                && ModelProvider.logos(models: ["", " \n"]) == [.custom], "Unknown/absent model inherited an agent logo")
+            let mixed = ["tgpt/custom", "glm-5", "gpt-6", "unknown", "GLM-4.7", "tgpt/gpt-6", ""]
+            let expected: [ModelProvider] = [.openai, .zai, .tbank, .custom]
+            try requireRegression(ModelProvider.logos(models: mixed) == expected
+                && ModelProvider.logos(models: mixed.reversed()) == expected, "Mixed logos lost unknown models, order or deduplication")
+            try requireRegression(ModelProvider.logos(models: ["", "gpt-6"]) == [.openai], "Empty metadata added a spurious logo")
+            let breakdown = UsageSession(id: "breakdown", models: [], usage: .zero,
+                modelBreakdowns: [.init(id: "tgpt/custom", usage: .zero), .init(id: "glm-5", usage: .zero)], agent: "claude")
+            try requireRegression(ModelProvider.logos(models: breakdown.models + breakdown.modelBreakdowns.map(\.id)) == [.zai, .tbank],
+                                  "Breakdown-only session lost its model logos")
         }
         await check("Statistics: ranking precedes the three-row limit and respects source and exclusion filters") {
             let sessions: [UsageSession] = (0..<8).map { index in
@@ -220,6 +244,69 @@ enum RegressionScenarios {
             let finalCount = await service.count(day)
             try requireRegression(finalCount == count && store.selectedSessionID == selected && store.selectedDay == day,
                                   "Same-day or future selection reloaded data or cleared the inspector")
+        }
+        await check("Day navigation: month/year/leap/DST boundaries and today's disabled forward action") {
+            let suite = "DayNavigation.\(UUID().uuidString)"
+            let defaults = UserDefaults(suiteName: suite)!
+            defaults.set("America/New_York", forKey: "timezone")
+            defer { defaults.removePersistentDomain(forName: suite) }
+            let clock = RegressionClock(), service = RegressionService()
+            let store = UsageStore(service: service, repository: RegressionRepository(), defaults: defaults,
+                                   now: { clock.now }, reloadWidget: {})
+            for (date, previous) in [("2026-01-01T17:00:00Z", "20251231"),
+                                     ("2024-03-01T17:00:00Z", "20240229"),
+                                     ("2026-03-09T16:00:00Z", "20260308"),
+                                     ("2025-11-03T17:00:00Z", "20251102")] {
+                await store.selectCustomDate(ISO8601DateFormatter().date(from: date)!)
+                let original = store.selectedDay
+                await store.moveSelectedDay(by: -1)
+                try requireRegression(store.selectedDay.key == previous && store.snapshot?.day == store.selectedDay,
+                                      "Day navigation skipped a calendar day at \(date)")
+                await store.moveSelectedDay(by: 1)
+                try requireRegression(store.selectedDay == original && store.snapshot?.day == original,
+                                      "Day navigation did not return to the original date")
+            }
+            await store.selectCustomDate(clock.now)
+            let today = store.selectedDay
+            try requireRegression(store.period == .custom && !store.canMoveSelectedDay(by: 1)
+                                  && store.canMoveSelectedDay(by: -1), "Today lost its custom-date navigation")
+            await store.moveSelectedDay(by: 1)
+            try requireRegression(store.selectedDay == today, "Forward action allowed a future day")
+            await store.moveSelectedDay(by: -1)
+            try requireRegression(store.canMoveSelectedDay(by: 1), "Forward action stayed disabled after leaving today")
+            await store.waitForHistoryBackfill()
+        }
+        await check("Day navigation: repeated clicks during a held response keep the latest day, budget and cache") {
+            try await DeepAuditScenarios.withStore { store, service, _, clock in
+                await store.refresh(reason: .startup)
+                await store.waitForHistoryBackfill()
+                let first = UsageDay(date: clock.now, timezone: store.timezone).adding(days: -15)
+                await store.selectCustomDate(first.date)
+                store.budgetEnabled = true
+                _ = store.setBudgetAmount(10)
+                store.sourceFilter = "claude"
+                await service.configure(at: clock.now, cost: 2, hold: first.adding(days: -1))
+                let pending = Task { await store.moveSelectedDay(by: -1) }
+                await service.waitUntilHeld()
+                for _ in 0..<4 { await store.moveSelectedDay(by: -1) }
+                await store.moveSelectedDay(by: 1)
+                let latest = first.adding(days: -4)
+                let remainedInteractive = store.selectedDay == latest && store.snapshot == nil
+                    && store.isRefreshing && store.canMoveSelectedDay(by: -1) && store.canMoveSelectedDay(by: 1)
+                await service.configure(at: clock.now, cost: 7)
+                await service.finish()
+                await pending.value
+                try requireRegression(remainedInteractive, "Pending report blocked clicks or displayed the wrong day's totals")
+                try requireRegression(store.selectedDay == latest && store.snapshot?.day == latest
+                    && store.snapshot?.totals.cost == 7 && store.dailyBudget == 10 && store.sourceFilter == "claude",
+                    "Late response replaced the final day's budget or reset the source filter")
+                let before = await service.count(latest)
+                await store.moveSelectedDay(by: 1)
+                await store.moveSelectedDay(by: -1)
+                let after = await service.count(latest)
+                try requireRegression(before == after && store.snapshot?.day == latest && store.snapshot?.totals.cost == 7,
+                                      "Returning to a cached day reloaded or showed different totals")
+            }
         }
         await check("Amounts: exclusions and missing prices retain the dollar sign without inequality symbols") {
             let language = L10n.preference

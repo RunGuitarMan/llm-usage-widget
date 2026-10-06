@@ -168,6 +168,12 @@ struct CCUsageService: CCUsageServing {
     let runner = ProcessRunner()
     var pricing: any ClaudePricingProviding = ClaudePricingCache(includeTranscriptModels: true)
     var pricingArchive = TranscriptPricingArchive()
+    // Test seam for isolated real-helper checks; production inherits its runtime environment.
+    var environment: [String: String]?
+
+    private func executionEnvironment(for executable: URL) -> [String: String] {
+        environment ?? (runtime == nil ? ProcessRunner.environment(for: executable) : CCUsageRuntime.environment())
+    }
 
     static func arguments(for day: UsageDay, report: CCUsageDecoder.Report) -> [String] {
         // Explicitly override offline defaults in the user's ccusage config.
@@ -191,8 +197,8 @@ struct CCUsageService: CCUsageServing {
         let configurationDirectory = FileManager.default.temporaryDirectory.appendingPathComponent("llmusage-pricing-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: configurationDirectory) }
         var pricingArguments: [String] = []
-        let contents = try CCUsagePricingConfiguration.contents(prices: prices, environment: (runtime == nil ? ProcessRunner.environment(for: executable) : CCUsageRuntime.environment()))
-        let pricingKey = try? pricingArchive.save(configuration: contents, environment: (runtime == nil ? ProcessRunner.environment(for: executable) : CCUsageRuntime.environment()), engineID: engineID)
+        let contents = try CCUsagePricingConfiguration.contents(prices: prices, environment: executionEnvironment(for: executable))
+        let pricingKey = try? pricingArchive.save(configuration: contents, environment: executionEnvironment(for: executable), engineID: engineID)
         if !prices.isEmpty {
             try FileManager.default.createDirectory(at: configurationDirectory, withIntermediateDirectories: true,
                                                     attributes: [.posixPermissions: 0o700])
@@ -219,7 +225,7 @@ struct CCUsageService: CCUsageServing {
         return .init(generatedAt: Date(), day: day, sessions: sessions, pricingKey: pricingKey)
     }
     private func fetchReport(_ report: CCUsageDecoder.Report, day: UsageDay, executable: URL, extraArguments: [String]) async throws -> UsageSnapshot {
-        let result = try await runner.run(executable: executable, arguments: Self.arguments(for: day, report: report) + extraArguments, environment: runtime == nil ? nil : CCUsageRuntime.environment())
+        let result = try await runner.run(executable: executable, arguments: Self.arguments(for: day, report: report) + extraArguments, environment: executionEnvironment(for: executable))
         return try CCUsageDecoder.decode(result.stdout, day: day, report: report)
     }
     func diagnose(customPath: String, forceDetect: Bool = false) async throws -> CLIDiagnostics {

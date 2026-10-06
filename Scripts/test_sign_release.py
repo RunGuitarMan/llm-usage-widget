@@ -23,3 +23,9 @@ class AppcastTests(unittest.TestCase):
     def test_invalid_version_is_not_published(self):
         with self.assertRaises(ValueError):
             make_feed("latest", "100", "https://example.invalid", "sig", 1, "")
+
+    def test_version_or_build_cannot_move_backwards_even_after_other_checks(self):
+        previous = ET.fromstring(make_feed("1.5.0", "100", "https://example.invalid/update.zip", "sig", 1, "First"))
+        for version, build in [("1.4.99", "101"), ("1.5.0", "101"), ("1.5.1", "99"), ("2.0.0", "100")]:
+            with self.subTest(version=version, build=build), self.assertRaisesRegex(ValueError, "must both increase"):
+                make_feed(version, build, "https://example.invalid/update.zip", "sig", 1, "Later", previous)

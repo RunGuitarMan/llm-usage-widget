@@ -19,13 +19,15 @@ class VersionRepository(unittest.TestCase):
         self.git("config", "user.email", "test@example.invalid")
         self.git("config", "commit.gpgsign", "false")
         self.git("commit", "--allow-empty", "-m", "Released baseline")
-        baseline = self.git("rev-parse", "HEAD")
         self.git("tag", "v1.3.1")
         (self.repository / ".github").mkdir()
-        (self.repository / ".github/release.json").write_text(json.dumps({"base_version": "1.3.1", "base_commit": baseline}))
+        self.write_version("1.4.0")
         self.git("add", ".github/release.json")
         self.git("commit", "-m", "feat: release feature")
         self.git("tag", "v1.4.0")
+
+    def write_version(self, version):
+        (self.repository / ".github/release.json").write_text(json.dumps({"version": version}))
 
     def git(self, *args):
         return subprocess.check_output(["git", "-C", str(self.repository), *args], text=True, stderr=subprocess.PIPE).strip()
@@ -40,15 +42,25 @@ class BuildVersionTests(VersionRepository):
         self.assertEqual(release["build"], review["build"])
         self.assertEqual(release["commit"], review["versionCommit"])
 
-    def test_branch_uses_base_release_and_records_actual_source(self):
+    def test_branch_and_review_use_manually_selected_version_before_release(self):
         base = self.git("rev-parse", "HEAD")
         self.git("switch", "-c", "work")
-        self.git("commit", "--allow-empty", "-m", "Unfinished work without a release title")
+        self.write_version("2.0.0")
+        self.git("commit", "-am", "Any title, with no release tag")
         development = build_identity(self.repository)
-        self.assertEqual(development["version"], "1.4.0")
-        self.assertEqual(development["versionCommit"], base)
+        self.assertEqual(development["version"], "2.0.0")
+        self.assertEqual(development["versionCommit"], development["commit"])
         self.assertNotEqual(development["commit"], base)
         self.assertEqual(development["channel"], "development")
+        self.assertEqual(build_identity(self.repository, "release")["version"], "2.0.0")
+
+    def test_uncommitted_version_is_used_and_marked_dirty_for_development(self):
+        self.write_version("3.0.1")
+        development = build_identity(self.repository)
+        self.assertEqual(development["version"], "3.0.1")
+        self.assertTrue(development["dirty"])
+        with self.assertRaisesRegex(ValueError, "clean source tree"):
+            build_identity(self.repository, "release")
 
     def test_manual_version_override_is_rejected(self):
         for override in [{"MARKETING_VERSION": "1.3.1"}, {"CURRENT_PROJECT_VERSION": "999"}]:
@@ -61,13 +73,11 @@ class BuildVersionTests(VersionRepository):
         with self.assertRaisesRegex(ValueError, "clean source tree"):
             build_identity(self.repository, "release")
 
-    def test_missing_or_inconsistent_tags_fail_without_a_fallback_number(self):
+    def test_tags_do_not_override_the_repository_version(self):
         self.git("tag", "-d", "v1.4.0", "v1.3.1")
-        with self.assertRaises(subprocess.CalledProcessError):
-            build_identity(self.repository)
+        self.assertEqual(build_identity(self.repository)["version"], "1.4.0")
         self.git("tag", "v9.9.9")
-        with self.assertRaisesRegex(ValueError, "tag disagrees"):
-            build_identity(self.repository)
+        self.assertEqual(build_identity(self.repository)["version"], "1.4.0")
 
     def test_shallow_history_is_rejected(self):
         clone = self.root / "shallow"

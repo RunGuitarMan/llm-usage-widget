@@ -284,7 +284,7 @@ struct SessionInspectorSummary: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 22) {
             HStack(spacing: 10) {
-                ProviderLogos(models: session.models + session.modelBreakdowns.map(\.id), sources: [session.sourceID])
+                ProviderLogos(models: session.models + session.modelBreakdowns.map(\.id))
                 VStack(alignment: .leading, spacing: 4) {
                     Text(session.modelLabel).font(.system(size: 15, weight: .semibold))
                         .lineLimit(2).textSelection(.enabled).help(session.modelLabel)

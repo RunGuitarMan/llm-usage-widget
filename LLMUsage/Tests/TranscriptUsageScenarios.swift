@@ -20,8 +20,8 @@ private struct TranscriptUsageFailure: Error, CustomStringConvertible { var desc
         return try TranscriptUsageParser.annotate(.init(events: decoder.finish()), source: source, parent: parent)
     }
     static let claude = #"""
-    {"type":"assistant","timestamp":"2026-10-01T12:00:00Z","requestId":"a","message":{"id":"m","role":"assistant","model":"claude-chat-fixture","content":[{"type":"text","text":"Private content never sent to cost process"},{"type":"tool_use","id":"t1","name":"Read","input":{"file_path":"/secret/a"}},{"type":"tool_use","id":"t2","name":"Read","input":{"file_path":"/secret/b"}}],"usage":{"input_tokens":100,"output_tokens":10,"cache_creation_input_tokens":40,"cache_read_input_tokens":20}}}
-    {"type":"assistant","timestamp":"2026-10-01T12:00:01Z","requestId":"a","message":{"id":"m","role":"assistant","model":"claude-chat-fixture","content":[{"type":"text","text":"Completed"}],"usage":{"input_tokens":100,"output_tokens":30,"cache_creation_input_tokens":40,"cache_read_input_tokens":20}}}
+    {"type":"assistant","uuid":"chunk-1","parentUuid":"prompt","timestamp":"2026-10-01T12:00:00Z","requestId":"a","message":{"id":"m","role":"assistant","model":"claude-chat-fixture","content":[{"type":"text","text":"Private content never sent to cost process"},{"type":"tool_use","id":"t1","name":"Read","input":{"file_path":"/secret/a"}},{"type":"tool_use","id":"t2","name":"Read","input":{"file_path":"/secret/b"}}],"usage":{"input_tokens":100,"output_tokens":10,"cache_creation_input_tokens":40,"cache_read_input_tokens":20}}}
+    {"type":"assistant","uuid":"chunk-2","parentUuid":"chunk-1","timestamp":"2026-10-01T12:00:01Z","requestId":"a","message":{"id":"m","role":"assistant","model":"claude-chat-fixture","content":[{"type":"text","text":"Completed"}],"usage":{"input_tokens":100,"output_tokens":30,"cache_creation_input_tokens":40,"cache_read_input_tokens":20}}}
     {"type":"user","timestamp":"2026-10-01T12:00:02Z","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t2","content":"Private result"},{"type":"tool_result","tool_use_id":"t1","content":"Other result"}]}}
     """#
     static let codex = #"""

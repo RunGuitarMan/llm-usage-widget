@@ -115,14 +115,14 @@ for target in ['LLMUsage','LLMUsageWidget','LLMUsageTests']:
         settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
         stem = 'App' if target == 'LLMUsage' else 'Widget'
         phases.insert(0, obj('version:'+target, 'PBXShellScriptBuildPhase', buildActionMask='2147483647',
-            files=[], inputPaths=['$(SRCROOT)/LLMUsage/Resources/'+stem+'-Info.plist'],
+            files=[], inputPaths=['$(SRCROOT)/LLMUsage/Resources/'+stem+'-Info.plist', '$(SRCROOT)/.github/release.json'],
             outputPaths=['$(DERIVED_FILE_DIR)/Versioned-'+stem+'-Info.plist'],
-            alwaysOutOfDate='1', name='Generate versioned Info.plist from Git', shellPath='/bin/bash',
+            alwaysOutOfDate='1', name='Generate Info.plist from repository version', shellPath='/bin/bash',
             shellScript='set -euo pipefail\npython3 "$SRCROOT/Scripts/build_version.py" --write-template "$SCRIPT_INPUT_FILE_0" "$SCRIPT_OUTPUT_FILE_0"\n',
             runOnlyForDeploymentPostprocessing='0'))
         phases.append(obj('verify-version:'+target, 'PBXShellScriptBuildPhase', buildActionMask='2147483647',
             files=[], inputPaths=['$(TARGET_BUILD_DIR)/$(INFOPLIST_PATH)'], outputPaths=[], alwaysOutOfDate='1',
-            name='Verify built version against Git', shellPath='/bin/bash',
+            name='Verify built version against repository', shellPath='/bin/bash',
             shellScript='set -euo pipefail\npython3 "$SRCROOT/Scripts/build_version.py" --verify-bundle "$TARGET_BUILD_DIR/$FULL_PRODUCT_NAME"'+(' --with-widget' if target == 'LLMUsage' else '')+'\n',
             runOnlyForDeploymentPostprocessing='0'))
     obj('target:'+target, 'PBXNativeTarget', buildConfigurationList=configs(target,settings), buildPhases=phases,

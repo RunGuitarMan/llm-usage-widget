@@ -198,6 +198,7 @@ enum TranscriptUsageParser {
         }
         var indexes: [String: Int] = [:]
         var userAttribution = TranscriptUserAttribution(events: transcript.events)
+        var claudeIdentity = ClaudeResponseIdentity()
         var sidechainIndexes: [String: Int] = [:]
         let sourceRecords = records(original)
         var model = ""
@@ -212,7 +213,7 @@ enum TranscriptUsageParser {
         var serial = 0
         var sequence = 0
         func append(model: String, date: Date?, events: [String], billing: TranscriptBilling,
-                    usage: TokenUsage, reasoning: Int64 = 0, key: String?, sidechain: Bool = false, replayKey: String? = nil) {
+                    usage: TokenUsage, reasoning: Int64 = 0, key: String?, sidechain: Bool = false, replayKey: String? = nil, preferLatest: Bool = false) {
             var seen = Set<String>()
             let ids = events.filter { seen.insert($0).inserted }
             let replayIndex = replayKey.flatMap { sidechainIndexes[$0] }.flatMap { index in
@@ -223,7 +224,7 @@ enum TranscriptUsageParser {
                 var seen = Set<String>()
                 let allIDs = (old.eventIDs + ids).filter { seen.insert($0).inserted }
                 if source == "gemini" || (old.isSidechain && !sidechain) || (old.isSidechain == sidechain &&
-                    (usage.total > old.usage.total || (usage.total == old.usage.total && old.billing.speed == nil && billing.speed != nil))) {
+                    (usage.total > old.usage.total || (usage.total == old.usage.total && (preferLatest || (old.billing.speed == nil && billing.speed != nil))))) {
                     transcript.requests[index] = .init(id: old.id, model: model, timestamp: date, eventIDs: allIDs,
                         billing: billing, usage: usage, reasoning: reasoning, isSidechain: sidechain, sequence: old.sequence)
                 } else { transcript.requests[index].eventIDs = allIDs }
@@ -240,6 +241,7 @@ enum TranscriptUsageParser {
             try Task.checkCancellation()
             sequence = record.sequence
             let root = object(record.text)
+            let claudeKey = source == "claude" ? claudeIdentity.observe(root, record: record) : nil
             userAttribution.observe(record, root: root, source: source)
             let date = TranscriptJSON.date(root["timestamp"] ?? root["created_at"])
             let events = references[record.id] ?? []
@@ -258,13 +260,12 @@ enum TranscriptUsageParser {
                     cacheCreate: tokens["cache_creation_input_tokens", default: 0], cacheRead: tokens["cache_read_input_tokens", default: 0], costIsIncomplete: true)
                 let messageID = message["id"] as? String
                 let requestID = root["requestId"] as? String
-                // Stream timestamps change while the API message identity stays
-                // fixed. Older/exported logs can omit the transport request ID.
-                let key = messageID.map { "claude|\($0)|\(requestID ?? "\(record.origin ?? "")|\(root["sessionId"] ?? "")")" }
+                let key = claudeKey
                 append(model: model, date: date, events: events,
                        billing: .init(tokens: tokens, speed: raw["speed"] as? String, cacheCreation: cache), usage: usage,
                        key: key, sidechain: root["isSidechain"] as? Bool == true,
-                       replayKey: messageID.map { $0 + "|" + (requestID == nil ? "requestless" : String(describing: root["timestamp"] ?? "")) })
+                       replayKey: messageID.map { $0 + "|" + (requestID == nil ? "requestless" : String(describing: root["timestamp"] ?? "")) },
+                       preferLatest: requestID == nil)
                 // Advisor iterations are separate billable model calls, not replacements for the main answer.
                 for (index, iteration) in (raw["iterations"] as? [[String: Any]] ?? []).enumerated()
                     where iteration["type"] as? String == "advisor_message" {
@@ -454,7 +455,7 @@ enum TranscriptUsageParser {
               number.doubleValue.rounded(.down) == number.doubleValue else { return nil }
         return number.int64Value
     }
-    private static func numbers(_ raw: [String: Any], keys: [String]) -> [String: Int64]? {
+    static func numbers(_ raw: [String: Any], keys: [String]) -> [String: Int64]? {
         var result: [String: Int64] = [:]
         for key in keys {
             guard let value = raw[key] else { continue }

@@ -42,10 +42,8 @@ See [Testing](docs/testing.md) for focused checks, saved reports and system-widg
 
 ## Release
 
-Open a PR to `main` with a typed title:
+Every PR must manually increase `version` in [`.github/release.json`](.github/release.json) above the current `main` version. Choose any higher `MAJOR.MINOR.PATCH`; PR titles do not determine it. Required **Tests** rejects unchanged or lower versions.
 
-- `feat: …` for new functionality → **minor**, e.g. `1.4.2 → 1.5.0`.
-- `fix: …` for a bug fix → **patch**, e.g. `1.4.2 → 1.4.3`.
-- Maintenance types such as `docs:` and `ci:` also produce a patch.
+Merge as many PRs as needed. Merging runs checks but **does not publish a release**. When ready, open **GitHub → Actions → Release → Run workflow** on **main**. It tests the selected commit, then builds and publishes its repository version, ZIP, checksum and signed update feed. The app and widget always embed that exact version, including local builds.
 
-After **Tests** passes, squash-merge using the PR title. CI tests the merged commit, calculates the version, builds the app and widget, and publishes a ZIP, checksum and signed update feed. No manual version edit or tag is needed. See [Releases](docs/releases.md) for supported titles and retries.
+See [Releases](docs/releases.md) for the full workflow, version checks and retries.

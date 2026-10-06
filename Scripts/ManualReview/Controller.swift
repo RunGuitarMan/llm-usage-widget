@@ -168,6 +168,7 @@ enum ReviewSize: String, CaseIterable, Identifiable {
                     cleanup()
                     exit(0)
                 } catch {
+                    WindowChromeChecks.saveFailure(self)
                     fputs("FAIL Manual review: \(error)\n", stderr)
                     cleanup()
                     exit(1)
@@ -218,6 +219,8 @@ enum ReviewSize: String, CaseIterable, Identifiable {
                 case "yesterday": store.period = .yesterday; await store.selectPeriod()
                 case "calendar":
                     await store.selectCustomDate(Date().addingTimeInterval(-3 * 86400))
+                    store.budgetEnabled = true
+                    _ = store.setBudgetAmount(100)
                 case "budget": store.budgetEnabled = true; _ = store.setBudgetAmount(10)
                 case "excluded": store.setModelIncluded(false, model: "gpt-6-astra")
                 case "inspector": store.selectedSessionID = store.snapshot?.sessions.first?.id

@@ -1,0 +1,2560 @@
+[
+  {
+    "name": "requestless_stream",
+    "records": [
+      {
+        "type": "user",
+        "uuid": "u1",
+        "sessionId": "s",
+        "message": {
+          "role": "user",
+          "content": "Synthetic prompt"
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "a1",
+        "parentUuid": "u1",
+        "sessionId": "s",
+        "timestamp": "2026-10-03T12:00:01Z",
+        "message": {
+          "role": "assistant",
+          "id": "m",
+          "model": "claude-response-fixture",
+          "stop_reason": null,
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic answer"
+            }
+          ],
+          "usage": {
+            "input_tokens": 100,
+            "output_tokens": 10,
+            "cache_creation_input_tokens": 40,
+            "cache_read_input_tokens": 20
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "a2",
+        "parentUuid": "a1",
+        "sessionId": "s",
+        "timestamp": "2026-10-03T12:00:02Z",
+        "message": {
+          "role": "assistant",
+          "id": "m",
+          "model": "claude-response-fixture",
+          "stop_reason": null,
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic answer"
+            }
+          ],
+          "usage": {
+            "input_tokens": 100,
+            "output_tokens": 30,
+            "cache_creation_input_tokens": 40,
+            "cache_read_input_tokens": 20
+          }
+        }
+      }
+    ],
+    "expected": {
+      "inputTokens": 100,
+      "outputTokens": 30,
+      "cacheCreationTokens": 40,
+      "cacheReadTokens": 20
+    }
+  },
+  {
+    "name": "requestless_tool_use_fragments",
+    "records": [
+      {
+        "type": "user",
+        "uuid": "u1",
+        "sessionId": "s",
+        "message": {
+          "role": "user",
+          "content": "Synthetic prompt"
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "a1",
+        "parentUuid": "u1",
+        "sessionId": "s",
+        "timestamp": "2026-10-03T12:00:01Z",
+        "message": {
+          "role": "assistant",
+          "id": "m",
+          "model": "claude-response-fixture",
+          "stop_reason": "tool_use",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic answer"
+            }
+          ],
+          "usage": {
+            "input_tokens": 100,
+            "output_tokens": 10,
+            "cache_creation_input_tokens": 40,
+            "cache_read_input_tokens": 20
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "a2",
+        "parentUuid": "a1",
+        "sessionId": "s",
+        "timestamp": "2026-10-03T12:00:02Z",
+        "message": {
+          "role": "assistant",
+          "id": "m",
+          "model": "claude-response-fixture",
+          "stop_reason": "tool_use",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic answer"
+            }
+          ],
+          "usage": {
+            "input_tokens": 100,
+            "output_tokens": 30,
+            "cache_creation_input_tokens": 40,
+            "cache_read_input_tokens": 20
+          }
+        }
+      }
+    ],
+    "expected": {
+      "inputTokens": 100,
+      "outputTokens": 30,
+      "cacheCreationTokens": 40,
+      "cacheReadTokens": 20
+    }
+  },
+  {
+    "name": "requestless_equal_counters_with_stop_reason",
+    "records": [
+      {
+        "type": "user",
+        "uuid": "u1",
+        "sessionId": "s",
+        "message": {
+          "role": "user",
+          "content": "Synthetic prompt"
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "a1",
+        "parentUuid": "u1",
+        "sessionId": "s",
+        "timestamp": "2026-10-03T12:00:01Z",
+        "message": {
+          "role": "assistant",
+          "id": "m",
+          "model": "claude-response-fixture",
+          "stop_reason": "tool_use",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic answer"
+            }
+          ],
+          "usage": {
+            "input_tokens": 100,
+            "output_tokens": 30,
+            "cache_creation_input_tokens": 40,
+            "cache_read_input_tokens": 20
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "a2",
+        "parentUuid": "a1",
+        "sessionId": "s",
+        "timestamp": "2026-10-03T12:00:02Z",
+        "message": {
+          "role": "assistant",
+          "id": "m",
+          "model": "claude-response-fixture",
+          "stop_reason": "tool_use",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic answer"
+            }
+          ],
+          "usage": {
+            "input_tokens": 100,
+            "output_tokens": 30,
+            "cache_creation_input_tokens": 40,
+            "cache_read_input_tokens": 20
+          }
+        }
+      }
+    ],
+    "expected": {
+      "inputTokens": 100,
+      "outputTokens": 30,
+      "cacheCreationTokens": 40,
+      "cacheReadTokens": 20
+    }
+  },
+  {
+    "name": "request_id_stream",
+    "records": [
+      {
+        "type": "user",
+        "uuid": "u1",
+        "sessionId": "s",
+        "message": {
+          "role": "user",
+          "content": "Synthetic prompt"
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "a1",
+        "parentUuid": "u1",
+        "sessionId": "s",
+        "timestamp": "2026-10-03T12:00:01Z",
+        "message": {
+          "role": "assistant",
+          "id": "m",
+          "model": "claude-response-fixture",
+          "stop_reason": null,
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic answer"
+            }
+          ],
+          "usage": {
+            "input_tokens": 100,
+            "output_tokens": 10,
+            "cache_creation_input_tokens": 40,
+            "cache_read_input_tokens": 20
+          }
+        },
+        "requestId": "r"
+      },
+      {
+        "type": "assistant",
+        "uuid": "a2",
+        "parentUuid": "a1",
+        "sessionId": "s",
+        "timestamp": "2026-10-03T12:00:02Z",
+        "message": {
+          "role": "assistant",
+          "id": "m",
+          "model": "claude-response-fixture",
+          "stop_reason": null,
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic answer"
+            }
+          ],
+          "usage": {
+            "input_tokens": 100,
+            "output_tokens": 30,
+            "cache_creation_input_tokens": 40,
+            "cache_read_input_tokens": 20
+          }
+        },
+        "requestId": "r"
+      }
+    ],
+    "expected": {
+      "inputTokens": 100,
+      "outputTokens": 30,
+      "cacheCreationTokens": 40,
+      "cacheReadTokens": 20
+    }
+  },
+  {
+    "name": "gateway_new_user",
+    "records": [
+      {
+        "type": "user",
+        "uuid": "u1",
+        "sessionId": "s",
+        "message": {
+          "role": "user",
+          "content": "Synthetic prompt"
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "a1",
+        "parentUuid": "u1",
+        "sessionId": "s",
+        "timestamp": "2026-10-03T12:00:01Z",
+        "message": {
+          "role": "assistant",
+          "id": "m",
+          "model": "claude-response-fixture",
+          "stop_reason": "tool_use",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic answer"
+            }
+          ],
+          "usage": {
+            "input_tokens": 100,
+            "output_tokens": 10,
+            "cache_creation_input_tokens": 40,
+            "cache_read_input_tokens": 20
+          }
+        }
+      },
+      {
+        "type": "user",
+        "uuid": "u2",
+        "sessionId": "s",
+        "message": {
+          "role": "user",
+          "content": "Synthetic prompt"
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "a2",
+        "parentUuid": "u2",
+        "sessionId": "s",
+        "timestamp": "2026-10-03T12:00:02Z",
+        "message": {
+          "role": "assistant",
+          "id": "m",
+          "model": "claude-response-fixture",
+          "stop_reason": "tool_use",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic answer"
+            }
+          ],
+          "usage": {
+            "input_tokens": 100,
+            "output_tokens": 30,
+            "cache_creation_input_tokens": 40,
+            "cache_read_input_tokens": 20
+          }
+        }
+      }
+    ],
+    "expected": {
+      "inputTokens": 200,
+      "outputTokens": 40,
+      "cacheCreationTokens": 80,
+      "cacheReadTokens": 40
+    }
+  },
+  {
+    "name": "gateway_tool_result",
+    "records": [
+      {
+        "type": "user",
+        "uuid": "u1",
+        "sessionId": "s",
+        "message": {
+          "role": "user",
+          "content": "Synthetic prompt"
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "a1",
+        "parentUuid": "u1",
+        "sessionId": "s",
+        "timestamp": "2026-10-03T12:00:01Z",
+        "message": {
+          "role": "assistant",
+          "id": "m",
+          "model": "claude-response-fixture",
+          "stop_reason": "tool_use",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic answer"
+            }
+          ],
+          "usage": {
+            "input_tokens": 100,
+            "output_tokens": 10,
+            "cache_creation_input_tokens": 40,
+            "cache_read_input_tokens": 20
+          }
+        }
+      },
+      {
+        "type": "user",
+        "uuid": "u2",
+        "sessionId": "s",
+        "message": {
+          "role": "user",
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t",
+              "content": "synthetic result"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "a2",
+        "parentUuid": "u2",
+        "sessionId": "s",
+        "timestamp": "2026-10-03T12:00:02Z",
+        "message": {
+          "role": "assistant",
+          "id": "m",
+          "model": "claude-response-fixture",
+          "stop_reason": "tool_use",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic answer"
+            }
+          ],
+          "usage": {
+            "input_tokens": 100,
+            "output_tokens": 30,
+            "cache_creation_input_tokens": 40,
+            "cache_read_input_tokens": 20
+          }
+        }
+      }
+    ],
+    "expected": {
+      "inputTokens": 200,
+      "outputTokens": 40,
+      "cacheCreationTokens": 80,
+      "cacheReadTokens": 40
+    }
+  },
+  {
+    "name": "requestless_end_turn_fragments",
+    "records": [
+      {
+        "type": "user",
+        "uuid": "u1",
+        "sessionId": "s",
+        "message": {
+          "role": "user",
+          "content": "Synthetic prompt"
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "a1",
+        "parentUuid": "u1",
+        "sessionId": "s",
+        "timestamp": "2026-10-03T12:00:01Z",
+        "message": {
+          "role": "assistant",
+          "id": "m",
+          "model": "claude-response-fixture",
+          "stop_reason": "end_turn",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic answer"
+            }
+          ],
+          "usage": {
+            "input_tokens": 100,
+            "output_tokens": 10,
+            "cache_creation_input_tokens": 40,
+            "cache_read_input_tokens": 20
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "a2",
+        "parentUuid": "a1",
+        "sessionId": "s",
+        "timestamp": "2026-10-03T12:00:02Z",
+        "message": {
+          "role": "assistant",
+          "id": "m",
+          "model": "claude-response-fixture",
+          "stop_reason": "end_turn",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic answer"
+            }
+          ],
+          "usage": {
+            "input_tokens": 100,
+            "output_tokens": 30,
+            "cache_creation_input_tokens": 40,
+            "cache_read_input_tokens": 20
+          }
+        }
+      }
+    ],
+    "expected": {
+      "inputTokens": 100,
+      "outputTokens": 30,
+      "cacheCreationTokens": 40,
+      "cacheReadTokens": 20
+    }
+  },
+  {
+    "name": "gateway_missing_ancestry",
+    "records": [
+      {
+        "type": "assistant",
+        "uuid": "a1",
+        "parentUuid": "u1",
+        "sessionId": "s",
+        "timestamp": "2026-10-03T12:00:01Z",
+        "message": {
+          "role": "assistant",
+          "id": "m",
+          "model": "claude-response-fixture",
+          "stop_reason": "tool_use",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic answer"
+            }
+          ],
+          "usage": {
+            "input_tokens": 100,
+            "output_tokens": 10,
+            "cache_creation_input_tokens": 40,
+            "cache_read_input_tokens": 20
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "a2",
+        "parentUuid": "another-branch",
+        "sessionId": "s",
+        "timestamp": "2026-10-03T12:00:02Z",
+        "message": {
+          "role": "assistant",
+          "id": "m",
+          "model": "claude-response-fixture",
+          "stop_reason": "tool_use",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic answer"
+            }
+          ],
+          "usage": {
+            "input_tokens": 100,
+            "output_tokens": 30,
+            "cache_creation_input_tokens": 40,
+            "cache_read_input_tokens": 20
+          }
+        }
+      }
+    ],
+    "expected": {
+      "inputTokens": 200,
+      "outputTokens": 40,
+      "cacheCreationTokens": 80,
+      "cacheReadTokens": 40
+    }
+  },
+  {
+    "name": "gateway_changed_input",
+    "records": [
+      {
+        "type": "assistant",
+        "uuid": "a1",
+        "parentUuid": "u1",
+        "sessionId": "s",
+        "timestamp": "2026-10-03T12:00:01Z",
+        "message": {
+          "role": "assistant",
+          "id": "m",
+          "model": "claude-response-fixture",
+          "stop_reason": "tool_use",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic answer"
+            }
+          ],
+          "usage": {
+            "input_tokens": 100,
+            "output_tokens": 10,
+            "cache_creation_input_tokens": 40,
+            "cache_read_input_tokens": 20
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "a2",
+        "parentUuid": "a1",
+        "sessionId": "s",
+        "timestamp": "2026-10-03T12:00:02Z",
+        "message": {
+          "role": "assistant",
+          "id": "m",
+          "model": "claude-response-fixture",
+          "stop_reason": "tool_use",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic answer"
+            }
+          ],
+          "usage": {
+            "input_tokens": 200,
+            "output_tokens": 30,
+            "cache_creation_input_tokens": 40,
+            "cache_read_input_tokens": 20
+          }
+        }
+      }
+    ],
+    "expected": {
+      "inputTokens": 300,
+      "outputTokens": 40,
+      "cacheCreationTokens": 80,
+      "cacheReadTokens": 40
+    }
+  },
+  {
+    "name": "gateway_output_reset",
+    "records": [
+      {
+        "type": "assistant",
+        "uuid": "a1",
+        "parentUuid": "u1",
+        "sessionId": "s",
+        "timestamp": "2026-10-03T12:00:01Z",
+        "message": {
+          "role": "assistant",
+          "id": "m",
+          "model": "claude-response-fixture",
+          "stop_reason": "tool_use",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic answer"
+            }
+          ],
+          "usage": {
+            "input_tokens": 100,
+            "output_tokens": 30,
+            "cache_creation_input_tokens": 40,
+            "cache_read_input_tokens": 20
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "a2",
+        "parentUuid": "a1",
+        "sessionId": "s",
+        "timestamp": "2026-10-03T12:00:02Z",
+        "message": {
+          "role": "assistant",
+          "id": "m",
+          "model": "claude-response-fixture",
+          "stop_reason": "tool_use",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic answer"
+            }
+          ],
+          "usage": {
+            "input_tokens": 100,
+            "output_tokens": 10,
+            "cache_creation_input_tokens": 40,
+            "cache_read_input_tokens": 20
+          }
+        }
+      }
+    ],
+    "expected": {
+      "inputTokens": 200,
+      "outputTokens": 40,
+      "cacheCreationTokens": 80,
+      "cacheReadTokens": 40
+    }
+  },
+  {
+    "name": "distinct_message_ids",
+    "records": [
+      {
+        "type": "assistant",
+        "uuid": "a1",
+        "parentUuid": "u1",
+        "sessionId": "s",
+        "timestamp": "2026-10-03T12:00:01Z",
+        "message": {
+          "role": "assistant",
+          "id": "m",
+          "model": "claude-response-fixture",
+          "stop_reason": null,
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic answer"
+            }
+          ],
+          "usage": {
+            "input_tokens": 100,
+            "output_tokens": 10,
+            "cache_creation_input_tokens": 40,
+            "cache_read_input_tokens": 20
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "a2",
+        "parentUuid": "a1",
+        "sessionId": "s",
+        "timestamp": "2026-10-03T12:00:02Z",
+        "message": {
+          "role": "assistant",
+          "id": "other",
+          "model": "claude-response-fixture",
+          "stop_reason": null,
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic answer"
+            }
+          ],
+          "usage": {
+            "input_tokens": 100,
+            "output_tokens": 30,
+            "cache_creation_input_tokens": 40,
+            "cache_read_input_tokens": 20
+          }
+        }
+      }
+    ],
+    "expected": {
+      "inputTokens": 200,
+      "outputTokens": 40,
+      "cacheCreationTokens": 80,
+      "cacheReadTokens": 40
+    }
+  },
+  {
+    "name": "stream_progress",
+    "records": [
+      {
+        "type": "assistant",
+        "uuid": "a1",
+        "parentUuid": "u1",
+        "sessionId": "s",
+        "timestamp": "2026-10-03T12:00:01Z",
+        "message": {
+          "role": "assistant",
+          "id": "m",
+          "model": "claude-response-fixture",
+          "stop_reason": "tool_use",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic answer"
+            }
+          ],
+          "usage": {
+            "input_tokens": 100,
+            "output_tokens": 10,
+            "cache_creation_input_tokens": 40,
+            "cache_read_input_tokens": 20
+          }
+        }
+      },
+      {
+        "type": "progress",
+        "data": {
+          "type": "synthetic"
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "a2",
+        "parentUuid": "a1",
+        "sessionId": "s",
+        "timestamp": "2026-10-03T12:00:02Z",
+        "message": {
+          "role": "assistant",
+          "id": "m",
+          "model": "claude-response-fixture",
+          "stop_reason": "tool_use",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic answer"
+            }
+          ],
+          "usage": {
+            "input_tokens": 100,
+            "output_tokens": 30,
+            "cache_creation_input_tokens": 40,
+            "cache_read_input_tokens": 20
+          }
+        }
+      }
+    ],
+    "expected": {
+      "inputTokens": 100,
+      "outputTokens": 30,
+      "cacheCreationTokens": 40,
+      "cacheReadTokens": 20
+    }
+  },
+  {
+    "name": "stream_replay",
+    "records": [
+      {
+        "type": "assistant",
+        "uuid": "a1",
+        "parentUuid": "u1",
+        "sessionId": "s",
+        "timestamp": "2026-10-03T12:00:01Z",
+        "message": {
+          "role": "assistant",
+          "id": "m",
+          "model": "claude-response-fixture",
+          "stop_reason": null,
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic answer"
+            }
+          ],
+          "usage": {
+            "input_tokens": 100,
+            "output_tokens": 10,
+            "cache_creation_input_tokens": 40,
+            "cache_read_input_tokens": 20
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "a2",
+        "parentUuid": "a1",
+        "sessionId": "s",
+        "timestamp": "2026-10-03T12:00:02Z",
+        "message": {
+          "role": "assistant",
+          "id": "m",
+          "model": "claude-response-fixture",
+          "stop_reason": null,
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic answer"
+            }
+          ],
+          "usage": {
+            "input_tokens": 100,
+            "output_tokens": 30,
+            "cache_creation_input_tokens": 40,
+            "cache_read_input_tokens": 20
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "a3",
+        "parentUuid": "a2",
+        "sessionId": "s",
+        "timestamp": "2026-10-03T12:00:03Z",
+        "message": {
+          "role": "assistant",
+          "id": "m",
+          "model": "claude-response-fixture",
+          "stop_reason": null,
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic answer"
+            }
+          ],
+          "usage": {
+            "input_tokens": 100,
+            "output_tokens": 30,
+            "cache_creation_input_tokens": 40,
+            "cache_read_input_tokens": 20
+          }
+        },
+        "isSidechain": true
+      }
+    ],
+    "expected": {
+      "inputTokens": 100,
+      "outputTokens": 30,
+      "cacheCreationTokens": 40,
+      "cacheReadTokens": 20
+    }
+  },
+  {
+    "name": "stream_midnight",
+    "records": [
+      {
+        "type": "assistant",
+        "uuid": "a1",
+        "parentUuid": "u1",
+        "sessionId": "s",
+        "timestamp": "2026-10-03T23:59:59Z",
+        "message": {
+          "role": "assistant",
+          "id": "m",
+          "model": "claude-response-fixture",
+          "stop_reason": "tool_use",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic answer"
+            }
+          ],
+          "usage": {
+            "input_tokens": 100,
+            "output_tokens": 10,
+            "cache_creation_input_tokens": 40,
+            "cache_read_input_tokens": 20
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "a2",
+        "parentUuid": "a1",
+        "sessionId": "s",
+        "timestamp": "2026-10-04T00:00:01Z",
+        "message": {
+          "role": "assistant",
+          "id": "m",
+          "model": "claude-response-fixture",
+          "stop_reason": "tool_use",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic answer"
+            }
+          ],
+          "usage": {
+            "input_tokens": 100,
+            "output_tokens": 30,
+            "cache_creation_input_tokens": 40,
+            "cache_read_input_tokens": 20
+          }
+        }
+      }
+    ],
+    "expected": {
+      "inputTokens": 100,
+      "outputTokens": 30,
+      "cacheCreationTokens": 40,
+      "cacheReadTokens": 20
+    },
+    "days": {
+      "20261003": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "20261004": [
+        100,
+        30,
+        40,
+        20
+      ]
+    }
+  },
+  {
+    "name": "session_multiple_days",
+    "records": [
+      {
+        "type": "assistant",
+        "uuid": "a1",
+        "parentUuid": "u1",
+        "sessionId": "s",
+        "timestamp": "2026-10-03T12:00:01Z",
+        "message": {
+          "role": "assistant",
+          "id": "m",
+          "model": "claude-response-fixture",
+          "stop_reason": null,
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic answer"
+            }
+          ],
+          "usage": {
+            "input_tokens": 100,
+            "output_tokens": 10,
+            "cache_creation_input_tokens": 40,
+            "cache_read_input_tokens": 20
+          }
+        }
+      },
+      {
+        "type": "user",
+        "uuid": "u2",
+        "sessionId": "s",
+        "message": {
+          "role": "user",
+          "content": "Synthetic prompt"
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "a2",
+        "parentUuid": "u2",
+        "sessionId": "s",
+        "timestamp": "2026-10-04T12:00:02Z",
+        "message": {
+          "role": "assistant",
+          "id": "next",
+          "model": "claude-response-fixture",
+          "stop_reason": null,
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic answer"
+            }
+          ],
+          "usage": {
+            "input_tokens": 100,
+            "output_tokens": 30,
+            "cache_creation_input_tokens": 40,
+            "cache_read_input_tokens": 20
+          }
+        }
+      }
+    ],
+    "expected": {
+      "inputTokens": 200,
+      "outputTokens": 40,
+      "cacheCreationTokens": 80,
+      "cacheReadTokens": 40
+    },
+    "days": {
+      "20261003": [
+        100,
+        10,
+        40,
+        20
+      ],
+      "20261004": [
+        100,
+        30,
+        40,
+        20
+      ]
+    }
+  },
+  {
+    "name": "gateway_bare_export",
+    "records": [
+      {
+        "sessionId": "s",
+        "timestamp": "2026-10-03T12:00:01Z",
+        "message": {
+          "role": "assistant",
+          "id": "m",
+          "model": "claude-response-fixture",
+          "stop_reason": null,
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic answer"
+            }
+          ],
+          "usage": {
+            "input_tokens": 100,
+            "output_tokens": 10,
+            "cache_creation_input_tokens": 40,
+            "cache_read_input_tokens": 20
+          }
+        }
+      },
+      {
+        "sessionId": "s",
+        "timestamp": "2026-10-03T12:00:02Z",
+        "message": {
+          "role": "assistant",
+          "id": "m",
+          "model": "claude-response-fixture",
+          "stop_reason": null,
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic answer"
+            }
+          ],
+          "usage": {
+            "input_tokens": 100,
+            "output_tokens": 30,
+            "cache_creation_input_tokens": 40,
+            "cache_read_input_tokens": 20
+          }
+        }
+      }
+    ],
+    "expected": {
+      "inputTokens": 200,
+      "outputTokens": 40,
+      "cacheCreationTokens": 80,
+      "cacheReadTokens": 40
+    }
+  },
+  {
+    "name": "gateway_boundary_with_misleading_parent",
+    "records": [
+      {
+        "type": "user",
+        "uuid": "u1",
+        "sessionId": "s",
+        "message": {
+          "role": "user",
+          "content": "Synthetic prompt"
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "a1",
+        "parentUuid": "u1",
+        "sessionId": "s",
+        "timestamp": "2026-10-03T12:00:01Z",
+        "message": {
+          "role": "assistant",
+          "id": "m",
+          "model": "claude-response-fixture",
+          "stop_reason": "tool_use",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic answer"
+            }
+          ],
+          "usage": {
+            "input_tokens": 100,
+            "output_tokens": 10,
+            "cache_creation_input_tokens": 40,
+            "cache_read_input_tokens": 20
+          }
+        }
+      },
+      {
+        "type": "user",
+        "uuid": "u2",
+        "sessionId": "s",
+        "message": {
+          "role": "user",
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t",
+              "content": "synthetic result"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "a2",
+        "parentUuid": "a1",
+        "sessionId": "s",
+        "timestamp": "2026-10-03T12:00:02Z",
+        "message": {
+          "role": "assistant",
+          "id": "m",
+          "model": "claude-response-fixture",
+          "stop_reason": "tool_use",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic answer"
+            }
+          ],
+          "usage": {
+            "input_tokens": 100,
+            "output_tokens": 30,
+            "cache_creation_input_tokens": 40,
+            "cache_read_input_tokens": 20
+          }
+        }
+      }
+    ],
+    "expected": {
+      "inputTokens": 200,
+      "outputTokens": 40,
+      "cacheCreationTokens": 80,
+      "cacheReadTokens": 40
+    }
+  },
+  {
+    "name": "gateway_unknown_boundary",
+    "records": [
+      {
+        "type": "user",
+        "uuid": "u1",
+        "sessionId": "s",
+        "message": {
+          "role": "user",
+          "content": "Synthetic prompt"
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "a1",
+        "parentUuid": "u1",
+        "sessionId": "s",
+        "timestamp": "2026-10-03T12:00:01Z",
+        "message": {
+          "role": "assistant",
+          "id": "m",
+          "model": "claude-response-fixture",
+          "stop_reason": "tool_use",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic answer"
+            }
+          ],
+          "usage": {
+            "input_tokens": 100,
+            "output_tokens": 10,
+            "cache_creation_input_tokens": 40,
+            "cache_read_input_tokens": 20
+          }
+        }
+      },
+      {
+        "type": "synthetic-boundary",
+        "uuid": "u2"
+      },
+      {
+        "type": "assistant",
+        "uuid": "a2",
+        "parentUuid": "u2",
+        "sessionId": "s",
+        "timestamp": "2026-10-03T12:00:02Z",
+        "message": {
+          "role": "assistant",
+          "id": "m",
+          "model": "claude-response-fixture",
+          "stop_reason": "tool_use",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic answer"
+            }
+          ],
+          "usage": {
+            "input_tokens": 100,
+            "output_tokens": 30,
+            "cache_creation_input_tokens": 40,
+            "cache_read_input_tokens": 20
+          }
+        }
+      }
+    ],
+    "expected": {
+      "inputTokens": 200,
+      "outputTokens": 40,
+      "cacheCreationTokens": 80,
+      "cacheReadTokens": 40
+    }
+  },
+  {
+    "name": "interleaved_tool_fragments",
+    "records": [
+      {
+        "type": "user",
+        "uuid": "u1",
+        "sessionId": "s",
+        "message": {
+          "role": "user",
+          "content": "Synthetic prompt"
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "a1",
+        "parentUuid": "u1",
+        "sessionId": "s",
+        "timestamp": "2026-10-03T12:00:01Z",
+        "message": {
+          "role": "assistant",
+          "id": "m",
+          "model": "claude-response-fixture",
+          "stop_reason": "tool_use",
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t",
+              "name": "synthetic",
+              "input": {}
+            }
+          ],
+          "usage": {
+            "input_tokens": 100,
+            "output_tokens": 30,
+            "cache_creation_input_tokens": 40,
+            "cache_read_input_tokens": 20
+          }
+        }
+      },
+      {
+        "type": "user",
+        "uuid": "u2",
+        "sessionId": "s",
+        "message": {
+          "role": "user",
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t",
+              "content": "synthetic result"
+            }
+          ]
+        },
+        "parentUuid": "a1"
+      },
+      {
+        "type": "assistant",
+        "uuid": "a2",
+        "parentUuid": "u2",
+        "sessionId": "s",
+        "timestamp": "2026-10-03T12:00:02Z",
+        "message": {
+          "role": "assistant",
+          "id": "m",
+          "model": "claude-response-fixture",
+          "stop_reason": "tool_use",
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "next-tool",
+              "name": "synthetic",
+              "input": {}
+            }
+          ],
+          "usage": {
+            "input_tokens": 100,
+            "output_tokens": 30,
+            "cache_creation_input_tokens": 40,
+            "cache_read_input_tokens": 20
+          }
+        }
+      }
+    ],
+    "expected": {
+      "inputTokens": 100,
+      "outputTokens": 30,
+      "cacheCreationTokens": 40,
+      "cacheReadTokens": 20
+    }
+  },
+  {
+    "name": "interleaved_tool_hook_fragments",
+    "records": [
+      {
+        "type": "user",
+        "uuid": "u1",
+        "sessionId": "s",
+        "message": {
+          "role": "user",
+          "content": "Synthetic prompt"
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "a1",
+        "parentUuid": "u1",
+        "sessionId": "s",
+        "timestamp": "2026-10-03T12:00:01Z",
+        "message": {
+          "role": "assistant",
+          "id": "m",
+          "model": "claude-response-fixture",
+          "stop_reason": "tool_use",
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t",
+              "name": "synthetic",
+              "input": {}
+            }
+          ],
+          "usage": {
+            "input_tokens": 100,
+            "output_tokens": 30,
+            "cache_creation_input_tokens": 40,
+            "cache_read_input_tokens": 20
+          }
+        }
+      },
+      {
+        "type": "user",
+        "uuid": "u2",
+        "sessionId": "s",
+        "message": {
+          "role": "user",
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t",
+              "content": "synthetic result"
+            }
+          ]
+        },
+        "parentUuid": "a1"
+      },
+      {
+        "type": "attachment",
+        "uuid": "hook",
+        "parentUuid": "u2",
+        "sessionId": "s",
+        "attachment": {
+          "type": "hook_success",
+          "content": "synthetic"
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "a2",
+        "parentUuid": "hook",
+        "sessionId": "s",
+        "timestamp": "2026-10-03T12:00:02Z",
+        "message": {
+          "role": "assistant",
+          "id": "m",
+          "model": "claude-response-fixture",
+          "stop_reason": "tool_use",
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "next-tool",
+              "name": "synthetic",
+              "input": {}
+            }
+          ],
+          "usage": {
+            "input_tokens": 100,
+            "output_tokens": 30,
+            "cache_creation_input_tokens": 40,
+            "cache_read_input_tokens": 20
+          }
+        }
+      }
+    ],
+    "expected": {
+      "inputTokens": 100,
+      "outputTokens": 30,
+      "cacheCreationTokens": 40,
+      "cacheReadTokens": 20
+    }
+  },
+  {
+    "name": "interleaved_tools_midnight",
+    "records": [
+      {
+        "type": "user",
+        "uuid": "u1",
+        "sessionId": "s",
+        "message": {
+          "role": "user",
+          "content": "Synthetic prompt"
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "a1",
+        "parentUuid": "u1",
+        "sessionId": "s",
+        "timestamp": "2026-10-03T23:59:59Z",
+        "message": {
+          "role": "assistant",
+          "id": "m",
+          "model": "claude-response-fixture",
+          "stop_reason": "tool_use",
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t",
+              "name": "synthetic",
+              "input": {}
+            }
+          ],
+          "usage": {
+            "input_tokens": 100,
+            "output_tokens": 30,
+            "cache_creation_input_tokens": 40,
+            "cache_read_input_tokens": 20
+          }
+        }
+      },
+      {
+        "type": "user",
+        "uuid": "u2",
+        "sessionId": "s",
+        "message": {
+          "role": "user",
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t",
+              "content": "synthetic result"
+            }
+          ]
+        },
+        "parentUuid": "a1"
+      },
+      {
+        "type": "attachment",
+        "uuid": "hook",
+        "parentUuid": "u2",
+        "sessionId": "s",
+        "attachment": {
+          "type": "hook_success",
+          "content": "synthetic"
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "a2",
+        "parentUuid": "hook",
+        "sessionId": "s",
+        "timestamp": "2026-10-04T00:00:01Z",
+        "message": {
+          "role": "assistant",
+          "id": "m",
+          "model": "claude-response-fixture",
+          "stop_reason": "tool_use",
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "next-tool",
+              "name": "synthetic",
+              "input": {}
+            }
+          ],
+          "usage": {
+            "input_tokens": 100,
+            "output_tokens": 30,
+            "cache_creation_input_tokens": 40,
+            "cache_read_input_tokens": 20
+          }
+        }
+      }
+    ],
+    "expected": {
+      "inputTokens": 100,
+      "outputTokens": 30,
+      "cacheCreationTokens": 40,
+      "cacheReadTokens": 20
+    },
+    "days": {
+      "20261003": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "20261004": [
+        100,
+        30,
+        40,
+        20
+      ]
+    }
+  },
+  {
+    "name": "interleaved_multiple_tool_fragments",
+    "records": [
+      {
+        "type": "user",
+        "uuid": "u1",
+        "sessionId": "s",
+        "message": {
+          "role": "user",
+          "content": "Synthetic prompt"
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "a1",
+        "parentUuid": "u1",
+        "sessionId": "s",
+        "timestamp": "2026-10-03T12:00:01Z",
+        "message": {
+          "role": "assistant",
+          "id": "m",
+          "model": "claude-response-fixture",
+          "stop_reason": "tool_use",
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t",
+              "name": "synthetic",
+              "input": {}
+            }
+          ],
+          "usage": {
+            "input_tokens": 100,
+            "output_tokens": 30,
+            "cache_creation_input_tokens": 40,
+            "cache_read_input_tokens": 20
+          }
+        }
+      },
+      {
+        "type": "user",
+        "uuid": "u2",
+        "sessionId": "s",
+        "message": {
+          "role": "user",
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t",
+              "content": "synthetic result"
+            }
+          ]
+        },
+        "parentUuid": "a1"
+      },
+      {
+        "type": "attachment",
+        "uuid": "hook",
+        "parentUuid": "u2",
+        "sessionId": "s",
+        "attachment": {
+          "type": "hook_success",
+          "content": "synthetic"
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "a2",
+        "parentUuid": "hook",
+        "sessionId": "s",
+        "timestamp": "2026-10-03T12:00:02Z",
+        "message": {
+          "role": "assistant",
+          "id": "m",
+          "model": "claude-response-fixture",
+          "stop_reason": "tool_use",
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "next-tool",
+              "name": "synthetic",
+              "input": {}
+            }
+          ],
+          "usage": {
+            "input_tokens": 100,
+            "output_tokens": 30,
+            "cache_creation_input_tokens": 40,
+            "cache_read_input_tokens": 20
+          }
+        }
+      },
+      {
+        "type": "user",
+        "uuid": "u3",
+        "parentUuid": "a2",
+        "sessionId": "s",
+        "message": {
+          "role": "user",
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "next-tool",
+              "content": "synthetic"
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "a3",
+        "parentUuid": "u3",
+        "sessionId": "s",
+        "timestamp": "2026-10-03T12:00:03Z",
+        "message": {
+          "role": "assistant",
+          "id": "m",
+          "model": "claude-response-fixture",
+          "stop_reason": "tool_use",
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "third-tool",
+              "name": "synthetic",
+              "input": {}
+            }
+          ],
+          "usage": {
+            "input_tokens": 100,
+            "output_tokens": 30,
+            "cache_creation_input_tokens": 40,
+            "cache_read_input_tokens": 20
+          }
+        }
+      }
+    ],
+    "expected": {
+      "inputTokens": 100,
+      "outputTokens": 30,
+      "cacheCreationTokens": 40,
+      "cacheReadTokens": 20
+    }
+  },
+  {
+    "name": "gateway_interleaved_changed_input",
+    "records": [
+      {
+        "type": "user",
+        "uuid": "u1",
+        "sessionId": "s",
+        "message": {
+          "role": "user",
+          "content": "Synthetic prompt"
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "a1",
+        "parentUuid": "u1",
+        "sessionId": "s",
+        "timestamp": "2026-10-03T12:00:01Z",
+        "message": {
+          "role": "assistant",
+          "id": "m",
+          "model": "claude-response-fixture",
+          "stop_reason": "tool_use",
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t",
+              "name": "synthetic",
+              "input": {}
+            }
+          ],
+          "usage": {
+            "input_tokens": 100,
+            "output_tokens": 30,
+            "cache_creation_input_tokens": 40,
+            "cache_read_input_tokens": 20
+          }
+        }
+      },
+      {
+        "type": "user",
+        "uuid": "u2",
+        "sessionId": "s",
+        "message": {
+          "role": "user",
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t",
+              "content": "synthetic result"
+            }
+          ]
+        },
+        "parentUuid": "a1"
+      },
+      {
+        "type": "assistant",
+        "uuid": "a2",
+        "parentUuid": "u2",
+        "sessionId": "s",
+        "timestamp": "2026-10-03T12:00:02Z",
+        "message": {
+          "role": "assistant",
+          "id": "m",
+          "model": "claude-response-fixture",
+          "stop_reason": "tool_use",
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "next-tool",
+              "name": "synthetic",
+              "input": {}
+            }
+          ],
+          "usage": {
+            "input_tokens": 101,
+            "output_tokens": 30,
+            "cache_creation_input_tokens": 40,
+            "cache_read_input_tokens": 20
+          }
+        }
+      }
+    ],
+    "expected": {
+      "inputTokens": 201,
+      "outputTokens": 60,
+      "cacheCreationTokens": 80,
+      "cacheReadTokens": 40
+    }
+  },
+  {
+    "name": "gateway_interleaved_changed_output",
+    "records": [
+      {
+        "type": "user",
+        "uuid": "u1",
+        "sessionId": "s",
+        "message": {
+          "role": "user",
+          "content": "Synthetic prompt"
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "a1",
+        "parentUuid": "u1",
+        "sessionId": "s",
+        "timestamp": "2026-10-03T12:00:01Z",
+        "message": {
+          "role": "assistant",
+          "id": "m",
+          "model": "claude-response-fixture",
+          "stop_reason": "tool_use",
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t",
+              "name": "synthetic",
+              "input": {}
+            }
+          ],
+          "usage": {
+            "input_tokens": 100,
+            "output_tokens": 30,
+            "cache_creation_input_tokens": 40,
+            "cache_read_input_tokens": 20
+          }
+        }
+      },
+      {
+        "type": "user",
+        "uuid": "u2",
+        "sessionId": "s",
+        "message": {
+          "role": "user",
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t",
+              "content": "synthetic result"
+            }
+          ]
+        },
+        "parentUuid": "a1"
+      },
+      {
+        "type": "assistant",
+        "uuid": "a2",
+        "parentUuid": "u2",
+        "sessionId": "s",
+        "timestamp": "2026-10-03T12:00:02Z",
+        "message": {
+          "role": "assistant",
+          "id": "m",
+          "model": "claude-response-fixture",
+          "stop_reason": "tool_use",
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "next-tool",
+              "name": "synthetic",
+              "input": {}
+            }
+          ],
+          "usage": {
+            "input_tokens": 100,
+            "output_tokens": 31,
+            "cache_creation_input_tokens": 40,
+            "cache_read_input_tokens": 20
+          }
+        }
+      }
+    ],
+    "expected": {
+      "inputTokens": 200,
+      "outputTokens": 61,
+      "cacheCreationTokens": 80,
+      "cacheReadTokens": 40
+    }
+  },
+  {
+    "name": "gateway_interleaved_foreign_result",
+    "records": [
+      {
+        "type": "user",
+        "uuid": "u1",
+        "sessionId": "s",
+        "message": {
+          "role": "user",
+          "content": "Synthetic prompt"
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "a1",
+        "parentUuid": "u1",
+        "sessionId": "s",
+        "timestamp": "2026-10-03T12:00:01Z",
+        "message": {
+          "role": "assistant",
+          "id": "m",
+          "model": "claude-response-fixture",
+          "stop_reason": "tool_use",
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t",
+              "name": "synthetic",
+              "input": {}
+            }
+          ],
+          "usage": {
+            "input_tokens": 100,
+            "output_tokens": 30,
+            "cache_creation_input_tokens": 40,
+            "cache_read_input_tokens": 20
+          }
+        }
+      },
+      {
+        "type": "user",
+        "uuid": "u2",
+        "sessionId": "s",
+        "message": {
+          "role": "user",
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "foreign-tool",
+              "content": "synthetic result"
+            }
+          ]
+        },
+        "parentUuid": "a1"
+      },
+      {
+        "type": "assistant",
+        "uuid": "a2",
+        "parentUuid": "u2",
+        "sessionId": "s",
+        "timestamp": "2026-10-03T12:00:02Z",
+        "message": {
+          "role": "assistant",
+          "id": "m",
+          "model": "claude-response-fixture",
+          "stop_reason": "tool_use",
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "next-tool",
+              "name": "synthetic",
+              "input": {}
+            }
+          ],
+          "usage": {
+            "input_tokens": 100,
+            "output_tokens": 30,
+            "cache_creation_input_tokens": 40,
+            "cache_read_input_tokens": 20
+          }
+        }
+      }
+    ],
+    "expected": {
+      "inputTokens": 200,
+      "outputTokens": 60,
+      "cacheCreationTokens": 80,
+      "cacheReadTokens": 40
+    }
+  },
+  {
+    "name": "gateway_interleaved_broken_parent",
+    "records": [
+      {
+        "type": "user",
+        "uuid": "u1",
+        "sessionId": "s",
+        "message": {
+          "role": "user",
+          "content": "Synthetic prompt"
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "a1",
+        "parentUuid": "u1",
+        "sessionId": "s",
+        "timestamp": "2026-10-03T12:00:01Z",
+        "message": {
+          "role": "assistant",
+          "id": "m",
+          "model": "claude-response-fixture",
+          "stop_reason": "tool_use",
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t",
+              "name": "synthetic",
+              "input": {}
+            }
+          ],
+          "usage": {
+            "input_tokens": 100,
+            "output_tokens": 30,
+            "cache_creation_input_tokens": 40,
+            "cache_read_input_tokens": 20
+          }
+        }
+      },
+      {
+        "type": "user",
+        "uuid": "u2",
+        "sessionId": "s",
+        "message": {
+          "role": "user",
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t",
+              "content": "synthetic result"
+            }
+          ]
+        },
+        "parentUuid": "another-branch"
+      },
+      {
+        "type": "assistant",
+        "uuid": "a2",
+        "parentUuid": "u2",
+        "sessionId": "s",
+        "timestamp": "2026-10-03T12:00:02Z",
+        "message": {
+          "role": "assistant",
+          "id": "m",
+          "model": "claude-response-fixture",
+          "stop_reason": "tool_use",
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "next-tool",
+              "name": "synthetic",
+              "input": {}
+            }
+          ],
+          "usage": {
+            "input_tokens": 100,
+            "output_tokens": 30,
+            "cache_creation_input_tokens": 40,
+            "cache_read_input_tokens": 20
+          }
+        }
+      }
+    ],
+    "expected": {
+      "inputTokens": 200,
+      "outputTokens": 60,
+      "cacheCreationTokens": 80,
+      "cacheReadTokens": 40
+    }
+  },
+  {
+    "name": "gateway_interleaved_text_answer",
+    "records": [
+      {
+        "type": "user",
+        "uuid": "u1",
+        "sessionId": "s",
+        "message": {
+          "role": "user",
+          "content": "Synthetic prompt"
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "a1",
+        "parentUuid": "u1",
+        "sessionId": "s",
+        "timestamp": "2026-10-03T12:00:01Z",
+        "message": {
+          "role": "assistant",
+          "id": "m",
+          "model": "claude-response-fixture",
+          "stop_reason": "tool_use",
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t",
+              "name": "synthetic",
+              "input": {}
+            }
+          ],
+          "usage": {
+            "input_tokens": 100,
+            "output_tokens": 30,
+            "cache_creation_input_tokens": 40,
+            "cache_read_input_tokens": 20
+          }
+        }
+      },
+      {
+        "type": "user",
+        "uuid": "u2",
+        "sessionId": "s",
+        "message": {
+          "role": "user",
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t",
+              "content": "synthetic result"
+            }
+          ]
+        },
+        "parentUuid": "a1"
+      },
+      {
+        "type": "assistant",
+        "uuid": "a2",
+        "parentUuid": "u2",
+        "sessionId": "s",
+        "timestamp": "2026-10-03T12:00:02Z",
+        "message": {
+          "role": "assistant",
+          "id": "m",
+          "model": "claude-response-fixture",
+          "stop_reason": "tool_use",
+          "content": [
+            {
+              "type": "text",
+              "text": "Another answer"
+            }
+          ],
+          "usage": {
+            "input_tokens": 100,
+            "output_tokens": 30,
+            "cache_creation_input_tokens": 40,
+            "cache_read_input_tokens": 20
+          }
+        }
+      }
+    ],
+    "expected": {
+      "inputTokens": 200,
+      "outputTokens": 60,
+      "cacheCreationTokens": 80,
+      "cacheReadTokens": 40
+    }
+  },
+  {
+    "name": "gateway_interleaved_mixed_user_input",
+    "records": [
+      {
+        "type": "user",
+        "uuid": "u1",
+        "sessionId": "s",
+        "message": {
+          "role": "user",
+          "content": "Synthetic prompt"
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "a1",
+        "parentUuid": "u1",
+        "sessionId": "s",
+        "timestamp": "2026-10-03T12:00:01Z",
+        "message": {
+          "role": "assistant",
+          "id": "m",
+          "model": "claude-response-fixture",
+          "stop_reason": "tool_use",
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t",
+              "name": "synthetic",
+              "input": {}
+            }
+          ],
+          "usage": {
+            "input_tokens": 100,
+            "output_tokens": 30,
+            "cache_creation_input_tokens": 40,
+            "cache_read_input_tokens": 20
+          }
+        }
+      },
+      {
+        "type": "user",
+        "uuid": "u2",
+        "sessionId": "s",
+        "message": {
+          "role": "user",
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t",
+              "content": "synthetic result"
+            },
+            {
+              "type": "text",
+              "text": "New instruction"
+            }
+          ]
+        },
+        "parentUuid": "a1"
+      },
+      {
+        "type": "assistant",
+        "uuid": "a2",
+        "parentUuid": "u2",
+        "sessionId": "s",
+        "timestamp": "2026-10-03T12:00:02Z",
+        "message": {
+          "role": "assistant",
+          "id": "m",
+          "model": "claude-response-fixture",
+          "stop_reason": "tool_use",
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "next-tool",
+              "name": "synthetic",
+              "input": {}
+            }
+          ],
+          "usage": {
+            "input_tokens": 100,
+            "output_tokens": 30,
+            "cache_creation_input_tokens": 40,
+            "cache_read_input_tokens": 20
+          }
+        }
+      }
+    ],
+    "expected": {
+      "inputTokens": 200,
+      "outputTokens": 60,
+      "cacheCreationTokens": 80,
+      "cacheReadTokens": 40
+    }
+  },
+  {
+    "name": "gateway_interleaved_unknown_attachment",
+    "records": [
+      {
+        "type": "user",
+        "uuid": "u1",
+        "sessionId": "s",
+        "message": {
+          "role": "user",
+          "content": "Synthetic prompt"
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "a1",
+        "parentUuid": "u1",
+        "sessionId": "s",
+        "timestamp": "2026-10-03T12:00:01Z",
+        "message": {
+          "role": "assistant",
+          "id": "m",
+          "model": "claude-response-fixture",
+          "stop_reason": "tool_use",
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t",
+              "name": "synthetic",
+              "input": {}
+            }
+          ],
+          "usage": {
+            "input_tokens": 100,
+            "output_tokens": 30,
+            "cache_creation_input_tokens": 40,
+            "cache_read_input_tokens": 20
+          }
+        }
+      },
+      {
+        "type": "user",
+        "uuid": "u2",
+        "sessionId": "s",
+        "message": {
+          "role": "user",
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t",
+              "content": "synthetic result"
+            }
+          ]
+        },
+        "parentUuid": "a1"
+      },
+      {
+        "type": "attachment",
+        "uuid": "hook",
+        "parentUuid": "u2",
+        "sessionId": "s",
+        "attachment": {
+          "type": "hook_additional_context",
+          "content": "synthetic"
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "a2",
+        "parentUuid": "hook",
+        "sessionId": "s",
+        "timestamp": "2026-10-03T12:00:02Z",
+        "message": {
+          "role": "assistant",
+          "id": "m",
+          "model": "claude-response-fixture",
+          "stop_reason": "tool_use",
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "next-tool",
+              "name": "synthetic",
+              "input": {}
+            }
+          ],
+          "usage": {
+            "input_tokens": 100,
+            "output_tokens": 30,
+            "cache_creation_input_tokens": 40,
+            "cache_read_input_tokens": 20
+          }
+        }
+      }
+    ],
+    "expected": {
+      "inputTokens": 200,
+      "outputTokens": 60,
+      "cacheCreationTokens": 80,
+      "cacheReadTokens": 40
+    }
+  },
+  {
+    "name": "gateway_interleaved_new_request_id",
+    "records": [
+      {
+        "type": "user",
+        "uuid": "u1",
+        "sessionId": "s",
+        "message": {
+          "role": "user",
+          "content": "Synthetic prompt"
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "a1",
+        "parentUuid": "u1",
+        "sessionId": "s",
+        "timestamp": "2026-10-03T12:00:01Z",
+        "message": {
+          "role": "assistant",
+          "id": "m",
+          "model": "claude-response-fixture",
+          "stop_reason": "tool_use",
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t",
+              "name": "synthetic",
+              "input": {}
+            }
+          ],
+          "usage": {
+            "input_tokens": 100,
+            "output_tokens": 30,
+            "cache_creation_input_tokens": 40,
+            "cache_read_input_tokens": 20
+          }
+        },
+        "requestId": "r1"
+      },
+      {
+        "type": "user",
+        "uuid": "u2",
+        "sessionId": "s",
+        "message": {
+          "role": "user",
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t",
+              "content": "synthetic result"
+            }
+          ]
+        },
+        "parentUuid": "a1"
+      },
+      {
+        "type": "assistant",
+        "uuid": "a2",
+        "parentUuid": "u2",
+        "sessionId": "s",
+        "timestamp": "2026-10-03T12:00:02Z",
+        "message": {
+          "role": "assistant",
+          "id": "m",
+          "model": "claude-response-fixture",
+          "stop_reason": "tool_use",
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "next-tool",
+              "name": "synthetic",
+              "input": {}
+            }
+          ],
+          "usage": {
+            "input_tokens": 100,
+            "output_tokens": 30,
+            "cache_creation_input_tokens": 40,
+            "cache_read_input_tokens": 20
+          }
+        },
+        "requestId": "r2"
+      }
+    ],
+    "expected": {
+      "inputTokens": 200,
+      "outputTokens": 60,
+      "cacheCreationTokens": 80,
+      "cacheReadTokens": 40
+    }
+  },
+  {
+    "name": "gateway_interleaved_changed_message_id",
+    "records": [
+      {
+        "type": "user",
+        "uuid": "u1",
+        "sessionId": "s",
+        "message": {
+          "role": "user",
+          "content": "Synthetic prompt"
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "a1",
+        "parentUuid": "u1",
+        "sessionId": "s",
+        "timestamp": "2026-10-03T12:00:01Z",
+        "message": {
+          "role": "assistant",
+          "id": "m",
+          "model": "claude-response-fixture",
+          "stop_reason": "tool_use",
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t",
+              "name": "synthetic",
+              "input": {}
+            }
+          ],
+          "usage": {
+            "input_tokens": 100,
+            "output_tokens": 30,
+            "cache_creation_input_tokens": 40,
+            "cache_read_input_tokens": 20
+          }
+        }
+      },
+      {
+        "type": "user",
+        "uuid": "u2",
+        "sessionId": "s",
+        "message": {
+          "role": "user",
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t",
+              "content": "synthetic result"
+            }
+          ]
+        },
+        "parentUuid": "a1"
+      },
+      {
+        "type": "assistant",
+        "uuid": "a2",
+        "parentUuid": "u2",
+        "sessionId": "s",
+        "timestamp": "2026-10-03T12:00:02Z",
+        "message": {
+          "role": "assistant",
+          "id": "new-message",
+          "model": "claude-response-fixture",
+          "stop_reason": "tool_use",
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "next-tool",
+              "name": "synthetic",
+              "input": {}
+            }
+          ],
+          "usage": {
+            "input_tokens": 100,
+            "output_tokens": 30,
+            "cache_creation_input_tokens": 40,
+            "cache_read_input_tokens": 20
+          }
+        }
+      }
+    ],
+    "expected": {
+      "inputTokens": 200,
+      "outputTokens": 60,
+      "cacheCreationTokens": 80,
+      "cacheReadTokens": 40
+    }
+  }
+]

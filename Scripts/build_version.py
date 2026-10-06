@@ -12,29 +12,16 @@ ROOT = Path(__file__).resolve().parent.parent
 def build_identity(repository=ROOT, channel="development", overrides=None):
     if channel not in ("development", "release"):
         raise ValueError("Unknown build channel")
-    if git(repository, "rev-parse", "--is-shallow-repository") != "false":
-        raise ValueError("Versioning requires full Git history and tags; fetch with --unshallow --tags")
-    config = json.loads((Path(repository) / ".github/release.json").read_text())
     commit = git(repository, "rev-parse", "HEAD")
     dirty = bool(git(repository, "status", "--porcelain", "--untracked-files=normal"))
-    if channel == "release":
-        if dirty:
-            raise ValueError("Release builds require a clean source tree")
-        version_commit = commit
-        version = release_version(repository, config, commit)
-    else:
-        # Branch commits are squashed before release. Do not invent future release
-        # numbers by counting those intermediate commits or reading a moving latest URL.
-        tag = git(repository, "describe", "--tags", "--first-parent", "--match", "v[0-9]*", "--abbrev=0", commit)
-        version_commit = git(repository, "rev-parse", tag + "^{commit}")
-        version = release_version(repository, config, version_commit)
-        if tag != version["tag"]:
-            raise ValueError("Base release tag disagrees with the release version calculation")
+    if channel == "release" and dirty:
+        raise ValueError("Release builds require a clean source tree")
+    version = release_version(repository, revision=commit)
     for key, field in (("MARKETING_VERSION", "version"), ("CURRENT_PROJECT_VERSION", "build")):
         supplied = (overrides or {}).get(key)
         if supplied and supplied != version[field]:
-            raise ValueError(f"{key} is derived from Git; refusing conflicting override {supplied!r}")
-    return dict(version, commit=commit, versionCommit=version_commit, dirty=dirty, channel=channel)
+            raise ValueError(f"{key} is set by the repository; refusing conflicting override {supplied!r}")
+    return dict(version, commit=commit, versionCommit=commit, dirty=dirty, channel=channel)
 
 
 def version_fields(identity):

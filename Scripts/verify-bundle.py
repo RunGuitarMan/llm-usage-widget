@@ -31,6 +31,8 @@ lock = json.loads((Path(__file__).resolve().parent.parent / "Configuration/Depen
 helper = app / "Contents/Helpers/ccusage"
 assert not helper.is_symlink(), "ccusage must be a bundled regular executable"
 assert runtime["version"] == lock["version"] and runtime["contractVersion"] == lock["contractVersion"]
+if "source" in lock:
+    assert runtime["sourceCommit"] == lock["source"]["commit"] and runtime["patchSHA256"] == lock["patch"]["sha256"]
 assert runtime["binarySHA256"] == hashlib.sha256(helper.read_bytes()).hexdigest(), "Bundled ccusage digest mismatch"
 assert subprocess.check_output([str(helper), "--version"], text=True).strip() == "ccusage " + lock["version"]
 subprocess.run(["codesign", "--verify", "--strict", str(helper)], check=True)

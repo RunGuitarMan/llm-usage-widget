@@ -7,6 +7,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+from ccusage_build import checked_patch, verify_built
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -22,7 +23,10 @@ def embed(app, identity="-"):
     deps = ROOT / "build/Dependencies/current"
     lock = json.loads((ROOT / "Configuration/Dependencies.json").read_text())
     binary = deps / "ccusage/package/bin/ccusage"
-    if hashlib.sha256(binary.read_bytes()).hexdigest() != lock["ccusage"]["binarySHA256"]:
+    if "source" in lock["ccusage"]:
+        checked_patch(ROOT, lock["ccusage"])
+        verify_built(deps / "ccusage", lock["ccusage"])
+    elif hashlib.sha256(binary.read_bytes()).hexdigest() != lock["ccusage"]["binarySHA256"]:
         raise ValueError("The locked ccusage binary was modified")
     helpers = app / "Contents/Helpers"
     helpers.mkdir(parents=True, exist_ok=True)
@@ -36,6 +40,8 @@ def embed(app, identity="-"):
     spec = lock["ccusage"]
     manifest = {key: spec[key] for key in ["version", "contractVersion", "architecture"]}
     manifest.update(schemaVersion=1, binarySHA256=hashlib.sha256(helper.read_bytes()).hexdigest())
+    if "source" in spec:
+        manifest.update(sourceCommit=spec["source"]["commit"], patchSHA256=spec["patch"]["sha256"])
     (resources / "CCUsageRuntime.json").write_text(json.dumps(manifest, indent=2) + "\n")
     licenses = resources / "Licenses"
     licenses.mkdir(exist_ok=True)

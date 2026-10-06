@@ -73,6 +73,8 @@ print(f'Built production app with private review controls: {target}', flush=True
 if mode == '--build-only':
     sys.exit(0)
 report = root/('build/manual-review/check-report' if mode == '--self-check' else 'build/UIReview')
+if mode != '--self-check' and os.environ.get('LLM_REVIEW_REPORT_DIR'):
+    report = Path(os.environ['LLM_REVIEW_REPORT_DIR']).expanduser().resolve()
 report.mkdir(parents=True, exist_ok=True)
 receipt = report/'launch.json'
 receipt.unlink(missing_ok=True)
