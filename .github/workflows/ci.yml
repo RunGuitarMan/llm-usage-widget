@@ -58,7 +58,9 @@ jobs:
           python3 Scripts/build_version.py --verify-bundle \
             'build/XcodeVersionCheck/Build/Products/Debug/LLM Usage.app' --with-widget
       - name: Verify bundled native CLI against synthetic pricing fixtures
-        run: build/portable-checks --bundled-cli
+        run: |
+          python3 Scripts/check-claude-streams.py
+          build/portable-checks --bundled-cli
       - name: Exercise signed app updates and download-only policy
         run: bash Scripts/check-updates.sh
 

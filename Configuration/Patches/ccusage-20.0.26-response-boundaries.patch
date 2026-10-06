@@ -1,0 +1,290 @@
+--- a/rust/adapters/claude/src/lib.rs
++++ b/rust/adapters/claude/src/lib.rs
+@@ -3,6 +3,7 @@
+ 
+ mod daily;
+ mod paths;
++mod response_lines;
+ 
+ use std::{
+     fs,
+@@ -25,7 +26,7 @@
+     UsageSummary, calculate_cost, calculate_cost_for_usage_at,
+     cli::{CostMode, SharedArgs},
+     debug_log,
+-    fast::{FxHashMap, byte_lines, suffix_string},
++    fast::{FxHashMap, suffix_string},
+     format_date_tz, log_level, missing_pricing_model_for_usage, parse_ts_timestamp, parse_tz,
+     progress,
+ };
+@@ -493,7 +494,7 @@
+     };
+ 
+     let usage_marker = memmem::Finder::new(br#""usage":{"#);
+-    for line in byte_lines(&content) {
++    for line in response_lines::response_lines(&content) {
+         if usage_marker.find(line).is_none() {
+             continue;
+         }
+--- a/rust/adapters/claude/src/daily.rs
++++ b/rust/adapters/claude/src/daily.rs
+@@ -14,7 +14,7 @@
+     ModelBreakdown, PricingMap, Result, Speed, TimestampMs, TokenCounts, TokenUsageRaw,
+     UsageSummary, calculate_cost_for_usage_at,
+     cli::{CostMode, SharedArgs},
+-    fast::{FxHashMap, byte_lines, suffix_string},
++    fast::{FxHashMap, suffix_string},
+     format_date_tz, log_level, missing_pricing_model_for_usage, parse_ts_timestamp, parse_tz,
+     utc_now,
+ };
+@@ -300,7 +300,7 @@
+     };
+ 
+     let usage_marker = memmem::Finder::new(br#""usage":{"#);
+-    for line in byte_lines(&content) {
++    for line in super::response_lines::response_lines(&content) {
+         if usage_marker.find(line).is_none() {
+             continue;
+         }
+--- /dev/null
++++ b/rust/adapters/claude/src/response_lines.rs
+@@ -0,0 +1,239 @@
++//! Collapse linked fragments before either loader prices or deduplicates them.
++//! Bare gateway exports keep timestamp-based identity: equal message IDs and
++//! similar counters alone never establish that two records are one response.
++//! Serialized fragments can each carry a non-null stop_reason (including
++//! tool_use/end_turn), so that field cannot establish a request boundary.
++use ccusage_core::{TokenUsageRaw, fast::byte_lines};
++use serde::Deserialize;
++
++#[derive(Deserialize)]
++#[serde(rename_all = "camelCase")]
++struct Record {
++    #[serde(rename = "type")]
++    kind: Option<String>,
++    uuid: Option<String>,
++    parent_uuid: Option<String>,
++    session_id: Option<String>,
++    request_id: Option<String>,
++    is_sidechain: Option<bool>,
++    message: Option<Message>,
++    attachment: Option<serde_json::Value>,
++}
++
++#[derive(Deserialize)]
++struct Message {
++    id: Option<String>,
++    model: Option<String>,
++    usage: Option<TokenUsageRaw>,
++    content: Option<serde_json::Value>,
++}
++
++fn compatible(previous: &Record, current: &Record) -> bool {
++    let (Some(a), Some(b)) = (&previous.message, &current.message) else {
++        return false;
++    };
++    let (Some(x), Some(y)) = (a.usage, b.usage) else {
++        return false;
++    };
++    previous.kind.as_deref() == Some("assistant")
++        && current.kind.as_deref() == Some("assistant")
++        && previous.request_id.is_none()
++        && current.request_id.is_none()
++        && current.uuid.as_ref().is_some_and(|id| !id.is_empty())
++        && previous.session_id == current.session_id
++        && previous.is_sidechain == current.is_sidechain
++        && a.id
++            .as_ref()
++            .is_some_and(|id| !id.is_empty() && Some(id) == b.id.as_ref())
++        && a.model == b.model
++        && x.input_tokens == y.input_tokens
++        && x.cache_creation_token_count() == y.cache_creation_token_count()
++        && x.cache_read_input_tokens == y.cache_read_input_tokens
++        && x.output_tokens <= y.output_tokens
++        && x.speed.map(|s| std::mem::discriminant(&s))
++            == y.speed.map(|s| std::mem::discriminant(&s))
++}
++
++fn block_ids(record: &Record, kind: &str, key: &str) -> Option<Vec<String>> {
++    let blocks = record.message.as_ref()?.content.as_ref()?.as_array()?;
++    if blocks.is_empty() {
++        return None;
++    }
++    blocks
++        .iter()
++        .map(|block| {
++            if block.get("type")?.as_str()? != kind {
++                return None;
++            }
++            let id = block.get(key)?.as_str()?;
++            (!id.is_empty()).then(|| id.to_owned())
++        })
++        .collect()
++}
++
++struct Pending {
++    index: usize,
++    record: Record,
++    tail_uuid: Option<String>,
++    tool_ids: Option<Vec<String>>,
++    crossed_tool_result: bool,
++}
++
++impl Pending {
++    fn new(index: usize, record: Record) -> Self {
++        Self {
++            index,
++            tail_uuid: record.uuid.clone(),
++            tool_ids: block_ids(&record, "tool_use", "id"),
++            record,
++            crossed_tool_result: false,
++        }
++    }
++
++    fn linked(&self, current: &Record) -> bool {
++        self.tail_uuid
++            .as_ref()
++            .is_some_and(|id| !id.is_empty() && Some(id) == current.parent_uuid.as_ref())
++            && current.uuid.as_ref().is_some_and(|id| !id.is_empty())
++    }
++
++    fn continues(&self, current: &Record) -> bool {
++        if !self.linked(current) || !compatible(&self.record, current) {
++            return false;
++        }
++        if !self.crossed_tool_result {
++            return true;
++        }
++        // Claude can execute an emitted tool block before writing the next
++        // block of that response. Only bridge owned tool results, preserving
++        // exact counters; changed counters or a new text answer start a call.
++        let (Some(old_ids), Some(new_ids)) = (&self.tool_ids, block_ids(current, "tool_use", "id"))
++        else {
++            return false;
++        };
++        let old_usage = self.record.message.as_ref().and_then(|m| m.usage);
++        let new_usage = current.message.as_ref().and_then(|m| m.usage);
++        old_usage
++            .zip(new_usage)
++            .is_some_and(|(a, b)| a.output_tokens == b.output_tokens)
++            && new_ids.iter().all(|id| !old_ids.contains(id))
++    }
++
++    fn advance(&mut self, current: &Record) -> bool {
++        if self.record.request_id.is_some() || !self.linked(current) {
++            return false;
++        }
++        let Some(tools) = &self.tool_ids else {
++            return false;
++        };
++        let owned_results = current.kind.as_deref() == Some("user")
++            && block_ids(current, "tool_result", "tool_use_id")
++                .is_some_and(|ids| ids.iter().all(|id| tools.contains(id)));
++        let hook = current.kind.as_deref() == Some("attachment")
++            && self.crossed_tool_result
++            && current
++                .attachment
++                .as_ref()
++                .and_then(|v| v.get("type"))
++                .and_then(|v| v.as_str())
++                == Some("hook_success");
++        if !owned_results && !hook {
++            return false;
++        }
++        self.tail_uuid = current.uuid.clone();
++        self.crossed_tool_result = true;
++        true
++    }
++}
++
++pub(super) fn response_lines(content: &[u8]) -> Vec<&[u8]> {
++    let mut result = Vec::new();
++    let mut previous: Option<Pending> = None;
++    for line in byte_lines(content) {
++        let index = result.len();
++        result.push(line);
++        let Ok(record) = serde_json::from_slice::<Record>(line) else {
++            // Damaged records cannot establish a continuation boundary.
++            previous = None;
++            continue;
++        };
++        match record.kind.as_deref() {
++            Some("assistant") => {
++                if let Some(old) = &previous
++                    && old.continues(&record)
++                {
++                    result[old.index] = &[];
++                }
++                previous = Some(Pending::new(index, record));
++            }
++            // These records do not start another model call. A later fragment
++            // must still link to the tracked UUID chain.
++            Some("progress" | "file-history-snapshot" | "queue-operation") => {}
++            _ => {
++                if !previous.as_mut().is_some_and(|old| old.advance(&record)) {
++                    previous = None;
++                }
++            }
++        }
++    }
++    result
++}
++
++#[cfg(test)]
++mod tests {
++    use super::response_lines;
++    use serde_json::{Value, json};
++
++    fn fixture() -> Vec<Value> {
++        let first = json!({"type":"assistant","uuid":"a","parentUuid":"prompt","sessionId":"s",
++            "timestamp":"2026-10-04T12:00:00Z","message":{"id":"m","model":"fixture","stop_reason":"tool_use",
++            "content":[{"type":"tool_use","id":"t1","name":"synthetic","input":{}}],
++            "usage":{"input_tokens":100,"output_tokens":30,"cache_creation_input_tokens":40,"cache_read_input_tokens":20}}});
++        let mut second = first.clone();
++        second["uuid"] = json!("b");
++        second["parentUuid"] = json!("hook");
++        second["timestamp"] = json!("2026-10-04T12:00:02Z");
++        second["message"]["content"][0]["id"] = json!("t2");
++        vec![
++            first,
++            json!({"type":"user","uuid":"result","parentUuid":"a","message":{"content":[{"type":"tool_result","tool_use_id":"t1","content":"synthetic"}]}}),
++            json!({"type":"attachment","uuid":"hook","parentUuid":"result","attachment":{"type":"hook_success"}}),
++            second,
++        ]
++    }
++
++    fn retained_usage(rows: Vec<Value>) -> u64 {
++        let raw = rows
++            .iter()
++            .map(Value::to_string)
++            .collect::<Vec<_>>()
++            .join("\n");
++        response_lines(raw.as_bytes())
++            .iter()
++            .filter_map(|line| serde_json::from_slice::<Value>(line).ok())
++            .filter_map(|row| row["message"]["usage"]["input_tokens"].as_u64())
++            .sum()
++    }
++
++    #[test]
++    fn keeps_one_usage_for_tool_fragments_interleaved_with_owned_results_and_hooks() {
++        assert_eq!(retained_usage(fixture()), 100);
++    }
++
++    #[test]
++    fn reused_gateway_id_does_not_cross_changed_counters_or_foreign_tool_results() {
++        let mut rows = fixture();
++        rows[3]["message"]["usage"]["output_tokens"] = json!(31);
++        assert_eq!(retained_usage(rows), 200);
++        let mut rows = fixture();
++        rows[1]["message"]["content"][0]["tool_use_id"] = json!("foreign");
++        assert_eq!(retained_usage(rows), 200);
++    }
++
++    #[test]
++    fn reused_gateway_id_with_equal_counters_does_not_merge_a_new_text_answer() {
++        let mut rows = fixture();
++        rows[3]["message"]["content"] = json!([{"type":"text","text":"another answer"}]);
++        assert_eq!(retained_usage(rows), 200);
++    }
++}

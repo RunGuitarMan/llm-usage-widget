@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import tarfile
 import tempfile
+from ccusage_build import build_ccusage, checked_patch, verify_built
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -57,6 +58,8 @@ def extract(archive, destination):
 
 def prepare(root=ROOT):
     manifest = json.loads((root / "Configuration/Dependencies.json").read_text())
+    if "source" in manifest["ccusage"]:
+        checked_patch(root, manifest["ccusage"])
     directory = root / "build/Dependencies"
     directory.mkdir(parents=True, exist_ok=True)
     fingerprint = hashlib.sha256((root / "Configuration/Dependencies.json").read_bytes()).hexdigest()
@@ -68,18 +71,23 @@ def prepare(root=ROOT):
                 stage = Path(temporary)
                 for name, algorithm in [("ccusage", "sha512"), ("sparkle", "sha256")]:
                     spec = manifest[name]
+                    if name == "ccusage" and "source" in spec:
+                        build_ccusage(root, spec, stage / name, directory, download, extract)
+                        continue
                     archive = directory / (spec[algorithm] + ".archive")
                     download(spec["url"], archive, algorithm, spec[algorithm])
                     target = stage / name
                     target.mkdir()
                     extract(archive, target)
                 binary = stage / "ccusage/package/bin/ccusage"
-                if hashlib.sha256(binary.read_bytes()).hexdigest() != manifest["ccusage"]["binarySHA256"]:
+                if "source" not in manifest["ccusage"] and hashlib.sha256(binary.read_bytes()).hexdigest() != manifest["ccusage"]["binarySHA256"]:
                     raise ValueError("ccusage binary checksum mismatch")
                 (stage / "ready").write_text(contents_digest(stage))
                 if ready.exists():
                     shutil.rmtree(ready)
                 stage.rename(ready)
+        if "source" in manifest["ccusage"]:
+            verify_built(ready / "ccusage", manifest["ccusage"])
         # A stable path lets both swiftc and Xcode use the very same framework.
         link = directory / "current"
         staged_link = directory / ".current"

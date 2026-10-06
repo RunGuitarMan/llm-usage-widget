@@ -20,6 +20,8 @@ CI runs the first four commands and the shipping build. `check.sh` calls `check-
 
 `LLMUsage/Tests/*Scenarios.swift` contains the shared assertions used by both the portable harness and XCTest wrappers. Add checks there instead of duplicating them. Existing coverage includes date/timezone boundaries, model attribution and exclusions, stream/replay deduplication, pricing persistence, transcript timing, search cancellation, stale responses, cache validation, clock changes and CLI process cleanup.
 
+Run `python3 Scripts/check-claude-streams.py` after building the app to check both real CLI loaders against the shared response-boundary fixtures (streams, reused gateway IDs, replays and midnight). `build/portable-checks --bundled-cli` additionally compares the application reports in both source modes with priced chat detail on those same fixtures.
+
 After building the app, run `build/portable-checks --bundled-cli` to verify the shipped native helper against synthetic logs and pricing fixtures. For optional system-CLI integration checks, use `bash Scripts/check.sh --live-cli` for saved/offline pricing or `bash Scripts/check.sh --chat-cli` for transcript calculations. Both use synthetic logs; the live pricing check also needs network access to the price catalog and the tested ccusage version. They do not validate every upstream CLI version.
 
 To test the Xcode app target with signing configured:

@@ -1,11 +1,13 @@
 import hashlib
 import importlib.util
 import io
+import json
 from pathlib import Path
 import tarfile
 import tempfile
 import unittest
 from unittest.mock import patch
+from ccusage_build import checked_patch, verify_built
 
 spec = importlib.util.spec_from_file_location("dependencies", Path(__file__).with_name("prepare-dependencies.py"))
 dependencies = importlib.util.module_from_spec(spec)
@@ -15,6 +17,27 @@ spec.loader.exec_module(dependencies)
 class DependencyTests(unittest.TestCase):
     def setUp(self):
         self.root = Path(self.enterContext(tempfile.TemporaryDirectory()))
+
+    def test_modified_patch_and_mismatched_build_inputs_are_rejected(self):
+        patch_file = self.root / "fix.patch"
+        patch_file.write_bytes(b"reviewed patch")
+        locked = {"patch": {"path": "fix.patch", "sha256": hashlib.sha256(patch_file.read_bytes()).hexdigest()}}
+        self.assertEqual(checked_patch(self.root, locked), patch_file)
+        patch_file.write_bytes(b"changed")
+        with self.assertRaisesRegex(ValueError, "patch checksum"):
+            checked_patch(self.root, locked)
+        binary = self.root / "package/bin/ccusage"
+        binary.parent.mkdir(parents=True)
+        binary.write_bytes(b"compiled")
+        receipt = {"inputsSHA256": hashlib.sha256(json.dumps(locked, sort_keys=True).encode()).hexdigest(),
+                   "binarySHA256": hashlib.sha256(binary.read_bytes()).hexdigest()}
+        (self.root / "build-receipt.json").write_text(json.dumps(receipt))
+        verify_built(self.root, locked)
+        with self.assertRaisesRegex(ValueError, "receipt mismatch"):
+            verify_built(self.root, dict(locked, contractVersion=3))
+        binary.write_bytes(b"tampered")
+        with self.assertRaisesRegex(ValueError, "receipt mismatch"):
+            verify_built(self.root, locked)
 
     def test_corrupt_download_never_replaces_known_archive(self):
         destination = self.root / "archive"
