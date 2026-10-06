@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail a system WidgetKit check on stale/missing deliveries or archive rejection.
+"""Fail a system WidgetKit check on stale/missing deliveries or host errors.
 
 Place all three widget kinds in all three sizes, refresh the common app, then
 run this against that same artifact. An empty desktop is a failure, never a pass.
@@ -16,6 +16,9 @@ from app_artifact import ROOT, verify
 
 KINDS = {"ClaudeUsageWidget", "LLMUsageSessionsWidget", "LLMUsageTrendWidget"}
 EXPECTED = {(kind, str(family)) for kind in KINDS for family in range(3)}
+LAUNCH_FAILURES = ("missing executable detected", "could not find and/or execute program",
+                   "attempt to re-bootstrap service from different path, will use existing",
+                   "failed to create extensionprocess", "failed to launch extension")
 
 
 def assess(events, bundle_id, version, generation):
@@ -27,6 +30,8 @@ def assess(events, bundle_id, version, generation):
             continue
         if "bundleStubNotSupported" in message or "ValidationError" in message or "failed with error" in message:
             errors.append("WidgetKit rejected an archive: " + message)
+        if any(failure in message.lower() for failure in LAUNCH_FAILURES):
+            errors.append("WidgetKit launch/registration failed: " + message)
         if "WidgetDelivery " not in message:
             continue
         fields = dict(re.findall(r"(\w+)=([^\s]+)", message))
@@ -75,7 +80,7 @@ def main():
     bundle_id = identity["bundleID"] + ".Widget"
     if not re.fullmatch(r"[A-Za-z0-9.-]+", bundle_id):
         raise ValueError("Invalid bundle identifier")
-    predicate = f'(process == "chronod" OR subsystem == "local.ClaudeUsage.Widget") AND eventMessage CONTAINS "{bundle_id}"'
+    predicate = f'(process == "chronod" OR process == "launchd" OR subsystem == "local.ClaudeUsage.Widget") AND eventMessage CONTAINS "{bundle_id}"'
     result = subprocess.run(["/usr/bin/log", "show", "--style", "json", "--info", "--start",
                              start.astimezone().strftime("%Y-%m-%d %H:%M:%S"), "--predicate", predicate],
                             capture_output=True, text=True, check=True)
@@ -84,7 +89,7 @@ def main():
     args.output.write_text(json.dumps({"bundleID": bundle_id, "version": identity["version"],
         "executableSHA256": identity["executableSHA256"], "since": args.since,
         "generation": generation, "deliveries": deliveries}, indent=2) + "\n")
-    print("PASS Actual WidgetKit delivery for all 9 kind/size pairs; no archive rejection in the test interval")
+    print("PASS Actual WidgetKit delivery for all 9 kind/size pairs; no archive or launch errors in the test interval")
 
 
 if __name__ == "__main__":

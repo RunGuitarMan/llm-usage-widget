@@ -85,7 +85,76 @@ private actor WidgetFixtureService: CCUsageServing {
         process.code = current; process.pid = 0
         try ReviewCheck.require(!WidgetExtensionLifecycle.shouldRetire(process, current: current, executable: path), "Invalid PID was selected for termination")
         print("PASS Widget lifecycle: stale executable/path detection, current process and other bundle isolation")
+        try await cachedHostRecovery()
         try await replacementLifecycle()
+    }
+
+    private static func cachedHostRecovery() async throws {
+        typealias Lifecycle = WidgetExtensionLifecycle
+        let host = Lifecycle.HostIdentity(pid: 12345, startSeconds: 100, startMicroseconds: 42)
+        let identifier = "local.fixture.Widget"
+        let currentBundle = "/Applications/LLM Usage.app/Contents/PlugIns/LLMUsageWidget.appex"
+        let oldBundle = "/deleted build/LLM Usage.app/Contents/PlugIns/LLMUsageWidget.appex"
+        let suffix = "/Contents/MacOS/LLMUsageWidget"
+        // Captured field structure of the failing launchd job, including a nested
+        // misleading field that must never override the top-level executable.
+        let output = """
+        pid/12345/local.fixture.Widget = {
+        \ttype = Extension
+        \tpath = \(oldBundle)
+        \tbundle id = local.fixture.Widget
+        \textension point = com.apple.widgetkit-extension
+        \tprogram = \(oldBundle + suffix)
+        \tenvironment = {
+        \t\tprogram = /unrelated/program
+        \t}
+        }
+        """
+        let stale = Lifecycle.cachedJob(output, hostPID: host.pid, identifier: identifier)
+        try ReviewCheck.require(stale?.executable == oldBundle + suffix, "Deleted-build launch job was not recognized")
+        for malformed in ["", "Could not find service", output.replacingOccurrences(of: "pid/12345/", with: "pid/999/"),
+                          output.replacingOccurrences(of: "bundle id = local.fixture.Widget", with: "bundle id = other.Widget"),
+                          output.replacingOccurrences(of: "type = Extension", with: "type = LaunchAgent"),
+                          output.replacingOccurrences(of: "com.apple.widgetkit-extension", with: "other.extension"),
+                          output.replacingOccurrences(of: "\tprogram = \(oldBundle + suffix)", with: "\tprogram = /bin/sleep"),
+                          output + "\n\tprogram = \(oldBundle + suffix)", String(output.dropLast())] {
+            try ReviewCheck.require(Lifecycle.cachedJob(malformed, hostPID: host.pid, identifier: identifier) == nil,
+                                    "Ambiguous/foreign launch job permits host recovery")
+        }
+        let current = Lifecycle.CachedJob(identifier: identifier, executable: currentBundle + suffix)
+        let alias = Lifecycle.CachedJob(identifier: identifier, executable: "/Applications/../Applications" + String((currentBundle + suffix).dropFirst("/Applications".count)))
+        let foreign = Lifecycle.CachedJob(identifier: "other.Widget", executable: oldBundle + suffix)
+        let recycled = Lifecycle.HostIdentity(pid: host.pid, startSeconds: 101, startMicroseconds: 0)
+        func check(_ name: String, jobs: [Lifecycle.CachedJob?], hosts: [Lifecycle.HostIdentity?], expected: Bool) async throws {
+            var jobIndex = 0, hostIndex = 0
+            var signals: [pid_t] = []
+            let result = await Lifecycle.recoverHost(host, identifier: identifier, executable: currentBundle + suffix,
+                identify: { _ in
+                    defer { hostIndex += 1 }
+                    return hosts[min(hostIndex, hosts.count - 1)]
+                }, inspect: { _, _ in
+                    defer { jobIndex += 1 }
+                    return jobs[min(jobIndex, jobs.count - 1)]
+                }, terminate: { pid in signals.append(pid); return true })
+            try ReviewCheck.require(result == expected && signals == (expected ? [host.pid] : []), "Unsafe host recovery: \(name)")
+        }
+        try await check("deleted build with no running extension", jobs: [stale, stale], hosts: [host], expected: true)
+        try await check("current path", jobs: [current], hosts: [host], expected: false)
+        try await check("canonical path alias", jobs: [alias], hosts: [host], expected: false)
+        try await check("unavailable diagnostics", jobs: [nil], hosts: [host], expected: false)
+        try await check("another widget", jobs: [foreign], hosts: [host], expected: false)
+        try await check("job corrected during lookup", jobs: [stale, current], hosts: [host], expected: false)
+        try await check("host disappeared", jobs: [stale], hosts: [host, nil], expected: false)
+        try await check("PID recycled before lookup", jobs: [stale], hosts: [recycled], expected: false)
+        try await check("PID recycled before signal", jobs: [stale], hosts: [host, host, recycled], expected: false)
+        try ReviewCheck.require(Lifecycle.hostIdentity(getpid()) == nil && Lifecycle.hostIdentity(0) == nil,
+                                "A non-host process was accepted for host recovery")
+        let now = Date(timeIntervalSince1970: 1_000)
+        try ReviewCheck.require(Lifecycle.recoveryAllowed(lastRecovery: nil, now: now)
+            && !Lifecycle.recoveryAllowed(lastRecovery: now.addingTimeInterval(-299), now: now)
+            && Lifecycle.recoveryAllowed(lastRecovery: now.addingTimeInterval(-300), now: now)
+            && Lifecycle.recoveryAllowed(lastRecovery: now.addingTimeInterval(1), now: now), "Host recovery cooldown is incorrect")
+        print("PASS Widget host recovery: deleted launch path, healthy/foreign jobs, fail-closed parsing, PID/job races and restart cooldown")
     }
 
     /// Non-UI process fixture: a signed copy of the system sleep utility, never

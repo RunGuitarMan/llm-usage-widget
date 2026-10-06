@@ -22,8 +22,17 @@ class WidgetHostCheckTests(unittest.TestCase):
             with self.subTest(events=len(events)), self.assertRaises(ValueError):
                 assess(events, self.bundle, "1.5.4", 100)
 
+    def test_deleted_build_launch_job_fails_even_with_fresh_provider_receipts(self):
+        for failure in ("Missing executable detected", "Could not find and/or execute program specified by service",
+                        "Attempt to re-bootstrap service from different path, will use existing",
+                        "Failed to create extensionProcess", "Failed to launch extension"):
+            events = self.deliveries() + [{"eventMessage": f"[{self.bundle}] {failure}"}]
+            with self.subTest(failure=failure), self.assertRaisesRegex(ValueError, "launch/registration failed"):
+                assess(events, self.bundle, "1.5.4", 100)
+
     def test_another_apps_errors_do_not_invalidate_the_test(self):
-        events = self.deliveries() + [{"eventMessage": "[other.Widget] failed with error ValidationError"}]
+        events = self.deliveries() + [{"eventMessage": "[other.Widget] failed with error ValidationError"},
+                                     {"eventMessage": "[other.Widget] Missing executable detected"}]
         self.assertEqual(len(assess(events, self.bundle, "1.5.4", 100)), 9)
 
     def test_storage_failure_is_not_a_successful_delivery(self):
