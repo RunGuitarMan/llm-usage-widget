@@ -123,5 +123,7 @@ import AppKit
         defer { invalid.cleanup() }
         invalid.save(notes: "Must preserve unreadable report")
         try require(invalid.persistenceError != nil && (try Data(contentsOf: badURL)) == original, "Unreadable report overwritten")
+        try await select("overview")
+        try await WindowChecks.sidebarAppearance(review)
     }
 }

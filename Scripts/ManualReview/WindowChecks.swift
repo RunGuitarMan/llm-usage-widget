@@ -96,12 +96,12 @@ import SwiftUI
             print("PASS Production chat/analytics/tools/error sheets fit 680/900px in \(language.rawValue)")
         }
         try await ReviewCheck.select("overview", in: review)
-        try await sidebarAppearance(review)
         try await ComponentChecks.run(store: store)
     }
 
-    private static func sidebarAppearance(_ review: ManualReviewController) async throws {
+    static func sidebarAppearance(_ review: ManualReviewController) async throws {
         let window = review.dashboard!
+        try await ReviewCheck.wait("Catalogue scene did not open") { review.panel != nil }
         // The preceding scenario dismisses a real sheet asynchronously. Its final
         // focus restoration must complete before this check switches windows.
         print("REVIEW Sidebar: waiting for the preceding sheet to close")
@@ -109,30 +109,28 @@ import SwiftUI
             window.attachedSheet == nil
         }
         NSApp.activate(ignoringOtherApps: true)
-        for appearance in [ReviewAppearance.light, .dark] {
-            review.appearance = appearance
-            review.changePresentation()
-            for active in [true, false] {
-                // A secondary catalogue can take key focus while leaving the
-                // dashboard main and visually active. Test actual app deactivation.
+        // Check both themes before resigning application focus. This is the final
+        // UI check: accessory apps cannot reliably steal activation back after
+        // voluntarily deactivating. No environment value or row state is overridden.
+        for active in [true, false] {
+            if active { review.showDashboard() }
+            else { NSApp.deactivate() }
+            for appearance in [ReviewAppearance.light, .dark] {
+                review.appearance = appearance
+                review.changePresentation()
                 print("REVIEW Sidebar: switching \(appearance), active=\(active)")
-                if active {
-                    NSApp.activate(ignoringOtherApps: true)
-                    window.makeKeyAndOrderFront(nil)
-                } else {
-                    NSApp.deactivate()
-                }
                 var accentPixels = -1
                 var neutralFill = false
                 do {
                     // A key-window notification precedes SwiftUI's appearance update.
                     // Wait for the actual rendered state, not an arbitrary 200ms delay.
                     try await ReviewCheck.wait("Sidebar appearance did not settle") {
-                        // Accessory apps may remain NSApp.isActive after resigning
-                        // their windows. Verify the window state and actual pixels.
                         let focused = active ? (NSApp.isActive && window.isKeyWindow)
                             : (!window.isKeyWindow && !window.isMainWindow)
-                        guard focused, window.attachedSheet == nil,
+                        // Do not trigger an offscreen draw before the live SwiftUI
+                        // view has consumed the native focus notification.
+                        guard focused, review.observedSidebarAppearance[DashboardTab.overview.symbol] == active,
+                              window.attachedSheet == nil,
                               let host = window.contentView, let table = ReviewCheck.sidebar(in: host),
                               table.selectedRow >= 0,
                               let row = table.rowView(atRow: table.selectedRow, makeIfNecessary: true),
@@ -153,12 +151,14 @@ import SwiftUI
                         return (active ? accentPixels > 10 : accentPixels == 0) && neutralFill
                     }
                 } catch {
-                    try ReviewCheck.require(false, "Sidebar did not follow active state: \(appearance), active=\(active), pixels=\(accentPixels), neutralFill=\(neutralFill), key=\(window.isKeyWindow), main=\(window.isMainWindow), appActive=\(NSApp.isActive)")
+                    if let host = window.contentView, let table = ReviewCheck.sidebar(in: host),
+                       let row = table.rowView(atRow: table.selectedRow, makeIfNecessary: false) {
+                        print("REVIEW Sidebar failure: emphasized=\(row.isEmphasized), tableStyle=\(table.selectionHighlightStyle.rawValue), rowStyle=\(row.selectionHighlightStyle.rawValue), observations=\(review.observedSidebarAppearance)")
+                    }
+                    try ReviewCheck.require(false, "Sidebar did not follow active state: \(appearance), active=\(active), observed=\(String(describing: review.observedSidebarAppearance[DashboardTab.overview.symbol])), pixels=\(accentPixels), neutralFill=\(neutralFill), key=\(window.isKeyWindow), main=\(window.isMainWindow), appActive=\(NSApp.isActive)")
                 }
             }
         }
-        NSApp.activate(ignoringOtherApps: true)
-        window.makeKeyAndOrderFront(nil)
         print("PASS Production sidebar selection in light/dark and active/inactive states")
     }
 }

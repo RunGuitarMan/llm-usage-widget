@@ -37,8 +37,8 @@ def launch(args):
             raise ValueError('The common app is already open normally. Close it before starting review.')
         stop(pid)
     normal = args.normal_smoke
-    report = ROOT / ('build/manual-review/normal-report' if normal else 'build/manual-review/check-report' if (args.self_check or args.widget_check) else 'build/UIReview')
-    if not normal and not (args.self_check or args.widget_check) and os.environ.get('LLM_REVIEW_REPORT_DIR'):
+    report = ROOT / ('build/manual-review/normal-report' if normal else 'build/manual-review/check-report' if (args.self_check or args.widget_check or args.focus_check) else 'build/UIReview')
+    if not normal and not (args.self_check or args.widget_check or args.focus_check) and os.environ.get('LLM_REVIEW_REPORT_DIR'):
         report = Path(os.environ['LLM_REVIEW_REPORT_DIR']).expanduser().resolve()
     report.mkdir(parents=True, exist_ok=True)
     receipt = report / 'launch.json'
@@ -47,8 +47,8 @@ def launch(args):
     exe = app / 'Contents/MacOS/LLM Usage'
     options = ['--demo'] if normal else ['--review']
     options += ['--review-report-dir', str(report), '--review-launch-token', token]
-    if (args.self_check or args.widget_check):
-        options.append('--review-widget-check' if args.widget_check else '--review-self-check')
+    if (args.self_check or args.widget_check or args.focus_check):
+        options.append('--review-widget-check' if args.widget_check else '--review-focus-check' if args.focus_check else '--review-self-check')
     fd, name = tempfile.mkstemp(prefix='llm-usage-review-', suffix='.log')
     os.close(fd)
     log = Path(name)
@@ -81,12 +81,12 @@ def launch(args):
                         break
             time.sleep(.1)
         if pid is None:
-            raise ValueError(f'App did not confirm the expected binary and dashboard. See {report / "app.log" if normal or (args.self_check or args.widget_check) else log}')
+            raise ValueError(f'App did not confirm the expected binary and dashboard. See {report / "app.log" if normal or (args.self_check or args.widget_check or args.focus_check) else log}')
         print(f"Confirmed SAME app: {app}; PID {pid}; SHA-256 {identity['executableSHA256']}; review={not normal}", flush=True)
         if normal:
             stop(pid)
             print('PASS Normal launch uses the common executable without activating the review catalogue')
-        elif (args.self_check or args.widget_check):
+        elif (args.self_check or args.widget_check or args.focus_check):
             deadline = time.monotonic() + 600
             while time.monotonic() < deadline:
                 try:
@@ -99,7 +99,7 @@ def launch(args):
             output = log.read_text()
             (report / 'app.log').write_text(output)
             print(output)
-            marker = 'PASS Widget checks in common app' if args.widget_check else 'PASS Manual review: production App/Scene'
+            marker = 'PASS Widget checks in common app' if args.widget_check else 'PASS Focus checks in common app' if args.focus_check else 'PASS Manual review: production App/Scene'
             if marker not in output:
                 raise ValueError('App self-check failed')
         verify(app, manifest)
@@ -111,7 +111,7 @@ def launch(args):
                 stop(candidate)
         raise
     finally:
-        if normal or (args.self_check or args.widget_check):
+        if normal or (args.self_check or args.widget_check or args.focus_check):
             (report / 'app.log').write_text(log.read_text())
             log.unlink(missing_ok=True)
 
@@ -121,6 +121,7 @@ def main():
     modes = parser.add_mutually_exclusive_group()
     modes.add_argument('--self-check', action='store_true')
     modes.add_argument('--widget-check', action='store_true', help='Focused provider and mapped-process regression checks in the common app')
+    modes.add_argument('--focus-check', action='store_true', help='Focused native sidebar appearance check in the common app')
     modes.add_argument('--normal-smoke', action='store_true', help='Same normal startup, with demo data to avoid reading user logs')
     parser.add_argument('--app', type=Path, default=ROOT / 'build/LLM Usage.app')
     parser.add_argument('--manifest', type=Path)
