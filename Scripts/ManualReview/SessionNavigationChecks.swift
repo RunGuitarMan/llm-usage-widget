@@ -1,4 +1,3 @@
-#if MANUAL_REVIEW
 import AppKit
 
 @MainActor enum SessionNavigationChecks {
@@ -57,4 +56,3 @@ import AppKit
         return scroll.contentView.bounds.origin.y > 0 && document.frame.height - scroll.contentView.bounds.maxY < 100
     }
 }
-#endif

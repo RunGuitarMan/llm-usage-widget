@@ -118,7 +118,6 @@ struct SessionChatView: View {
         }
         .background(Color(nsColor: .windowBackgroundColor))
         .frame(minWidth: 680, idealWidth: 900, maxWidth: .infinity, minHeight: 520, idealHeight: 740, maxHeight: .infinity)
-        #if MANUAL_REVIEW
         .onAppear {
             guard let kind = ManualReviewController.active?.chatKind else { return }
             view = kind == "expensive" ? .expensive : kind == "analytics" ? .tools : .chat
@@ -128,7 +127,6 @@ struct SessionChatView: View {
             showInfo = kind == "info"
             scope = .session
         }
-        #endif
         .task(id: reload) {
             if !isDemo && (reader.transcript == nil || reload > 0) {
                 await reader.load(session, file: selectedFile, customPath: customPath, pricingKey: pricingKey, services: transcriptServices)

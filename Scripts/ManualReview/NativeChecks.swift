@@ -1,4 +1,3 @@
-#if MANUAL_REVIEW
 import AppKit
 
 /// In-process assertions against the shipping scene. Never constructs a product window or host.
@@ -96,4 +95,3 @@ import AppKit
         try require(abs(host.bounds.width - width) <= 1, "Window did not fit requested width \(width): \(host.bounds)")
     }
 }
-#endif

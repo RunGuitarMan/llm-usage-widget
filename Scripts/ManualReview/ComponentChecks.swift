@@ -1,4 +1,3 @@
-#if MANUAL_REVIEW
 import AppKit
 import SwiftUI
 
@@ -50,4 +49,3 @@ import SwiftUI
         print("PASS Popover updates preserve anchor geometry and publish the latest badge on close")
     }
 }
-#endif

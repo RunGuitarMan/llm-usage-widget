@@ -1,4 +1,3 @@
-#if MANUAL_REVIEW
 import AppKit
 import SwiftUI
 import WidgetKit
@@ -23,12 +22,12 @@ enum ReviewSize: String, CaseIterable, Identifiable {
 
 @MainActor final class ManualReviewController: ObservableObject {
     static let active: ManualReviewController? = {
-        guard CommandLine.arguments.contains("--manual-review") else { return nil }
+        guard CommandLine.arguments.contains("--review") || CommandLine.arguments.contains("--manual-review") else { return nil }
         let args = CommandLine.arguments
         let directory = args.firstIndex(of: "--review-report-dir").flatMap { index in
             args.indices.contains(index + 1) ? URL(fileURLWithPath: args[index + 1]) : nil
         } ?? FileManager.default.temporaryDirectory.appendingPathComponent("LLMUsageReview")
-        do { return try ManualReviewController(reportDirectory: directory, resume: !args.contains("--review-self-check")) }
+        do { return try ManualReviewController(reportDirectory: directory, resume: !args.contains("--review-self-check") && !args.contains("--review-widget-check")) }
         catch { fatalError("Cannot initialize manual review: \(error)") }
     }()
 
@@ -44,7 +43,7 @@ enum ReviewSize: String, CaseIterable, Identifiable {
         var size: String
     }
     let suite: String
-    var buildID: String { Bundle.main.object(forInfoDictionaryKey: "ManualReviewBuild") as? String ?? "unknown" }
+    var buildID: String { AppLaunchReceipt.buildID }
     @Published var selectedID = ReviewScenario.all[0].id
     @Published var language: InterfaceLanguage = .russian
     @Published var appearance: ReviewAppearance = .light
@@ -160,11 +159,15 @@ enum ReviewSize: String, CaseIterable, Identifiable {
             await selectionTask?.value
             openWindow("manual-review")
             NSApp.activate(ignoringOtherApps: true)
-            writeLaunchReceipt()
-            if CommandLine.arguments.contains("--review-self-check") {
+            if CommandLine.arguments.contains("--review-self-check") || CommandLine.arguments.contains("--review-widget-check") {
                 do {
-                    try await ManualReviewChecks.run(self)
-                    print("PASS Manual review: production App/Scene, toolbar, chat sheet, data lifecycle and reports")
+                    if CommandLine.arguments.contains("--review-widget-check") {
+                        try await WidgetChecks.run()
+                        print("PASS Widget checks in common app")
+                    } else {
+                        try await ManualReviewChecks.run(self)
+                        print("PASS Manual review: production App/Scene, toolbar, chat sheet, data lifecycle and reports")
+                    }
                     cleanup()
                     exit(0)
                 } catch {
@@ -175,19 +178,6 @@ enum ReviewSize: String, CaseIterable, Identifiable {
                 }
             }
         }
-    }
-
-    private func writeLaunchReceipt() {
-        guard let index = CommandLine.arguments.firstIndex(of: "--review-launch-token"),
-              CommandLine.arguments.indices.contains(index + 1) else { return }
-        let receipt: [String: Any] = ["token": CommandLine.arguments[index + 1],
-                                    "pid": ProcessInfo.processInfo.processIdentifier,
-                                    "executable": Bundle.main.executableURL!.path, "build": buildID,
-                                    "appRoot": connectedToAppRoot]
-        do {
-            try JSONSerialization.data(withJSONObject: receipt).write(
-                to: reportURL.deletingLastPathComponent().appendingPathComponent("launch.json"), options: .atomic)
-        } catch { persistenceError = "Не удалось подтвердить запуск: \(error.localizedDescription)" }
     }
 
     func select(_ id: String) {
@@ -427,5 +417,3 @@ struct ReviewWidgetsView: View {
         }.background(Color(nsColor: .underPageBackgroundColor))
     }
 }
-
-#endif

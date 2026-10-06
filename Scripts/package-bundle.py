@@ -7,6 +7,7 @@ import re
 import shutil
 import sys
 from build_version import build_identity, version_fields
+from bundle_identity import app_bundle_id
 
 kind, destination = sys.argv[1:]
 root = Path(__file__).resolve().parent.parent
@@ -22,9 +23,9 @@ for name in ["Shared.xcconfig", "UpdateSigning.xcconfig", "Local.xcconfig"]:
 for key in ["LLM_USAGE_APP_GROUP", "CLAUDE_USAGE_APP_GROUP", "MARKETING_VERSION", "CURRENT_PROJECT_VERSION", "LLM_UPDATE_CHANNEL", "LLM_UPDATE_PUBLIC_KEY"]:
     if key in os.environ:
         settings[key] = os.environ[key]
-app_id = os.environ.get("LLM_APP_BUNDLE_ID", "local.ClaudeUsage.Development")
-if not re.fullmatch(r"[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+", app_id):
-    raise SystemExit("Expected a reverse-DNS app bundle identifier")
+# Keep the already shipped identity (and its widget placements/data) stable.
+# Development copies must never compete with it in LaunchServices or WidgetKit.
+app_id = app_bundle_id(settings["LLM_UPDATE_CHANNEL"], os.environ.get("LLM_APP_BUNDLE_ID"))
 storage_mode = os.environ.get("LLM_WIDGET_STORAGE_MODE",
     "local-files" if os.environ.get("LLM_CODESIGN_IDENTITY", "-") == "-" else "app-group")
 if storage_mode not in ("local-files", "app-group"):

@@ -36,7 +36,7 @@ bash Scripts/check-icons.sh
 python3 -m unittest discover -s Scripts -p 'test_*.py' -v
 ```
 
-With full Xcode selected, also run `swift test`. For interactive UI review, run `bash Scripts/manual-review.sh`; this uses the real app with synthetic data and a private development catalogue. Notes survive restarts. The catalogue is excluded from ordinary and release builds.
+With full Xcode selected, also run `swift test`. After `bash Scripts/build-local.sh`, run `bash Scripts/manual-review.sh` for interactive review. It launches the same built app with synthetic data and isolated preferences; no second app is compiled. The catalogue is dormant during normal use. Notes survive restarts.
 
 See [Testing](docs/testing.md) for focused checks, saved reports and system-widget verification. After adding or removing Swift files, regenerate the Xcode project with `python3 Scripts/generate_project.py`.
 

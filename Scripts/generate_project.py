@@ -15,6 +15,7 @@ def ref(path, kind='sourcecode.swift'):
     return obj('file:' + path, 'PBXFileReference', lastKnownFileType=kind, path=path, sourceTree='SOURCE_ROOT')
 
 sources = sorted(str(p.relative_to(root)) for p in (root/'LLMUsage').rglob('*.swift') if 'Tests' not in p.parts)
+sources += sorted(str(p.relative_to(root)) for p in (root/'Scripts/ManualReview').glob('*.swift'))
 files = {p: ref(p) for p in sources}
 tests = sorted(str(p.relative_to(root)) for p in (root/'LLMUsage/Tests').glob('*.swift'))
 files.update({p: ref(p) for p in tests})
@@ -35,7 +36,7 @@ for target, product, kind in [('LLMUsage', 'LLM Usage.app', 'wrapper.application
     products[target] = obj('product:' + target, 'PBXFileReference', explicitFileType=kind, includeInIndex='0', path=product, sourceTree='BUILT_PRODUCTS_DIR')
 product_group = obj('products', 'PBXGroup', children=list(products.values()), name='Products', sourceTree='<group>')
 source_groups = []
-for directory in ['App','Dashboard','Sessions','Models','Settings','Data','Services','Shared','Widget','Tests']:
+for directory in ['App','Dashboard','Sessions','Models','Settings','Data','Services','Shared','Widget','Tests','ManualReview']:
     children = [v for p,v in files.items() if f'/{directory}/' in p]
     if directory == 'Tests': children.append(fixture)
     source_groups.append(obj('group:'+directory, 'PBXGroup', children=children, name=directory, sourceTree='<group>'))
@@ -64,7 +65,7 @@ def build_file(target, path): return obj('build:'+target+path, 'PBXBuildFile', f
 shared_widget = ['Shared/BrandGeometry.swift','Shared/UsageModels.swift','Shared/Localization.swift','Shared/UsageFormatting.swift','Shared/UsageRoute.swift',
                  'Shared/SnapshotStorage.swift','Shared/SampleData.swift','Shared/UsageStyle.swift',
                  'Shared/UsageHistory.swift','Shared/UsageHistoryViews.swift','Widget/UsageVariantViews.swift',
-                 'Widget/UsageWidgetViews.swift','Widget/LLMUsageWidget.swift']
+                 'Widget/UsageWidgetViews.swift','Widget/UsageTimelineProvider.swift','Widget/LLMUsageWidget.swift']
 for target in ['LLMUsage','LLMUsageWidget','LLMUsageTests']:
     paths = tests if target.endswith('Tests') else [p for p in sources if not p.endswith('Widget/LLMUsageWidget.swift')]
     if target.endswith('Widget'): paths = ['LLMUsage/'+p for p in shared_widget]

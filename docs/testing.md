@@ -2,7 +2,7 @@
 
 ## Commands
 
-Run from the repository root with macOS SDK 26+ selected (see [Development](development.md)).
+Run from the repository root with macOS SDK 26+ selected (see [Development](development.md)). Build once with `bash Scripts/build-local.sh` before `check.sh`, `check-windows.sh` or interactive review. Launchers refuse missing/stale artifacts and never rebuild them.
 
 | Command | Coverage |
 | --- | --- |
@@ -12,11 +12,13 @@ Run from the repository root with macOS SDK 26+ selected (see [Development](deve
 | `python3 -m unittest discover -s Scripts -p 'test_*.py' -v` | Installer rollback/concurrency, manual version increases, stale/tampered release artifacts and safe release publication |
 | `swift test` | Core XCTest suite; requires full Xcode |
 | `bash Scripts/check-ui.sh` | App and widget typechecking only |
-| `bash Scripts/check-windows.sh` | The production-app review self-check below; no separate window harness |
-| `bash Scripts/build-local.sh` | Complete app/widget build, signatures, bundle structure and absence of private review code |
+| `bash Scripts/check-windows.sh` | Normal startup smoke check and review self-check against the same executable |
+| `bash Scripts/build-local.sh` | One complete app/widget build, signatures, bundle structure and immutable artifact manifest |
 | `bash Scripts/manual-review.sh --self-check` | Production window geometry, first-show and reopen chrome, sidebar corners after automatic inspector expansion, trailing toolbar, sidebar/focus, scrolling, session navigation, real chat sheets, catalogue scenarios, loading/error recovery and report persistence |
+| `bash Scripts/manual-review.sh --widget-check` | Focused real-file app → provider publication, gallery without storage, stale/midnight transitions, corruption recovery and replacement of a running signed process; same common app |
+| `python3 Scripts/widget_host_check.py --since <ISO-8601>` | Actual system WidgetKit deliveries for all 9 kind/size pairs; fails on missing/stale deliveries, old extension versions, storage errors or chronod archive rejection |
 
-CI runs the first four commands and the shipping build. `check.sh` calls `check-windows.sh`, which builds and runs the same application and catalogue used for manual review. Native checks are visible on screen and require a logged-in macOS GUI session. Product windows must come from `LLMUsageApp` and its scenes: do not add a separate `@main` or hand-built `NSWindow` around a product screen for regression checks. Windowless component measurements remain in the same process. These checks do not substitute for a manual system-widget check.
+CI runs the first four commands and the shipping build. `check.sh` calls `check-windows.sh`, which launches the already built common application in normal and review modes. Native checks are visible on screen and require a logged-in macOS GUI session. Product windows must come from `LLMUsageApp` and its scenes: do not add a separate `@main` or hand-built `NSWindow` around a product screen for regression checks. Windowless component measurements remain in the same process. These checks do not substitute for a manual system-widget check.
 
 **CI** runs on PRs and pushes to `main`, and can also be started manually. It never publishes a release. **Release** is a separate manually dispatched workflow on `main`; it reuses the full CI checks for its selected commit before publishing. See [Releases](releases.md) for the launch sequence.
 
@@ -39,17 +41,19 @@ xcodebuild -project LLMUsage.xcodeproj -scheme LLMUsage \
 
 CI also builds the Xcode app and embedded widget without launching them and checks their version metadata against the same repository version and Git build number as script builds.
 
-Run `bash Scripts/manual-review.sh`. The catalogue offers 89 curated scenarios, RU/EN, light/dark appearance and width presets. It is a checklist, not exhaustive coverage of every UI combination. **⌘1** reopens the catalogue. Use Next/Back to navigate and record Passed, Problem or Skip with notes. Loading scenarios can be released with **Успешный ответ источника**.
+Run `bash Scripts/build-local.sh` once, then `bash Scripts/manual-review.sh` to launch that same app in review mode. The catalogue offers 89 curated scenarios, RU/EN, light/dark appearance and width presets. It is a checklist, not exhaustive coverage of every UI combination. **⌘1** reopens the catalogue. Use Next/Back to navigate and record Passed, Problem or Skip with notes. Loading scenarios can be released with **Успешный ответ источника**.
 
 Files under `build/UIReview/`:
 
 - `review-progress.json`: marks and notes, saved atomically per scenario/language/theme/size.
 - `review-position.json`: the current scenario, language, theme and size, restored on restart.
-- `launch.json`: the current launch receipt and source fingerprint.
+- `launch.json`: the current launch receipt, PID, actual executable SHA-256 and runtime mode.
 
 **Отчёт** opens this folder. Preserve it when cleaning builds; copy it before experimenting with report files. Relaunching keeps saved notes and resumes the position. If the app hangs, preserve the report and collect a process sample before stopping the identified development process; restarting the review build reads the existing files.
 
-All launcher modes replace the previous review bundle and stop its process, so finish an active manual session before rebuilding. `--build-only` builds without launching. `--self-check` uses a separate `build/manual-review/check-report` folder. It tests scenario switching and invariants, not every clickable control.
+The launcher does not replace or mutate the app. It may stop a previous launcher-owned review session; an ordinary running session must be closed explicitly. `build-local.sh` builds without launching; the old review `--build-only` option is removed. `--self-check` uses `build/manual-review/check-report`; `--normal-smoke` uses `build/manual-review/normal-report`. Each records `artifact.json` and the executable hash. The self-check covers scenario switching and invariants, not every clickable control.
+
+`--app /absolute/path/LLM\ Usage.app --manifest /absolute/path/app-artifact.json` selects another already built artifact explicitly; the same source/hash/signature checks still apply. Legacy `build/manual-review/LLM Usage.app` copies are no longer a test target.
 
 For disposable interactive checks without changing saved notes or position, use `LLM_REVIEW_REPORT_DIR="$PWD/build/manual-review/interactive-report" bash Scripts/manual-review.sh`. This override applies only to interactive review; automated checks always use `build/manual-review/check-report`.
 
@@ -67,5 +71,20 @@ Before a UI release, verify:
 - Sidebar: active/inactive windows, dark/light appearance, increased contrast and reduced transparency.
 
 Install the app to check WidgetKit placement, gallery registration, refreshes and dated links. The review catalogue shows actual widget content but does not reproduce the system WidgetKit host. Cross-machine installation and interrupted system-level installation are also separate manual checks.
+
+### Widget refresh regression
+
+The 1.5.3 incident was downstream of a successful snapshot read: a process mapped from an old build stayed alive after bundle replacement, and `chronod` rejected its archives with `bundleStubNotSupported` / `Bundle version did not match`. File publication or content screenshots alone therefore cannot establish that a desktop widget updated.
+
+The required self-check includes the production `UsageTimelineProvider`, reading files published by the real `UsageStore` and `SnapshotRepository`. It checks A → B, generation timestamps, a clean install, preview data without disk access, corruption/recovery and midnight/staleness. A non-UI signed process fixture then replaces the executable inode while the original process remains alive; the production lifecycle code must retain the current process and retire the stale one. This fixture uses copies of system CLI utilities, not another application or window. Python regressions also feed the captured archive-rejection signature to the system-host gate: fresh provider receipts cannot turn that failure into a pass.
+
+For system acceptance, use the **same built artifact** on a logged-in macOS test account, first on a clean installation and then after replacing an older build without logging out:
+
+1. Record the test start time with timezone. Open the system gallery; inspect the current icon and readable previews for all three kinds and sizes.
+2. Place all nine combinations. In normal mode publish data A, then refresh after a known source change B. Compare amounts and dates with the app, including while Finder is active and after closing/reopening the dashboard. Runtime review's in-memory cards do not count as this check.
+3. Run `python3 Scripts/widget_host_check.py --since 2026-10-06T17:00:00Z` with the actual start time, against that artifact. It compares logged extension deliveries with the latest persisted generation and checks system rejection errors. No configured widgets or a missing family is a failure. Keep its JSON receipt with the artifact hash and visual review evidence.
+4. Repeat after an update with the previous extension still running. Check dated session links and gallery icon as well as refreshed values.
+
+The desktop check requires real configured widgets; hosted CI does not provision desktop placements through a supported WidgetKit API. CI covers the deterministic process-replacement regression and provider/storage contracts. A green CI or a successful log gate does not replace inspection of actual system rendering, and cannot promise detection of every future macOS defect.
 
 Update integration checks require a logged-in macOS GUI session. They use fresh test keys, isolated bundle IDs and synthetic services; they never install over LLM Usage or read agent logs. Portable runtime scenarios cover consent, exact-version and digest rejection, active-work quiescence, the verified loopback handoff and engine provenance. `verify-bundle.py` checks the final signed helper and Sparkle configuration.

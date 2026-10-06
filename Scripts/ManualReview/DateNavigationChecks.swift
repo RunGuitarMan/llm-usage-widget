@@ -1,4 +1,3 @@
-#if MANUAL_REVIEW
 import AppKit
 
 @MainActor enum DateNavigationChecks {
@@ -97,4 +96,3 @@ import AppKit
         try ReviewCheck.require(navigation() == nil, "Today preset retained custom-date arrows")
     }
 }
-#endif

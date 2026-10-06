@@ -408,12 +408,11 @@ struct SessionDetailView: View {
             guard copied else { return }
             do { try await Task.sleep(for: .seconds(2)); copied = false } catch { }
         }
-        #if MANUAL_REVIEW
         .task(id: store.reviewChatRevision) {
+            guard store.isManualReview else { return }
             if store.reviewChatPresented, let session = store.selectedSession { openChat(session) }
             else { chatSession = nil }
         }
-        #endif
         .sheet(item: $chatSession) { selection in
             SessionChatView(session: selection.session, timezone: selection.day.timezone, isDemo: store.isDemo,
                             day: selection.day, policy: selection.policy,

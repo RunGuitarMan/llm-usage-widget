@@ -1,4 +1,3 @@
-#if MANUAL_REVIEW
 import AppKit
 import QuartzCore
 
@@ -193,4 +192,3 @@ import QuartzCore
         try? rows.joined(separator: "\n").write(to: review.reportURL.deletingLastPathComponent().appendingPathComponent("window-failure.txt"), atomically: true, encoding: .utf8)
     }
 }
-#endif

@@ -1,4 +1,3 @@
-#if MANUAL_REVIEW
 import AppKit
 import SwiftUI
 
@@ -110,4 +109,3 @@ struct ReviewProviderProbe: NSViewRepresentable {
     }
 
 }
-#endif

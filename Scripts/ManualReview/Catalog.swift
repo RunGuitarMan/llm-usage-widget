@@ -1,4 +1,3 @@
-#if MANUAL_REVIEW
 import SwiftUI
 import WidgetKit
 
@@ -203,6 +202,3 @@ struct ReviewReport: Codable {
     var version = 1
     var records: [String: ReviewRecord] = [:]
 }
-
-
-#endif

@@ -16,7 +16,7 @@ The app and WidgetKit extension target macOS 26. Release artifacts are Apple Sil
 
 Run shell scripts with Bash. `Scripts/toolchain.sh` selects `DEVELOPER_DIR`, then the toolchain in `build/AppleTools26`, then the system toolchain. If necessary, `python3 Scripts/prepare-local-toolchain.py` downloads Apple's tools into `build/` without replacing system tools; its package requires macOS 26.2+. Preserve that directory when cleaning build outputs.
 
-`bash Scripts/build-local.sh` compiles the app and extension, regenerates icons, checks that review code is absent, signs the bundle and validates it. `--demo` opens synthetic sample data: quit any running copy, then `open 'build/LLM Usage.app' --args --demo`.
+`bash Scripts/build-local.sh` compiles the app and extension, regenerates icons, includes the dormant runtime review catalogue, signs the bundle and validates it. `--demo` opens synthetic sample data: quit any running copy, then `open 'build/LLM Usage.app' --args --demo`.
 
 For Xcode, open `LLMUsage.xcodeproj`, select **LLMUsage → My Mac**, and configure signing for both targets. Put personal values in ignored `Configuration/Local.xcconfig`:
 
@@ -30,6 +30,10 @@ Use bundle identifiers and a shared App Group registered to your team. Xcode bui
 `Scripts/generate_project.py` owns the Xcode project and shared scheme. Edit the generator for structural changes and rerun it after adding/removing Swift files. `Scripts/app-sources.sh` supplies the common product sources to script builds, review builds and UI typechecking. The icon source is `LLMUsage/Shared/BrandGeometry.swift`.
 
 Keep build products, reports, downloaded tools and previews under ignored `build/`. Do not commit local logs, exported conversations, credentials or `Configuration/Local.xcconfig`. Existing `ClaudeUsage` bundle IDs, storage keys and URL aliases preserve compatibility with older installations.
+
+Script builds use `local.ClaudeUsage.Local` for development. Published releases retain the historical `local.ClaudeUsage.Development` identity and its data/widget placements; the word “Development” in that old identifier does not describe the release channel. Development builds cannot override their identity to the release ID. This prevents local builds from competing with an installed release in LaunchServices and WidgetKit. The extension is built directly inside the staged host, with the same newly generated icon and a content-derived icon filename.
+
+On normal startup the app registers its current bundle with LaunchServices and checks only same-user processes whose signed identifier and executable suffix identify its widget. It obtains the running code's identity with `kSecGuestAttributeDynamicCode`, so replacing/unlinking the on-disk executable cannot hide the old process or substitute the new file's identity. A previous canonical path or different code digest triggers a verified SIGTERM of that old extension, then a timeline reload. The current extension and other app identities remain untouched. No global LaunchServices reset, Notification Center restart or widget placement deletion is used. Runtime review and normal demo smoke tests do not repair the installed widget registration.
 
 ## Application version
 
@@ -85,21 +89,21 @@ Timing comes from recorded intervals. Request duration and TTFT remain request-l
 
 Long messages have bounded inline previews; the full text opens in a native text reader to avoid expensive SwiftUI layout. Token bars open detailed breakdowns, and request/tool links navigate to the timeline event.
 
-## Private UI review
+## Runtime UI review of the common app
 
-`MANUAL_REVIEW` is defined only by `Scripts/manual-review.sh`. The build uses the production `LLMUsageApp`, `AppRootView`, windows, toolbar and chat sheet. `Scripts/ManualReview` adds a catalogue, fixtures and injected external services; it does not copy product screens or provide a second app entry point.
+`bash Scripts/build-local.sh` creates one signed `build/LLM Usage.app`, with the real widget extension and `Scripts/ManualReview` compiled into the same executable. `bash Scripts/manual-review.sh` only launches it with `--review`. No compilation flag, alternate bundle ID, Info.plist mutation, copying or signing occurs at review launch. Without that argument the catalogue and fixture controller are inactive.
 
-Use this single review build for diagnostic experiments as well as regression checks. Add temporary instrumentation to this mode and inspect its actual windows; do not create throwaway geometry/chrome apps or alternate product hosts, even under ignored `build/` or `/tmp`. The repository's [agent instructions](../AGENTS.md) enforce the same workflow.
+Normal and review startup share `LLMUsageApp`, `AppRootView`, all scenes, window opening, toolbar, sheets and geometry. Review injects synthetic external services and in-memory storage into `UsageStore`, uses a private UserDefaults suite, and simulates login-item changes. Its updater is inactive. Review must never change window setup to make a test pass. Content-only PNG exports remain separate and cannot verify native window chrome.
 
-The separate development bundle ID protects installed preferences. Synthetic services and in-memory storage replace external I/O while the normal `UsageStore` refresh/cache/error paths remain active. Login-item changes are simulated. The build requires an explicit `--manual-review` argument; shipping builds contain neither that entry point nor the catalogue. `verify-review-boundary.py` checks the shipping executable during each build.
+`build/app-artifact.json` records the source fingerprint, Git commit, executable SHA-256 and every file/link in the signed app, including WidgetKit and Sparkle. The launcher rejects stale sources or changed bundle contents, verifies the launched PID/path/hash/mode from the common dashboard, and checks the artifact again after the run. It never silently rebuilds. Close the app and explicitly run the builder after source changes. Build/check locks prevent concurrent replacement. Additional checks in the same app do not require another build.
 
-The launcher stages a fresh signed bundle, retires only known review copies under this workspace and verifies the launched PID, executable and source fingerprint. The catalogue displays that fingerprint. See [Testing](testing.md) for operation and report recovery.
+`check-windows.sh` first launches normal startup with `--demo` (no review catalogue and no user log reads), then runs the runtime catalogue self-check against that exact artifact. Release runs these checks on its final release-channel app before archiving it, without a subsequent compilation or re-signing. The normal startup smoke check does not prove live CLI or system WidgetKit behavior.
 
-Automated window checks use this same bundle: `check.sh` → `check-windows.sh` → `manual-review.sh --self-check`. Assertions live in `Scripts/ManualReview` and inspect the connected production window and its actual chat sheets. The launcher also retires the obsolete standalone window-check executables; saved notes in `build/UIReview` are preserved. Content-only PNG exports are separate and cannot verify native window chrome.
+Use this same app for diagnostic experiments. The [agent instructions](../AGENTS.md) prohibit alternate product windows and diagnostic apps. Saved notes and position in `build/UIReview` remain separate from automated reports. See [Testing](testing.md) for commands and report recovery.
 
 ## App updates
 
-`AppUpdateCoordinator` owns consent, persisted update preferences and the user-visible state. Development and review builds do not query the production feed. Release builds check a signed Sparkle appcast hosted as a GitHub Release asset. Both feed and ZIP require the pinned Ed25519 key. Release notes are plain text.
+`AppUpdateCoordinator` owns consent, persisted update preferences and the user-visible state. Development builds and runtime review sessions do not query the production feed. Release builds check a signed Sparkle appcast hosted as a GitHub Release asset. Both feed and ZIP require the pinned Ed25519 key. Release notes are plain text.
 
 Sparkle automatic downloads are deliberately disabled: its installer can install downloaded updates when the app quits. `UpdateDownloadCache` downloads and verifies an archive without starting the installer. On an install click or the visible automatic countdown, the store pauses refresh/backfill and waits for active work, the shared runtime blocks new calculations, and a short-lived loopback server hands the verified archive to Sparkle. Sparkle independently verifies it again before extraction and replacement. Failures resume the current app; successful updates relaunch it. No usage data is stored inside the replaceable app bundle.
 

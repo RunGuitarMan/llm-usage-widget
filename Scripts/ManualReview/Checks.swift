@@ -1,4 +1,3 @@
-#if MANUAL_REVIEW
 import AppKit
 
 @MainActor enum ManualReviewChecks {
@@ -24,6 +23,7 @@ import AppKit
                     && !window.collectionBehavior.contains(.fullScreenAuxiliary)
                     && !window.collectionBehavior.contains(.fullScreenNone),
                     "Dashboard cannot enter its own full-screen Space")
+        try await WidgetChecks.run()
         try require(!review.store.isDemo, "Review disabled product controls using demo mode")
         try require(Set(ReviewScenario.all.map(\.id)).count == ReviewScenario.all.count, "Duplicate scenario IDs")
         try await WindowChromeChecks.run(review)
@@ -125,4 +125,3 @@ import AppKit
         try require(invalid.persistenceError != nil && (try Data(contentsOf: badURL)) == original, "Unreadable report overwritten")
     }
 }
-#endif

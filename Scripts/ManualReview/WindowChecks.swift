@@ -1,4 +1,3 @@
-#if MANUAL_REVIEW
 import AppKit
 import SwiftUI
 
@@ -103,36 +102,55 @@ import SwiftUI
 
     private static func sidebarAppearance(_ review: ManualReviewController) async throws {
         let window = review.dashboard!
-        guard let catalogue = review.panel else { try ReviewCheck.require(false, "Missing review catalogue window"); return }
+        // The preceding scenario dismisses a real sheet asynchronously. Its final
+        // focus restoration must complete before this check switches windows.
+        print("REVIEW Sidebar: waiting for the preceding sheet to close")
+        try await ReviewCheck.wait("Chat sheet did not finish closing before sidebar focus check") {
+            window.attachedSheet == nil
+        }
+        NSApp.activate(ignoringOtherApps: true)
         for appearance in [ReviewAppearance.light, .dark] {
             review.appearance = appearance
             review.changePresentation()
             for active in [true, false] {
-                // Switch between the two real scenes, without depending on another app's focus.
-                (active ? window : catalogue).makeKeyAndOrderFront(nil)
-                try await ReviewCheck.wait("Dashboard key-window state did not change: active=\(active)") {
-                    window.isKeyWindow == active
+                // A secondary catalogue can take key focus while leaving the
+                // dashboard main and visually active. Test actual app deactivation.
+                print("REVIEW Sidebar: switching \(appearance), active=\(active)")
+                if active {
+                    NSApp.activate(ignoringOtherApps: true)
+                    window.makeKeyAndOrderFront(nil)
+                } else {
+                    NSApp.deactivate()
                 }
-                try await ReviewCheck.settle()
-                guard let host = window.contentView, let table = ReviewCheck.sidebar(in: host),
-                      let row = table.rowView(atRow: table.selectedRow, makeIfNecessary: true),
-                      let bitmap = row.bitmapImageRepForCachingDisplay(in: row.bounds) else {
-                    try ReviewCheck.require(false, "Cannot render production sidebar selection"); return
-                }
-                row.cacheDisplay(in: row.bounds, to: bitmap)
-                var accentPixels = 0
-                for y in 0..<bitmap.pixelsHigh {
-                    for x in 0..<bitmap.pixelsWide {
-                        guard let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB), color.alphaComponent > 0.3 else { continue }
-                        let c = [color.redComponent, color.greenComponent, color.blueComponent]
-                        if c.max()! - c.min()! > 0.15 { accentPixels += 1 }
+                var accentPixels = -1
+                var neutralFill = false
+                do {
+                    // A key-window notification precedes SwiftUI's appearance update.
+                    // Wait for the actual rendered state, not an arbitrary 200ms delay.
+                    try await ReviewCheck.wait("Sidebar appearance did not settle") {
+                        guard NSApp.isActive == active, window.isKeyWindow == active, window.attachedSheet == nil,
+                              let host = window.contentView, let table = ReviewCheck.sidebar(in: host),
+                              table.selectedRow >= 0,
+                              let row = table.rowView(atRow: table.selectedRow, makeIfNecessary: true),
+                              let bitmap = row.bitmapImageRepForCachingDisplay(in: row.bounds) else { return false }
+                        row.cacheDisplay(in: row.bounds, to: bitmap)
+                        accentPixels = 0
+                        for y in 0..<bitmap.pixelsHigh {
+                            for x in 0..<bitmap.pixelsWide {
+                                guard let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB), color.alphaComponent > 0.3 else { continue }
+                                let c = [color.redComponent, color.greenComponent, color.blueComponent]
+                                if c.max()! - c.min()! > 0.15 { accentPixels += 1 }
+                            }
+                        }
+                        guard bitmap.pixelsWide > 28,
+                              let fill = bitmap.colorAt(x: bitmap.pixelsWide - 28, y: bitmap.pixelsHigh / 2)?.usingColorSpace(.deviceRGB) else { return false }
+                        let c = [fill.redComponent, fill.greenComponent, fill.blueComponent]
+                        neutralFill = fill.alphaComponent > 0.01 && c.max()! - c.min()! < 0.03
+                        return (active ? accentPixels > 10 : accentPixels == 0) && neutralFill
                     }
+                } catch {
+                    try ReviewCheck.require(false, "Sidebar did not follow active state: \(appearance), active=\(active), pixels=\(accentPixels), neutralFill=\(neutralFill), key=\(window.isKeyWindow), main=\(window.isMainWindow), appActive=\(NSApp.isActive)")
                 }
-                try ReviewCheck.require(active ? accentPixels > 10 : accentPixels == 0,
-                                        "Sidebar did not follow active state: \(appearance), active=\(active), pixels=\(accentPixels)")
-                let fill = bitmap.colorAt(x: bitmap.pixelsWide - 28, y: bitmap.pixelsHigh / 2)!.usingColorSpace(.deviceRGB)!
-                let c = [fill.redComponent, fill.greenComponent, fill.blueComponent]
-                try ReviewCheck.require(fill.alphaComponent > 0.01 && c.max()! - c.min()! < 0.03, "Sidebar highlight is missing or not neutral")
             }
         }
         NSApp.activate(ignoringOtherApps: true)
@@ -140,4 +158,3 @@ import SwiftUI
         print("PASS Production sidebar selection in light/dark and active/inactive states")
     }
 }
-#endif
