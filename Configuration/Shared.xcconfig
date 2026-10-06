@@ -2,7 +2,8 @@
 CLAUDE_USAGE_APP_GROUP = group.local.ClaudeUsage
 LLM_USAGE_APP_GROUP = $(CLAUDE_USAGE_APP_GROUP)
 DEVELOPMENT_TEAM =
-// Version fields are generated from Git by Scripts/build_version.py for every target.
+// Version comes from .github/release.json; build number comes from Git history.
+// Scripts/build_version.py generates and verifies both fields for every target.
 // Developer builds do not contact the production update channel.
 LLM_UPDATE_CHANNEL = development
 LLM_UPDATE_PUBLIC_KEY =

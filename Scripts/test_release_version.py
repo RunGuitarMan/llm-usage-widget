@@ -1,107 +1,80 @@
-"""Exercise release titles and versioning against real temporary Git histories."""
-import subprocess
-import tempfile
+"""Exercise manual versions and monotonic PR checks against real Git histories."""
+import json
 import unittest
-from pathlib import Path
 
-from release_version import release_kind, release_version
+from release_version import check_increase, configured_version, previous_version, release_version
+from test_build_version import VersionRepository
 
 
-class ReleaseVersionTests(unittest.TestCase):
-    def setUp(self):
-        self.directory = tempfile.TemporaryDirectory()
-        self.addCleanup(self.directory.cleanup)
-        self.repository = Path(self.directory.name)
-        self.git("init", "-b", "main")
-        self.git("config", "user.name", "Release test")
-        self.git("config", "user.email", "test@example.invalid")
-        self.git("config", "commit.gpgsign", "false")
-        self.commit("Released baseline")
-        self.config = {"base_version": "1.3.1", "base_commit": self.git("rev-parse", "HEAD")}
+class ReleaseVersionTests(VersionRepository):
+    def test_reads_exact_version_independently_of_commit_title(self):
+        self.write_version("7.12.3")
+        self.git("commit", "-am", "Any PR title is allowed")
+        self.assertEqual(release_version(self.repository), {"version": "7.12.3", "tag": "v7.12.3", "build": "3"})
+        self.git("commit", "--allow-empty", "-m", "feat!: title must not change version")
+        self.assertEqual(release_version(self.repository)["version"], "7.12.3")
 
-    def git(self, *arguments):
-        return subprocess.check_output(
-            ["git", "-C", str(self.repository), *arguments], text=True, stderr=subprocess.PIPE
-        ).strip()
-
-    def commit(self, title="fix: correct usage"):
-        self.git("commit", "--allow-empty", "-m", title)
-
-    def version(self):
-        return release_version(self.repository, self.config)
-
-    def test_baseline_is_already_released(self):
-        self.assertEqual(self.version(), {"version": "1.3.1", "tag": "v1.3.1", "build": "1"})
-
-    def test_minor_resets_patch_and_fixes_increment_patch(self):
-        for title, expected in [("fix: correct totals", "1.3.2"),
-                                ("feat(review): add catalogue (#22)", "1.4.0"),
-                                ("fix(chat): restore links", "1.4.1"),
-                                ("feat: add another feature", "1.5.0")]:
-            self.commit(title)
-            self.assertEqual(self.version()["version"], expected)
-        self.assertEqual(self.version()["build"], "5")
-
-    def test_maintenance_merges_are_patch_releases(self):
-        for patch_number, kind in enumerate(
-            ["docs", "refactor", "perf", "test", "build", "ci", "chore", "revert"], start=2
-        ):
-            self.commit(f"{kind}: maintain project")
-            self.assertEqual(self.version()["tag"], f"v1.3.{patch_number}")
-
-    def test_rerun_and_out_of_order_run_keep_the_same_version(self):
-        self.commit("feat: add review")
-        first = self.git("rev-parse", "HEAD")
-        self.commit()
-        self.assertEqual(self.version(), self.version())
-        self.assertEqual(release_version(self.repository, self.config, first)["tag"], "v1.4.0")
-        self.assertEqual(self.version()["tag"], "v1.4.1")
-
-    def test_only_first_parent_titles_count(self):
-        self.git("switch", "-c", "feature")
-        for _ in range(4):
-            self.commit("feat: development step")
-        self.git("switch", "main")
-        self.git("merge", "--no-ff", "feature", "-m", "feat: complete feature")
-        self.assertEqual(self.version()["tag"], "v1.4.0")
-        self.assertEqual(self.version()["build"], "2")
-
-    def test_squash_body_does_not_change_release_type(self):
-        self.commit("fix: restore layout\n\nfeat: historical branch commit")
-        self.assertEqual(self.version()["tag"], "v1.3.2")
-
-    def test_reject_unknown_or_non_first_parent_baseline(self):
-        self.commit()
-        self.config["base_commit"] = "0" * 40
+    def test_requires_a_strict_increase_with_numeric_comparison(self):
+        for version in ["1.4.1", "1.10.0", "2.0.0", "9.0.0"]:
+            self.write_version(version)
+            with self.subTest(version=version):
+                self.assertEqual(check_increase(self.repository, "HEAD")["version"], version)
+        for version in ["1.4.0", "1.3.99", "0.99.99"]:
+            self.write_version(version)
+            with self.subTest(version=version), self.assertRaisesRegex(ValueError, "Every PR must increase"):
+                check_increase(self.repository, "HEAD")
+        self.write_version("1.10.0")
+        self.git("commit", "-am", "Choose minor version")
+        self.write_version("1.9.99")
         with self.assertRaises(ValueError):
-            self.version()
-        self.git("switch", "-c", "feature")
-        self.commit()
-        self.config["base_commit"] = self.git("rev-parse", "HEAD")
-        self.git("switch", "main")
-        self.git("merge", "--no-ff", "feature", "-m", "feat: feature")
-        with self.assertRaises(ValueError):
-            self.version()
+            check_increase(self.repository, "HEAD")
 
-    def test_reject_invalid_config(self):
-        for version in ["1.0", "01.0.0", "1.0.0\ninvalid=value", "1.0.0-beta"]:
+    def test_parallel_pr_must_pick_a_higher_version_after_first_merges(self):
+        base = self.git("rev-parse", "HEAD")
+        self.write_version("1.4.1")
+        check_increase(self.repository, base)
+        self.git("commit", "-am", "First PR")
+        # A second PR that still proposes 1.4.1 fails against the updated base.
+        with self.assertRaisesRegex(ValueError, "greater than 1.4.1"):
+            check_increase(self.repository, "HEAD")
+        self.write_version("1.4.2")
+        check_increase(self.repository, "HEAD")
+
+    def test_rejects_missing_invalid_and_legacy_current_configuration(self):
+        for config in [{}, {"base_version": "1.4.0", "base_commit": "a" * 40}, [],
+                       {"version": "1.4.1", "other": True}]:
+            with self.subTest(config=config), self.assertRaises(ValueError):
+                configured_version(config)
+        for version in [None, 123, "1.0", "v1.0.0", "01.0.0", "1.00.0", "1.0.0\n", "1.0.0-beta", "1.0.0+build"]:
             with self.subTest(version=version), self.assertRaises(ValueError):
-                release_version(self.repository, {**self.config, "base_version": version})
-        with self.assertRaises(ValueError):
-            release_version(self.repository, {**self.config, "base_commit": "HEAD"})
+                configured_version({"version": version})
+        (self.repository / ".github/release.json").unlink()
+        with self.assertRaises(FileNotFoundError):
+            release_version(self.repository)
 
-    def test_reject_unclassified_history_instead_of_guessing(self):
-        self.commit("Add a new feature")
+    def test_migration_compares_against_actual_legacy_main_version(self):
+        baseline = self.git("rev-parse", "HEAD")
+        (self.repository / ".github/release.json").write_text(json.dumps(
+            {"base_version": "1.4.0", "base_commit": baseline}))
+        self.git("commit", "-am", "feat: previous automatic release")
+        self.git("commit", "--allow-empty", "-m", "fix: unreleased main change")
+        self.assertEqual(previous_version(self.repository, "HEAD"), "1.5.1")
+        self.write_version("1.5.1")
         with self.assertRaises(ValueError):
-            self.version()
+            check_increase(self.repository, "HEAD")
+        self.write_version("1.5.2")
+        check_increase(self.repository, "HEAD")
 
-    def test_title_validation(self):
-        self.assertEqual(release_kind("feat: календарь"), "minor")
-        self.assertEqual(release_kind("fix(ui): restore layout (#42)"), "patch")
-        for title in ["", "Add feature", "feature: x", "feat:", "fix: ", "feat!: breaking",
-                      "feat(): x", "feat: x\nfix: y", "feat: x\n", "feat:  "]:
-            with self.subTest(title=title), self.assertRaises(ValueError):
-                release_kind(title)
+    def test_build_number_uses_first_parent_history(self):
+        self.git("switch", "-c", "feature")
+        for _ in range(3):
+            self.git("commit", "--allow-empty", "-m", "Intermediate work")
+        self.write_version("1.4.1")
+        self.git("commit", "-am", "Choose version")
+        self.git("switch", "main")
+        self.git("merge", "--no-ff", "feature", "-m", "Merged PR")
+        self.assertEqual(release_version(self.repository)["build"], "3")
+        self.assertEqual(release_version(self.repository)["version"], "1.4.1")
 
 
 if __name__ == "__main__":

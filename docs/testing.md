@@ -9,7 +9,7 @@ Run from the repository root with macOS SDK 26+ selected (see [Development](deve
 | `bash Scripts/check.sh` | Shared core scenarios, SwiftPM module boundary, native menu checks, app/widget typechecking and production-scene window checks |
 | `bash Scripts/check-icons.sh` | Icon geometry, assets and appearance |
 | `bash Scripts/check-updates.sh` | Real signed Sparkle replacement/relaunch of disposable apps; manual, download-only quit, invalid signature and automatic modes |
-| `python3 -m unittest discover -s Scripts -p 'test_*.py' -v` | Installer rollback/concurrency, Git-derived versions, stale/tampered release artifacts and safe release publication |
+| `python3 -m unittest discover -s Scripts -p 'test_*.py' -v` | Installer rollback/concurrency, manual version increases, stale/tampered release artifacts and safe release publication |
 | `swift test` | Core XCTest suite; requires full Xcode |
 | `bash Scripts/check-ui.sh` | App and widget typechecking only |
 | `bash Scripts/check-windows.sh` | The production-app review self-check below; no separate window harness |
@@ -33,7 +33,7 @@ xcodebuild -project LLMUsage.xcodeproj -scheme LLMUsage \
 
 ## Manual review and saved notes
 
-CI also builds the Xcode app and embedded widget without launching them and checks their version metadata against the same Git calculation as script builds.
+CI also builds the Xcode app and embedded widget without launching them and checks their version metadata against the same repository version and Git build number as script builds.
 
 Run `bash Scripts/manual-review.sh`. The catalogue offers 86 curated scenarios, RU/EN, light/dark appearance and width presets. It is a checklist, not exhaustive coverage of every UI combination. **⌘1** reopens the catalogue. Use Next/Back to navigate and record Passed, Problem or Skip with notes. Loading scenarios can be released with **Успешный ответ источника**.
 

@@ -819,10 +819,10 @@
 			"isa" = "PBXShellScriptBuildPhase";
 			"buildActionMask" = "2147483647";
 			"files" = ();
-			"inputPaths" = ("$(SRCROOT)/LLMUsage/Resources/App-Info.plist");
+			"inputPaths" = ("$(SRCROOT)/LLMUsage/Resources/App-Info.plist", "$(SRCROOT)/.github/release.json");
 			"outputPaths" = ("$(DERIVED_FILE_DIR)/Versioned-App-Info.plist");
 			"alwaysOutOfDate" = "1";
-			"name" = "Generate versioned Info.plist from Git";
+			"name" = "Generate Info.plist from repository version";
 			"shellPath" = "/bin/bash";
 			"shellScript" = "set -euo pipefail\npython3 \"$SRCROOT/Scripts/build_version.py\" --write-template \"$SCRIPT_INPUT_FILE_0\" \"$SCRIPT_OUTPUT_FILE_0\"\n";
 			"runOnlyForDeploymentPostprocessing" = "0";
@@ -834,7 +834,7 @@
 			"inputPaths" = ("$(TARGET_BUILD_DIR)/$(INFOPLIST_PATH)");
 			"outputPaths" = ();
 			"alwaysOutOfDate" = "1";
-			"name" = "Verify built version against Git";
+			"name" = "Verify built version against repository";
 			"shellPath" = "/bin/bash";
 			"shellScript" = "set -euo pipefail\npython3 \"$SRCROOT/Scripts/build_version.py\" --verify-bundle \"$TARGET_BUILD_DIR/$FULL_PRODUCT_NAME\" --with-widget\n";
 			"runOnlyForDeploymentPostprocessing" = "0";
@@ -978,10 +978,10 @@
 			"isa" = "PBXShellScriptBuildPhase";
 			"buildActionMask" = "2147483647";
 			"files" = ();
-			"inputPaths" = ("$(SRCROOT)/LLMUsage/Resources/Widget-Info.plist");
+			"inputPaths" = ("$(SRCROOT)/LLMUsage/Resources/Widget-Info.plist", "$(SRCROOT)/.github/release.json");
 			"outputPaths" = ("$(DERIVED_FILE_DIR)/Versioned-Widget-Info.plist");
 			"alwaysOutOfDate" = "1";
-			"name" = "Generate versioned Info.plist from Git";
+			"name" = "Generate Info.plist from repository version";
 			"shellPath" = "/bin/bash";
 			"shellScript" = "set -euo pipefail\npython3 \"$SRCROOT/Scripts/build_version.py\" --write-template \"$SCRIPT_INPUT_FILE_0\" \"$SCRIPT_OUTPUT_FILE_0\"\n";
 			"runOnlyForDeploymentPostprocessing" = "0";
@@ -993,7 +993,7 @@
 			"inputPaths" = ("$(TARGET_BUILD_DIR)/$(INFOPLIST_PATH)");
 			"outputPaths" = ();
 			"alwaysOutOfDate" = "1";
-			"name" = "Verify built version against Git";
+			"name" = "Verify built version against repository";
 			"shellPath" = "/bin/bash";
 			"shellScript" = "set -euo pipefail\npython3 \"$SRCROOT/Scripts/build_version.py\" --verify-bundle \"$TARGET_BUILD_DIR/$FULL_PRODUCT_NAME\"\n";
 			"runOnlyForDeploymentPostprocessing" = "0";

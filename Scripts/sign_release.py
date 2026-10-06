@@ -8,7 +8,7 @@ import subprocess
 import tempfile
 import xml.etree.ElementTree as ET
 from release_artifacts import archive_file, release_identity, verify_archive
-from release_version import git
+from release_version import git, parse_version
 
 ROOT = Path(__file__).resolve().parent.parent
 SPARKLE = "http://www.andymatuschak.org/xml-namespaces/sparkle"
@@ -16,8 +16,17 @@ ET.register_namespace("sparkle", SPARKLE)
 
 
 def make_feed(version, build, url, signature, length, notes, previous=None):
-    if not re.fullmatch(r"[0-9]+(?:\.[0-9]+){1,2}", version) or not build.isdecimal():
+    selected_version = parse_version(version)
+    if not build.isdecimal():
         raise ValueError("Expected a release version and monotonic numeric build")
+    if previous is not None:
+        for old in previous.findall("./channel/item"):
+            old_version = parse_version(old.findtext(f"{{{SPARKLE}}}shortVersionString"))
+            old_build = int(old.findtext(f"{{{SPARKLE}}}version", "0"))
+            if (selected_version, int(build)) == (old_version, old_build):
+                continue  # Retrying this exact release is safe.
+            if selected_version <= old_version or int(build) <= old_build:
+                raise ValueError("Release version and build must both increase over the signed appcast")
     root = ET.Element("rss", {"version": "2.0"})
     channel = ET.SubElement(root, "channel")
     ET.SubElement(channel, "title").text = "LLM Usage"
