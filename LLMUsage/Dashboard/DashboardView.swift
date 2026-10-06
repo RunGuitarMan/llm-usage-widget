@@ -86,6 +86,65 @@ private final class PeriodPopUpButton: NSPopUpButton {
     }
 }
 
+/// One native toolbar capsule; fixed segment widths keep both arrows under the cursor.
+private struct DateToolbarPicker: NSViewRepresentable {
+    @ObservedObject var store: UsageStore
+    var onCalendar: () -> Void
+    var onMove: (Int) -> Void
+
+    func makeCoordinator() -> Coordinator { Coordinator(onCalendar: onCalendar, onMove: onMove) }
+
+    func makeNSView(context: Context) -> NSSegmentedControl {
+        let control = NSSegmentedControl(frame: .zero)
+        control.identifier = NSUserInterfaceItemIdentifier("day-navigation")
+        control.segmentCount = 3
+        control.trackingMode = .momentary
+        control.segmentStyle = .automatic
+        control.controlSize = .large
+        control.font = .systemFont(ofSize: 13)
+        control.setWidth(32, forSegment: 0)
+        control.setWidth(160, forSegment: 1)
+        control.setWidth(32, forSegment: 2)
+        control.target = context.coordinator
+        control.action = #selector(Coordinator.selectSegment(_:))
+        updateNSView(control, context: context)
+        return control
+    }
+
+    func updateNSView(_ control: NSSegmentedControl, context: Context) {
+        context.coordinator.onCalendar = onCalendar
+        context.coordinator.onMove = onMove
+        let date = UsageFormat.date(store.customDate, timezone: store.timezone)
+        let titles = [L10n.text("Предыдущий день"), L10n.text("Выбрать дату: \(date)"), L10n.text("Следующий день")]
+        for (index, symbol) in ["chevron.left", "calendar", "chevron.right"].enumerated() {
+            control.setImage(NSImage(systemSymbolName: symbol, accessibilityDescription: titles[index]), forSegment: index)
+            control.setToolTip(titles[index], forSegment: index)
+        }
+        control.setLabel(date, forSegment: 1)
+        control.setEnabled(store.canMoveSelectedDay(by: -1), forSegment: 0)
+        control.setEnabled(!store.isDemo, forSegment: 1)
+        control.setEnabled(store.canMoveSelectedDay(by: 1), forSegment: 2)
+    }
+
+    @MainActor final class Coordinator {
+        var onCalendar: () -> Void
+        var onMove: (Int) -> Void
+        init(onCalendar: @escaping () -> Void, onMove: @escaping (Int) -> Void) {
+            self.onCalendar = onCalendar
+            self.onMove = onMove
+        }
+        @objc func selectSegment(_ control: NSSegmentedControl) {
+            let segment = control.selectedSegment
+            guard (0..<3).contains(segment), control.isEnabled(forSegment: segment) else { return }
+            switch segment {
+            case 0: onMove(-1)
+            case 2: onMove(1)
+            default: onCalendar()
+            }
+        }
+    }
+}
+
 struct DashboardView: View {
     @ObservedObject var store: UsageStore
     @ObservedObject var dashboardWindow = DashboardWindowCoordinator()
@@ -241,13 +300,10 @@ struct DashboardView: View {
         if store.tab != .settings {
             ToolbarItem(placement: .automatic) {
                 if store.period == .custom {
-                    Button { datePopover = .date } label: {
-                        Label(UsageFormat.date(store.customDate, timezone: store.timezone), systemImage: "calendar")
-                            .labelStyle(.titleAndIcon).font(.system(size: 13)).fixedSize()
-                    }
-                    .disabled(store.isDemo)
-                    .help(L10n.text("Выбрать дату"))
-                    .accessibilityLabel(L10n.text("Выбрать дату: \(UsageFormat.date(store.customDate, timezone: store.timezone))"))
+                    DateToolbarPicker(store: store, onCalendar: { datePopover = .date }) { offset in
+                        datePopover = nil
+                        Task { await store.moveSelectedDay(by: offset) }
+                    }.fixedSize()
                     .popover(isPresented: calendarPresented(at: .date)) { calendarPopover }
                 }
             }

@@ -138,7 +138,7 @@ import QuartzCore
         func findOpenDashboard(in menu: NSMenu) -> (NSMenu, Int)? {
             menu.update()
             for (index, item) in menu.items.enumerated() {
-                if item.title == L10n.text("Открыть Dashboard") { return (menu, index) }
+                if item.title == L10n.text("Открыть обзор") { return (menu, index) }
                 if let submenu = item.submenu, let match = findOpenDashboard(in: submenu) { return match }
             }
             return nil

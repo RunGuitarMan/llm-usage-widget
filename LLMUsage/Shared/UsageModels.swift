@@ -139,49 +139,65 @@ struct UsageSession: Codable, Equatable, Identifiable, Sendable {
     }
 }
 
-/// Model authorship is independent of the CLI agent (and of a routing service).
-/// Unknown model names deliberately do not inherit the agent's vendor.
+/// Model branding is independent of the CLI agent. The explicit tgpt prefix
+/// identifies T-Bank; other models follow their family, including through routers.
 enum ModelProvider: String, CaseIterable, Sendable {
-    case anthropic, openai, google, custom, mixed
+    case anthropic, openai, google, zai, deepseek, qwen, moonshot, minimax, mistral, meta, tbank, custom, mixed
+
+    static var brandedCases: [Self] { allCases.filter { $0 != .custom && $0 != .mixed } }
 
     var title: String {
         switch self {
         case .anthropic: return "Anthropic"
         case .openai: return "OpenAI"
         case .google: return "Google"
+        case .zai: return "Z.AI"
+        case .deepseek: return "DeepSeek"
+        case .qwen: return "Qwen"
+        case .moonshot: return "Moonshot AI"
+        case .minimax: return "MiniMax"
+        case .mistral: return "Mistral AI"
+        case .meta: return "Meta"
+        case .tbank: return L10n.text("Т-Банк")
         case .custom: return L10n.text("Другой или неизвестный провайдер")
         case .mixed: return L10n.text("Несколько провайдеров")
         }
     }
 
     static func resolve(models: [String]) -> Self {
-        let names = models.map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }.filter { !$0.isEmpty }
-        let providers = Set(names.map { name -> Self in
-            // Match whole family prefixes, including namespaces used by routers
-            // and Bedrock (e.g. openrouter/anthropic/claude-… or us.anthropic.claude-…).
-            if name.range(of: #"(?:^|[/.:])(?:claude|opus|sonnet|haiku)(?:$|[-_.])"#, options: .regularExpression) != nil { return .anthropic }
-            if name.range(of: #"(?:^|[/.:])(?:gpt(?:$|[-_.])|chatgpt(?:$|[-_.])|o[1-9][0-9]*(?:$|[-_.]))"#, options: .regularExpression) != nil { return .openai }
-            if name.range(of: #"(?:^|[/.:])(?:gemini|gemma)(?:$|[-_.])"#, options: .regularExpression) != nil { return .google }
-            return .custom
-        })
-        return providers.count > 1 ? .mixed : providers.first ?? .custom
+        let providers = logos(models: models)
+        return providers.count > 1 ? .mixed : providers[0]
     }
 
-    /// Preserve each known author. For an unrecognized model, the source logo
-    /// identifies its agent without claiming that agent authored the model.
-    static func logos(models: [String], sources: [String]) -> [Self] {
-        let known = Set(models.map { resolve(models: [$0]) }.filter { $0 != .custom })
-        if !known.isEmpty { return allCases.filter { known.contains($0) } }
-        let fallback = Set(sources.compactMap { source -> Self? in
-            switch source {
-            case "claude": return .anthropic
-            case "codex": return .openai
-            case "gemini": return .google
-            default: return nil
-            }
-        })
-        return fallback.isEmpty ? [.custom] : allCases.filter { fallback.contains($0) }
+    /// Stable, deduplicated logos, retaining unknown models in mixed sessions.
+    /// Empty entries are absent metadata, not an extra unknown model.
+    static func logos(models: [String]) -> [Self] {
+        let names = models.map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }.filter { !$0.isEmpty }
+        let providers = Set(names.map(provider(for:)))
+        return providers.isEmpty ? [.custom] : allCases.filter { providers.contains($0) }
     }
+
+    private static func provider(for name: String) -> Self {
+        // User-defined branding has priority even for tgpt/gpt-… or tgpt/claude-….
+        if name.hasPrefix("tgpt") { return .tbank }
+        // Whole family prefixes support router/author namespaces and Bedrock IDs.
+        // Numeric suffixes also cover compact identifiers such as glm4.7 and qwen3.
+        let modelName = String(name.split(separator: "/", omittingEmptySubsequences: false).last ?? "")
+        return families.first { modelName.range(of: $0.pattern, options: .regularExpression) != nil }?.provider ?? .custom
+    }
+
+    private static let families: [(provider: Self, pattern: String)] = [
+        (.anthropic, #"(?:^|[/.:])(?:claude|opus|sonnet|haiku)(?:$|[-_.])"#),
+        (.openai, #"(?:^|[/.:])(?:gpt|chatgpt|o[1-9][0-9]*)(?:$|[-_.])"#),
+        (.google, #"(?:^|[/.:])(?:gemini|gemma)(?:$|[-_.])"#),
+        (.zai, #"(?:^|[/.:])(?:glm|chatglm)(?:$|[-_.]|[0-9])"#),
+        (.deepseek, #"(?:^|[/.:])deepseek(?:$|[-_.])"#),
+        (.qwen, #"(?:^|[/.:])qwen(?:$|[-_.]|[0-9])"#),
+        (.moonshot, #"(?:^|[/.:])(?:kimi|moonshot)(?:$|[-_.])"#),
+        (.minimax, #"(?:^|[/.:])minimax(?:$|[-_.])"#),
+        (.mistral, #"(?:^|[/.:])(?:mistral|mixtral|ministral|codestral|devstral|magistral|pixtral)(?:$|[-_.])"#),
+        (.meta, #"(?:^|[/.:])llama(?:$|[-_.]|[0-9])"#)
+    ]
 }
 
 /// Exact, case-insensitive model-name overrides take precedence over provider defaults.

@@ -6,7 +6,7 @@ import SwiftUI
     static func run(_ review: ManualReviewController) async throws {
         guard let window = review.dashboard else { try ReviewCheck.require(false, "Missing production dashboard"); return }
         let store = review.store
-        for provider in [ModelProvider.anthropic, .openai, .google] {
+        for provider in ModelProvider.brandedCases {
             try ReviewCheck.require(ProviderLogo.images[provider]?.isValid == true, "Missing bundled provider logo: \(provider)")
         }
         for language in [InterfaceLanguage.english, .russian] {

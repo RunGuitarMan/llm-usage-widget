@@ -67,7 +67,9 @@ Rates reach ccusage through private temporary `pricingOverrides` configuration. 
 
 Model exclusions match exact names without case sensitivity; Z.ai / GLM are excluded by default. Exclusions affect Statistics, history, menu bar and widgets while preserving session records. Models shows original amounts for reference, marks excluded rows and keeps its included-spending total separate. A mixed session without a complete per-model breakdown is excluded as a whole if any of its models is excluded.
 
-Provider logos follow known model names independently of the coding agent. Mixed sessions show their known providers; an unknown model falls back to its source logo with a source tooltip. The daily budget uses the day's included total across sources, even when the screen is filtered to one source.
+Provider logos follow model families independently of the coding agent: Anthropic, OpenAI, Google, Z.AI (GLM/ChatGLM), DeepSeek, Qwen, Moonshot AI (Kimi), MiniMax, Mistral AI and Meta (Llama). After trimming whitespace and ignoring case, a model ID starting with `tgpt` takes priority and displays the T-Bank shield, including `tgpt/gpt-…`. Router namespaces and versioned model names are supported; opaque aliases remain unknown. Mixed sessions show deduplicated logos in a stable, overlapping stack with opaque backgrounds and separating outlines, including a neutral icon for unknown models. The tooltip and accessibility label list every provider. Empty metadata uses the neutral icon only when no model names are available. Tool names remain separate source labels. Logo recognition is independent of model exclusions and pricing. Logo sources and adaptations are recorded in `LLMUsage/Resources/Providers/NOTICE.txt`.
+
+The daily budget uses the day's included total across sources, even when the screen is filtered to one source.
 
 ## Chat inspection
 

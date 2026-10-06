@@ -99,7 +99,7 @@ struct LLMUsageApp: App {
             }
             #endif
             CommandGroup(after: .windowArrangement) {
-                OpenUsageButton(store: store, dashboard: appDelegate.dashboard, route: .overview, title: L10n.text("Открыть Dashboard"))
+                OpenUsageButton(store: store, dashboard: appDelegate.dashboard, route: .overview, title: L10n.text("Открыть обзор"))
                 Button(L10n.text("Показать статистику в строке меню")) { appDelegate.showMenuBarUsage() }
                     .keyboardShortcut("u", modifiers: [.command, .shift])
             }

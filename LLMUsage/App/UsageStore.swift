@@ -330,7 +330,18 @@ final class UsageStore: ObservableObject {
         reloadWidget()
     }
 
-    /// The calendar browses locally; only a confirmed day changes the report.
+    func canMoveSelectedDay(by offset: Int) -> Bool {
+        guard period == .custom, !isDemo, offset == -1 || offset == 1 else { return false }
+        return selectedDay.adding(days: offset).date <= UsageDay(date: now(), timezone: timezone).date
+    }
+
+    func moveSelectedDay(by offset: Int) async {
+        guard canMoveSelectedDay(by: offset) else { return }
+        // Read the current selection for every click, even while an earlier report is loading.
+        await selectCustomDate(selectedDay.adding(days: offset).date)
+    }
+
+    /// Month browsing is local to the calendar; choosing or stepping a day changes the report.
     func selectCustomDate(_ date: Date) async {
         let day = UsageDay(date: date, timezone: timezone)
         guard day.date <= UsageDay(date: now(), timezone: timezone).date else { return }

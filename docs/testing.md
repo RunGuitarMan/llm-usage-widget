@@ -39,7 +39,7 @@ xcodebuild -project LLMUsage.xcodeproj -scheme LLMUsage \
 
 CI also builds the Xcode app and embedded widget without launching them and checks their version metadata against the same repository version and Git build number as script builds.
 
-Run `bash Scripts/manual-review.sh`. The catalogue offers 86 curated scenarios, RU/EN, light/dark appearance and width presets. It is a checklist, not exhaustive coverage of every UI combination. **⌘1** reopens the catalogue. Use Next/Back to navigate and record Passed, Problem or Skip with notes. Loading scenarios can be released with **Успешный ответ источника**.
+Run `bash Scripts/manual-review.sh`. The catalogue offers 89 curated scenarios, RU/EN, light/dark appearance and width presets. It is a checklist, not exhaustive coverage of every UI combination. **⌘1** reopens the catalogue. Use Next/Back to navigate and record Passed, Problem or Skip with notes. Loading scenarios can be released with **Успешный ответ источника**.
 
 Files under `build/UIReview/`:
 
@@ -51,6 +51,8 @@ Files under `build/UIReview/`:
 
 All launcher modes replace the previous review bundle and stop its process, so finish an active manual session before rebuilding. `--build-only` builds without launching. `--self-check` uses a separate `build/manual-review/check-report` folder. It tests scenario switching and invariants, not every clickable control.
 
+For disposable interactive checks without changing saved notes or position, use `LLM_REVIEW_REPORT_DIR="$PWD/build/manual-review/interactive-report" bash Scripts/manual-review.sh`. This override applies only to interactive review; automated checks always use `build/manual-review/check-report`.
+
 ## Visual and system checks
 
 `bash Scripts/render-previews.sh` writes previews to `build/Previews`. Useful filters include `--widgets`, `--menus`, `--sidebars`, `--models`, `--ui-polish` and `--language=ru`/`en`. These render content; native titlebar glass, popover positioning and window focus require a live app.
@@ -59,8 +61,8 @@ Before a UI release, verify:
 
 - Statistics: expand/collapse sessions with one main scroll area; sort/search/filter and follow a session link.
 - Toolbar: switch sections and dates repeatedly; hide/show the sidebar with an active warning. Buttons must not duplicate or inherit the warning fill.
-- Calendar and budget: select a date in both locales; change a budget in Settings and check its meter, including with a source filter.
-- Provider logos: known, unknown and mixed models in sessions, Models and the inspector.
+- Calendar and budget: select a date in both locales; step through days with the date capsule, including rapid clicks, month boundaries and today's disabled forward arrow. Verify that a day arrow dismisses the open calendar and that the capsule stays in place. Change a budget in Settings and check its meter, including with a source filter.
+- Provider logos: use `provider-sessions`, `provider-models` and `provider-inspector` for GLM in Claude Code, the T-Bank shield for `tgpt…`, all bundled brands, unknown/empty models and mixed sessions. Self-checks validate bundled marks and production logo bindings and labels in RU/EN and both themes. Review-only native probes observe the real logo groups; no product window is recreated.
 - Chat: token details, tool/request links, search, full-text reading and long messages at narrow width in both themes.
 - Sidebar: active/inactive windows, dark/light appearance, increased contrast and reduced transparency.
 

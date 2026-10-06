@@ -51,7 +51,7 @@ struct ModelsView: View {
                                 }
                             } label: {
                                 HStack(spacing: 16) {
-                                    ProviderLogos(models: model.id.components(separatedBy: ", "), sources: model.sources)
+                                    ProviderLogos(models: model.id.components(separatedBy: ", "))
                                     VStack(alignment: .leading, spacing: 7) {
                                         Text(model.title).font(.system(size: 14, weight: .medium)).lineLimit(2)
                                         Text(L10n.text("Сессии: \(model.sessionCount) · \(UsageFormat.tokens(model.usage.total)) токенов"))
