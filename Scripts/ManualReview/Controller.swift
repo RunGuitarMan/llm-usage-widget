@@ -27,7 +27,7 @@ enum ReviewSize: String, CaseIterable, Identifiable {
         let directory = args.firstIndex(of: "--review-report-dir").flatMap { index in
             args.indices.contains(index + 1) ? URL(fileURLWithPath: args[index + 1]) : nil
         } ?? FileManager.default.temporaryDirectory.appendingPathComponent("LLMUsageReview")
-        do { return try ManualReviewController(reportDirectory: directory, resume: !args.contains("--review-self-check") && !args.contains("--review-widget-check") && !args.contains("--review-focus-check")) }
+        do { return try ManualReviewController(reportDirectory: directory, resume: !args.contains("--review-self-check") && !args.contains("--review-widget-check") && !args.contains("--review-focus-check") && !args.contains("--review-telemetry-check")) }
         catch { fatalError("Cannot initialize manual review: \(error)") }
     }()
 
@@ -164,11 +164,14 @@ enum ReviewSize: String, CaseIterable, Identifiable {
             await selectionTask?.value
             openWindow("manual-review")
             NSApp.activate(ignoringOtherApps: true)
-            if CommandLine.arguments.contains("--review-self-check") || CommandLine.arguments.contains("--review-widget-check") || CommandLine.arguments.contains("--review-focus-check") {
+            if CommandLine.arguments.contains("--review-self-check") || CommandLine.arguments.contains("--review-widget-check") || CommandLine.arguments.contains("--review-focus-check") || CommandLine.arguments.contains("--review-telemetry-check") {
                 do {
                     if CommandLine.arguments.contains("--review-widget-check") {
                         try await WidgetChecks.run()
                         print("PASS Widget checks in common app")
+                    } else if CommandLine.arguments.contains("--review-telemetry-check") {
+                        try await TelemetryReview.run(self)
+                        print("PASS Telemetry checks in common app")
                     } else if CommandLine.arguments.contains("--review-focus-check") {
                         try await WindowChecks.sidebarAppearance(self)
                         print("PASS Focus checks in common app")

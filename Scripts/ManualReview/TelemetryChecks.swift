@@ -107,7 +107,11 @@ struct TelemetryReviewProbe: NSViewRepresentable {
                 coordinator.cancelSetup(); try await ReviewCheck.wait("Conflict sheet did not close") { window.attachedSheet == nil }
                 try await ReviewCheck.select("telemetry-export", in: review)
                 try await ReviewCheck.wait("Export preview missing") { !probes(window.attachedSheet, kind: "export").isEmpty }
-                try ReviewCheck.require(probes(window.attachedSheet, kind: "export").first!.value > 0, "Export has no selected API events")
+                // The native sheet exists before its .task loads the immutable snapshot.
+                // Wait for the actual controls to publish every fixture event.
+                try await ReviewCheck.wait("Export did not load all five selected API events") {
+                    probes(window.attachedSheet, kind: "export").first?.value == 5
+                }
                 coordinator.presentsExport = false; try await ReviewCheck.wait("Export sheet did not close") { window.attachedSheet == nil }
                 try await ReviewCheck.select("chat-telemetry", in: review)
                 try await ReviewCheck.wait("Session telemetry missing in real chat") { !probes(window.attachedSheet, kind: "chat").isEmpty }
