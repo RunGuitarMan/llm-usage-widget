@@ -16,6 +16,7 @@ import os
 from pathlib import Path
 import re
 import secrets
+from socketserver import TCPServer
 import threading
 import time
 import uuid
@@ -198,6 +199,12 @@ def collector(sink, port=4318):
 
     class Server(ThreadingHTTPServer):
         daemon_threads = True
+
+        def server_bind(self):
+            # HTTPServer.server_bind performs reverse DNS through getfqdn().
+            # A fixed loopback collector must start without a DNS dependency.
+            TCPServer.server_bind(self)
+            self.server_name, self.server_port = self.server_address[:2]
 
         def handle_error(self, *_):
             sink.reject()

@@ -183,7 +183,7 @@ LLM Usage по желанию пользователя принимает лок
 | Целевые telemetry scenarios | 21 группа — PASS; дополнительно проверен переход большой сессии через 16 MiB с удалением старейших событий, сохранением новых и соблюдением квоты |
 | `bash Scripts/check-windows.sh` / штатный `--review --self-check` | 99 сценариев каталога — PASS; telemetry settings/status/consent/export/chat в RU/EN × light/dark, compact |
 | Normal demo + review artifact | Один подписанный `build/LLM Usage.app`; source identity, SHA-256, app/widget signatures и побайтная неизменность до/после — PASS |
-| Python | 84 tests — PASS |
+| Python | Полный локальный прогон: 84 tests — PASS. После отдельного исправления DNS-зависимости сборщика: только 6 его целевых tests — PASS, включая новую регрессию; всего в наборе теперь 85 tests |
 | `check-claude-streams.py` | 31 fixture — PASS |
 | `swift test` | Запущен; локально `no such module XCTest`. Общие scenarios компилируются как отдельный SwiftPM core module и проходят portable runner |
 | Project/version/diff | Generator идемпотентен, `git diff --check` чист; 1.5.5 > актуального main 1.5.4 |
@@ -192,6 +192,8 @@ LLM Usage по желанию пользователя принимает лок
 Отчёты находятся в `build/telemetry-*.log`, автоматический native report — `build/manual-review/check-report`, ручной ZIP — `build/manual-review/telemetry-interactive/manual-telemetry-20261007.zip`. `build/UIReview` не изменялся. Ранние прогоны выявили нестабильность дробного timestamp fingerprint и неполную синтетическую chat fixture; они исправлены и повторно проверены. При первом запуске проверки был также невоспроизводимый сбой открытия инспектора; повторные полные native-прогоны прошли без ослабления существующих assertions. После исправления только UI-формата цены выполнены пересборка и адресный ручной осмотр экрана чата; полный набор для этой правки не повторяется.
 
 Код и документация продолжают существующий draft PR #29 на `feat/claude-cost-parity`; release.json остаётся 1.5.5. Merge, release и теги не создаются.
+
+CI на коммите `0e14ae2` остановился в существующем Python capture test до XCTest: `HTTPServer.server_bind` выполнял reverse DNS, и старт listener не укладывался в 5 s. Loopback collector теперь вызывает `TCPServer.server_bind` и использует фиксированное имя `127.0.0.1`; регрессия с запрещённым `socket.getfqdn` проходит. После этой правки локально повторены только шесть тестов сборщика, полный набор не перезапускался. Финальный push запускает обычный CI с Xcode; его результат следует смотреть в PR.
 
 ## Практические ограничения
 

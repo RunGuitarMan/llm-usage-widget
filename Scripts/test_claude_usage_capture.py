@@ -96,6 +96,15 @@ class CaptureTests(unittest.TestCase):
                 server.server_close()
                 thread.join()
 
+    def test_loopback_startup_does_not_resolve_dns(self):
+        with tempfile.TemporaryDirectory() as temp, patch("socket.getfqdn", side_effect=AssertionError("DNS must not run")):
+            server, endpoint = C.collector(C.Sink(Path(temp)), 0)
+            try:
+                self.assertEqual(server.server_name, "127.0.0.1")
+                self.assertEqual(urlsplit(endpoint).port, server.server_port)
+            finally:
+                server.server_close()
+
     def test_external_launcher_cli_and_export(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
