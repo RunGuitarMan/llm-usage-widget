@@ -64,6 +64,7 @@ enum ClaudeSessionAccounting {
             guard valid, used == Set(groups.keys), Set(accepted.keys).isSubset(of: used) else {
                 result.usageUncertain = true; continue
             }
+            result.claudeSnapshotValidated = true
             accepted = proposal // A snapshot replaces the previous cumulative one.
         }
         result.requests += accepted.keys.sorted().compactMap { accepted[$0] }

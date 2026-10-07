@@ -416,7 +416,7 @@ struct SessionDetailView: View {
         .sheet(item: $chatSession) { selection in
             SessionChatView(session: selection.session, timezone: selection.day.timezone, isDemo: store.isDemo,
                             day: selection.day, policy: selection.policy,
-                            customPath: selection.customPath, pricingKey: selection.pricingKey)
+                            customPath: selection.customPath, pricingKey: selection.pricingKey, telemetry: store.telemetry)
         }
     }
 

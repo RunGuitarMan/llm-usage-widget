@@ -196,6 +196,9 @@ enum ReviewSize: String, CaseIterable, Identifiable {
         preparing = true
         selectionTask = Task { @MainActor in
             defer { if selectedID == id { preparing = false } }
+            store.telemetry.presentsOnboarding = false
+            store.telemetry.presentsExport = false
+            store.telemetry.cancelSetup()
             store.requestReviewChat(false)
             for _ in 0..<40 {
                 if dashboard?.attachedSheet == nil { break }
@@ -224,6 +227,10 @@ enum ReviewSize: String, CaseIterable, Identifiable {
                 case "inspector": store.selectedSessionID = store.snapshot?.sessions.first?.id
                 default: break
                 }
+                if option.hasPrefix("telemetry-") {
+                    do { try await TelemetryReview.configure(store.telemetry, mode: String(option.dropFirst(10))) }
+                    catch { persistenceError = "Synthetic telemetry scenario failed" }
+                }
                 if fixture == .missing { await store.testCLI() }
                 showDashboard()
             case let .transition(step):
@@ -245,6 +252,7 @@ enum ReviewSize: String, CaseIterable, Identifiable {
                 await prepare(.normal, keepInspector: true)
                 guard !Task.isCancelled else { return }
                 chatKind = kind
+                if kind == "telemetry" { try? await TelemetryReview.configure(store.telemetry, mode: "receiving") }
                 store.selectedSessionID = store.snapshot?.sessions.first?.id
                 showDashboard()
                 store.requestReviewChat(true)
@@ -272,6 +280,12 @@ enum ReviewSize: String, CaseIterable, Identifiable {
 
     private func prepare(_ fixture: ReviewFixture, keepInspector: Bool = false) async {
         refreshTask?.cancel()
+        let oldTelemetry = store.telemetry
+        await oldTelemetry.shutdown()
+        if oldTelemetry.isolated, let root = oldTelemetry.isolationRoot { try? FileManager.default.removeItem(at: root) }
+        store.telemetry = ClaudeTelemetryCoordinator(defaults: UserDefaults(suiteName: suite)!, isolated: true)
+        store.objectWillChange.send()
+        await store.telemetry.start()
         store.resetForManualReview()
         service.configure(fixture)
         if !keepInspector { store.selectedSessionID = nil }
@@ -343,7 +357,7 @@ enum ReviewSize: String, CaseIterable, Identifiable {
             try await Task.sleep(for: .milliseconds(120))
             if kind == "missing" { throw UsageError.processFailed(1, "Тестовый журнал не найден") }
             if kind == "empty" { return .init(events: []) }
-            var transcript = TranscriptPreview.sample
+            var transcript = kind == "telemetry" ? TelemetryReview.transcript() : TranscriptPreview.sample
             if kind == "partial" {
                 transcript.usageUncertain = true
                 for index in transcript.requests.indices {
@@ -364,6 +378,7 @@ enum ReviewSize: String, CaseIterable, Identifiable {
     func cleanup() {
         selectionTask?.cancel()
         refreshTask?.cancel()
+        store.telemetry.stopImmediately()
         store.resetForManualReview()
         service.configure(.normal)
         UserDefaults(suiteName: suite)?.removePersistentDomain(forName: suite)

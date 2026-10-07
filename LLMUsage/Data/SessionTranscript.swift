@@ -100,6 +100,9 @@ struct SessionTranscript: Sendable {
     var usageSupported = false
     var usageUncertain = false
     var imported = false
+    var telemetryPricingSpeed: String?
+    var claudeSnapshotValidated = false
+    var telemetryRates: [String: [String: Double]] = [:]
 
     var messageCount: Int { events.filter { $0.isMessage && !$0.isUsageOnly }.count }
     var toolCount: Int { events.filter { $0.kind == .tool }.count }

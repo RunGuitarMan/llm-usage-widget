@@ -31,6 +31,7 @@ import AppKit
         try await WindowChecks.run(review)
         try await SessionNavigationChecks.run(review)
         try await ProviderChecks.run(review)
+        try await TelemetryReview.run(review)
         for scenario in ReviewScenario.all {
             try await select(scenario.id)
             try require(review.dashboard === window, "Scenario replaced the production window")

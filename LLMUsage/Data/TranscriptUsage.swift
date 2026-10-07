@@ -19,6 +19,7 @@ struct TranscriptRequest: Identifiable, Sendable {
     var userEventID: String?
     var accountingIntervalStart: Date?
     var accountingIntervalEnd: Date?
+    var telemetryIdentity: TranscriptTelemetryIdentity?
     var isSupplemental: Bool { accountingIntervalStart != nil }
     func belongs(to day: UsageDay) -> Bool {
         guard let date = timestamp, date >= day.date && date < day.end else { return false }
@@ -224,7 +225,7 @@ enum TranscriptUsageParser {
         var serial = 0
         var sequence = 0
         func append(model: String, date: Date?, events: [String], billing: TranscriptBilling,
-                    usage: TokenUsage, reasoning: Int64 = 0, key: String?, sidechain: Bool = false, replayKey: String? = nil, preferLatest: Bool = false) {
+                    usage: TokenUsage, reasoning: Int64 = 0, key: String?, sidechain: Bool = false, replayKey: String? = nil, preferLatest: Bool = false, telemetryIdentity: TranscriptTelemetryIdentity? = nil) {
             var seen = Set<String>()
             let ids = events.filter { seen.insert($0).inserted }
             let replayIndex = replayKey.flatMap { sidechainIndexes[$0] }.flatMap { index in
@@ -237,7 +238,7 @@ enum TranscriptUsageParser {
                 if source == "gemini" || (old.isSidechain && !sidechain) || (old.isSidechain == sidechain &&
                     (usage.total > old.usage.total || (usage.total == old.usage.total && (preferLatest || (old.billing.speed == nil && billing.speed != nil))))) {
                     transcript.requests[index] = .init(id: old.id, model: model, timestamp: date, eventIDs: allIDs,
-                        billing: billing, usage: usage, reasoning: reasoning, isSidechain: sidechain, sequence: old.sequence)
+                        billing: billing, usage: usage, reasoning: reasoning, isSidechain: sidechain, sequence: old.sequence, telemetryIdentity: telemetryIdentity)
                 } else { transcript.requests[index].eventIDs = allIDs }
                 if let key { indexes[key] = index }
                 return
@@ -246,7 +247,7 @@ enum TranscriptUsageParser {
             if let key { indexes[key] = transcript.requests.count }
             if let replayKey { sidechainIndexes[replayKey] = transcript.requests.count }
             transcript.requests.append(.init(id: "request-\(serial)", model: model, timestamp: date,
-                eventIDs: ids, billing: billing, usage: usage, reasoning: reasoning, isSidechain: sidechain, sequence: sequence))
+                eventIDs: ids, billing: billing, usage: usage, reasoning: reasoning, isSidechain: sidechain, sequence: sequence, telemetryIdentity: telemetryIdentity))
         }
         for record in sourceRecords {
             try Task.checkCancellation()
@@ -282,7 +283,7 @@ enum TranscriptUsageParser {
                        billing: .init(tokens: tokens, speed: raw["speed"] as? String, cacheCreation: cache), usage: usage,
                        key: key, sidechain: root["isSidechain"] as? Bool == true,
                        replayKey: messageID.map { $0 + "|" + (requestID == nil ? "requestless" : String(describing: root["timestamp"] ?? "")) },
-                       preferLatest: requestID == nil)
+                       preferLatest: requestID == nil, telemetryIdentity: .init(sessionID: ClaudeTelemetrySanitizer.session(root["sessionId"]), requestID: ClaudeTelemetrySanitizer.identifier(requestID), clientRequestID: ClaudeTelemetrySanitizer.identifier(root["clientRequestId"] ?? root["client_request_id"])))
                 // Advisor iterations are separate billable model calls, not replacements for the main answer.
                 for (index, iteration) in (raw["iterations"] as? [[String: Any]] ?? []).enumerated()
                     where iteration["type"] as? String == "advisor_message" {

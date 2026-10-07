@@ -27,6 +27,10 @@ The required **Tests** check rejects PRs whose `.github/release.json` version is
 
 `LLMUsage/Tests/*Scenarios.swift` contains the shared assertions used by both the portable harness and XCTest wrappers. Add checks there instead of duplicating them. Existing coverage includes date/timezone boundaries, model attribution and exclusions, stream/replay deduplication, pricing persistence, transcript timing, search cancellation, stale responses, cache validation, clock changes and CLI process cleanup.
 
+Claude telemetry adds 21 shared scenario groups covering add-only settings transactions, races/faults, privacy canaries, numeric/framing/gzip bounds, loopback HTTP, restart/dedup/recovery, retention/quota, reconciliation and anonymous ZIP exports. After compilation, `build/portable-checks --telemetry-only` runs that focused subset without launching a UI. Tests use private temporary configurations/stores and never edit the user's Claude settings.
+
+The catalogue adds onboarding, preview/conflict, ready/receiving/waiting/error/off, export and chat telemetry scenarios. Native checks inspect the production controls and sheets in RU/EN, light/dark and compact sizes. Review uses isolated synthetic settings and a free loopback port; automatic checks preserve `build/UIReview`.
+
 Run `python3 Scripts/check-claude-streams.py` after building the app to check both real CLI loaders against the shared response-boundary fixtures (streams, reused gateway IDs, replays and midnight). `build/portable-checks --bundled-cli` additionally compares the application reports in both source modes with priced chat detail on those same fixtures.
 
 After building the app, run `build/portable-checks --bundled-cli` to verify the shipped native helper against synthetic logs and pricing fixtures. For optional system-CLI integration checks, use `bash Scripts/check.sh --live-cli` for saved/offline pricing or `bash Scripts/check.sh --chat-cli` for transcript calculations. Both use synthetic logs; the live pricing check also needs network access to the price catalog and the tested ccusage version. They do not validate every upstream CLI version.
@@ -42,7 +46,7 @@ xcodebuild -project LLMUsage.xcodeproj -scheme LLMUsage \
 
 CI also builds the Xcode app and embedded widget without launching them and checks their version metadata against the same repository version and Git build number as script builds.
 
-Run `bash Scripts/build-local.sh` once, then `bash Scripts/manual-review.sh` to launch that same app in review mode. The catalogue offers 89 curated scenarios, RU/EN, light/dark appearance and width presets. It is a checklist, not exhaustive coverage of every UI combination. **⌘1** reopens the catalogue. Use Next/Back to navigate and record Passed, Problem or Skip with notes. Loading scenarios can be released with **Успешный ответ источника**.
+Run `bash Scripts/build-local.sh` once, then `bash Scripts/manual-review.sh` to launch that same app in review mode. The catalogue offers 99 curated scenarios, RU/EN, light/dark appearance and width presets. It is a checklist, not exhaustive coverage of every UI combination. **⌘1** reopens the catalogue. Use Next/Back to navigate and record Passed, Problem or Skip with notes. Loading scenarios can be released with **Успешный ответ источника**.
 
 Files under `build/UIReview/`:
 

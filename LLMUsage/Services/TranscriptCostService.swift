@@ -115,6 +115,11 @@ struct TranscriptCostService: Sendable {
             transcript.usageUncertain = true
             transcript.notices.append(L10n.text("Версия расчёта или тарифы исходного отчёта отличаются. Стоимость пересчитана; обновите статистику для сверки."))
         }
+        if let root = try? JSONSerialization.jsonObject(with: configuration) as? [String: Any],
+           let speed = (root["defaults"] as? [String: Any])?["speed"] as? String, ["auto", "standard", "fast"].contains(speed) {
+            transcript.telemetryPricingSpeed = speed
+        }
+        transcript.telemetryRates = ClaudeTelemetryReconciler.rates(configuration)
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("llmusage-chat-\(UUID().uuidString)", isDirectory: true)
         defer { try? FileManager.default.removeItem(at: root) }
         let requests = transcript.requests.filter { !$0.isReplay && !$0.model.isEmpty }
