@@ -17,6 +17,13 @@ struct TranscriptRequest: Identifiable, Sendable {
     var sequence = 0
     var accountingModel: String?
     var userEventID: String?
+    var accountingIntervalStart: Date?
+    var accountingIntervalEnd: Date?
+    var isSupplemental: Bool { accountingIntervalStart != nil }
+    func belongs(to day: UsageDay) -> Bool {
+        guard let date = timestamp, date >= day.date && date < day.end else { return false }
+        return accountingIntervalStart.map { $0 >= day.date } ?? true
+    }
     var modelForAccounting: String { accountingModel ?? model }
     var anchorID: String? { eventIDs.first }
 }
@@ -54,8 +61,12 @@ struct TranscriptUsageSummary: Sendable {
         requests = transcript.requests.filter { request in
             guard !request.isReplay else { return false }
             guard let day else { return true }
-            guard let date = request.timestamp else { return false }
-            return date >= day.date && date < day.end
+            return request.belongs(to: day)
+        }
+        if let day {
+            unknownDates += transcript.requests.filter { $0.isSupplemental && !$0.belongs(to: day)
+                && ($0.accountingIntervalStart ?? .distantFuture) < day.end
+                && ($0.accountingIntervalEnd ?? .distantPast) >= day.date }.count
         }
         for request in requests {
             reported = reported + request.usage
@@ -255,7 +266,13 @@ enum TranscriptUsageParser {
                       let cache = numbers(TranscriptJSON.object(raw["cache_creation"]), keys: ["ephemeral_5m_input_tokens", "ephemeral_1h_input_tokens"]) else {
                     transcript.usageUncertain = true; continue
                 }
-                if !cache.isEmpty { tokens["cache_creation_input_tokens"] = cache.values.reduce(0, +) }
+                let aggregate = tokens["cache_creation_input_tokens", default: 0]
+                let split = cache.values.reduce(0, +)
+                if aggregate > 0, raw["cache_creation"] != nil, split == 0 {
+                    let notice = L10n.text("Для записи кэша без разбивки TTL применена ставка 5 минут.")
+                    if !transcript.notices.contains(notice) { transcript.notices.append(notice) }
+                } else if aggregate > 0, split > 0, aggregate != split { transcript.usageUncertain = true }
+                if split > 0 { tokens["cache_creation_input_tokens"] = split }
                 let usage = TokenUsage(input: tokens["input_tokens", default: 0], output: tokens["output_tokens", default: 0],
                     cacheCreate: tokens["cache_creation_input_tokens", default: 0], cacheRead: tokens["cache_read_input_tokens", default: 0], costIsIncomplete: true)
                 let messageID = message["id"] as? String
@@ -411,7 +428,7 @@ enum TranscriptUsageParser {
             let right = $1.element.records.map(\.sequence).min() ?? Int.max
             return left == right ? $0.offset < $1.offset : left < right
         }.map(\.element)
-        return transcript
+        return source == "claude" ? ClaudeSessionAccounting.annotate(transcript) : transcript
     }
 
     /// Match the actual counter and response records, not a coincidental token

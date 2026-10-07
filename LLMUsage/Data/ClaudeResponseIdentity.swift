@@ -54,7 +54,7 @@ struct ClaudeResponseIdentity {
               let raw = message["usage"] as? [String: Any],
               var usage = TranscriptUsageParser.numbers(raw, keys: ["input_tokens", "output_tokens", "cache_creation_input_tokens", "cache_read_input_tokens"]),
               let cache = TranscriptUsageParser.numbers(TranscriptJSON.object(raw["cache_creation"]), keys: ["ephemeral_5m_input_tokens", "ephemeral_1h_input_tokens"]) else { return key }
-        if !cache.isEmpty { usage["cache_creation_input_tokens"] = cache.values.reduce(0, +) }
+        if cache.values.contains(where: { $0 > 0 }) { usage["cache_creation_input_tokens"] = cache.values.reduce(0, +) }
         let model = message["model"] as? String
         let sidechain = root["isSidechain"] as? Bool
         let speed = raw["speed"] as? String

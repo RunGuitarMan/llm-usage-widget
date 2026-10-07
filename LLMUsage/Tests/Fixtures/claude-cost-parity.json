@@ -1,0 +1,3920 @@
+[
+  {
+    "name": "previous",
+    "expectedVisibleCost": 1.0222951,
+    "expectedSessionCost": 1.0222951,
+    "records": [
+      {
+        "type": "user",
+        "uuid": "prompt",
+        "sessionId": "accounting-fixture",
+        "timestamp": "2026-10-07T12:00:00Z",
+        "message": {
+          "role": "user",
+          "content": "Synthetic prompt"
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-1",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-0",
+        "timestamp": "2026-10-07T12:01:00Z",
+        "message": {
+          "id": "msg-0",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 405,
+            "cache_creation_input_tokens": 42805,
+            "cache_read_input_tokens": 0,
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 0,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "speed": "standard"
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-2",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-1",
+        "timestamp": "2026-10-07T12:02:00Z",
+        "message": {
+          "id": "msg-1",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 380,
+            "cache_creation_input_tokens": 1702,
+            "cache_read_input_tokens": 42805,
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 0,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "speed": "standard"
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-3",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-1",
+        "timestamp": "2026-10-07T12:02:00Z",
+        "message": {
+          "id": "msg-1",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 380,
+            "cache_creation_input_tokens": 1702,
+            "cache_read_input_tokens": 42805,
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 0,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "speed": "standard"
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-4",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-1",
+        "timestamp": "2026-10-07T12:02:00Z",
+        "message": {
+          "id": "msg-1",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 380,
+            "cache_creation_input_tokens": 1702,
+            "cache_read_input_tokens": 42805,
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 0,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "speed": "standard"
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-5",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-1",
+        "timestamp": "2026-10-07T12:02:00Z",
+        "message": {
+          "id": "msg-1",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 380,
+            "cache_creation_input_tokens": 1702,
+            "cache_read_input_tokens": 42805,
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 0,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "speed": "standard"
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-6",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-2",
+        "timestamp": "2026-10-07T12:03:00Z",
+        "message": {
+          "id": "msg-2",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 631,
+            "cache_creation_input_tokens": 3974,
+            "cache_read_input_tokens": 44507,
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 0,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "speed": "standard"
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-7",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-2",
+        "timestamp": "2026-10-07T12:03:00Z",
+        "message": {
+          "id": "msg-2",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 631,
+            "cache_creation_input_tokens": 3974,
+            "cache_read_input_tokens": 44507,
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 0,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "speed": "standard"
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-8",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-2",
+        "timestamp": "2026-10-07T12:03:00Z",
+        "message": {
+          "id": "msg-2",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 631,
+            "cache_creation_input_tokens": 3974,
+            "cache_read_input_tokens": 44507,
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 0,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "speed": "standard"
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-9",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-2",
+        "timestamp": "2026-10-07T12:03:00Z",
+        "message": {
+          "id": "msg-2",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 631,
+            "cache_creation_input_tokens": 3974,
+            "cache_read_input_tokens": 44507,
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 0,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "speed": "standard"
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-10",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-3",
+        "timestamp": "2026-10-07T12:04:00Z",
+        "message": {
+          "id": "msg-3",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 673,
+            "cache_creation_input_tokens": 9580,
+            "cache_read_input_tokens": 48481,
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 0,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "speed": "standard"
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-11",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-3",
+        "timestamp": "2026-10-07T12:04:00Z",
+        "message": {
+          "id": "msg-3",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 673,
+            "cache_creation_input_tokens": 9580,
+            "cache_read_input_tokens": 48481,
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 0,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "speed": "standard"
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-12",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-3",
+        "timestamp": "2026-10-07T12:04:00Z",
+        "message": {
+          "id": "msg-3",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 673,
+            "cache_creation_input_tokens": 9580,
+            "cache_read_input_tokens": 48481,
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 0,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "speed": "standard"
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-13",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-4",
+        "timestamp": "2026-10-07T12:05:00Z",
+        "message": {
+          "id": "msg-4",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 883,
+            "cache_creation_input_tokens": 5104,
+            "cache_read_input_tokens": 58061,
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 0,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "speed": "standard"
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-14",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-4",
+        "timestamp": "2026-10-07T12:05:00Z",
+        "message": {
+          "id": "msg-4",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 883,
+            "cache_creation_input_tokens": 5104,
+            "cache_read_input_tokens": 58061,
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 0,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "speed": "standard"
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-15",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-4",
+        "timestamp": "2026-10-07T12:05:00Z",
+        "message": {
+          "id": "msg-4",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 883,
+            "cache_creation_input_tokens": 5104,
+            "cache_read_input_tokens": 58061,
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 0,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "speed": "standard"
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-16",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-4",
+        "timestamp": "2026-10-07T12:05:00Z",
+        "message": {
+          "id": "msg-4",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 883,
+            "cache_creation_input_tokens": 5104,
+            "cache_read_input_tokens": 58061,
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 0,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "speed": "standard"
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-17",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-5",
+        "timestamp": "2026-10-07T12:06:00Z",
+        "message": {
+          "id": "msg-5",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 797,
+            "cache_creation_input_tokens": 14629,
+            "cache_read_input_tokens": 63165,
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 0,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "speed": "standard"
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-18",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-5",
+        "timestamp": "2026-10-07T12:06:00Z",
+        "message": {
+          "id": "msg-5",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 797,
+            "cache_creation_input_tokens": 14629,
+            "cache_read_input_tokens": 63165,
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 0,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "speed": "standard"
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-19",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-5",
+        "timestamp": "2026-10-07T12:06:00Z",
+        "message": {
+          "id": "msg-5",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 797,
+            "cache_creation_input_tokens": 14629,
+            "cache_read_input_tokens": 63165,
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 0,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "speed": "standard"
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-20",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-5",
+        "timestamp": "2026-10-07T12:06:00Z",
+        "message": {
+          "id": "msg-5",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 797,
+            "cache_creation_input_tokens": 14629,
+            "cache_read_input_tokens": 63165,
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 0,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "speed": "standard"
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-21",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-6",
+        "timestamp": "2026-10-07T12:07:00Z",
+        "message": {
+          "id": "msg-6",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 667,
+            "cache_creation_input_tokens": 19517,
+            "cache_read_input_tokens": 77794,
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 0,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "speed": "standard"
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-22",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-6",
+        "timestamp": "2026-10-07T12:07:00Z",
+        "message": {
+          "id": "msg-6",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 667,
+            "cache_creation_input_tokens": 19517,
+            "cache_read_input_tokens": 77794,
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 0,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "speed": "standard"
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-23",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-6",
+        "timestamp": "2026-10-07T12:07:00Z",
+        "message": {
+          "id": "msg-6",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 667,
+            "cache_creation_input_tokens": 19517,
+            "cache_read_input_tokens": 77794,
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 0,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "speed": "standard"
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-24",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-7",
+        "timestamp": "2026-10-07T12:08:00Z",
+        "message": {
+          "id": "msg-7",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 353,
+            "cache_creation_input_tokens": 2117,
+            "cache_read_input_tokens": 97311,
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 0,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "speed": "standard"
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-25",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-7",
+        "timestamp": "2026-10-07T12:08:00Z",
+        "message": {
+          "id": "msg-7",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 353,
+            "cache_creation_input_tokens": 2117,
+            "cache_read_input_tokens": 97311,
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 0,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "speed": "standard"
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-26",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-7",
+        "timestamp": "2026-10-07T12:08:00Z",
+        "message": {
+          "id": "msg-7",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 353,
+            "cache_creation_input_tokens": 2117,
+            "cache_read_input_tokens": 97311,
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 0,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "speed": "standard"
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-27",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-8",
+        "timestamp": "2026-10-07T12:09:00Z",
+        "message": {
+          "id": "msg-8",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 1003,
+            "cache_creation_input_tokens": 6839,
+            "cache_read_input_tokens": 99428,
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 0,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "speed": "standard"
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-28",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-8",
+        "timestamp": "2026-10-07T12:09:00Z",
+        "message": {
+          "id": "msg-8",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 1003,
+            "cache_creation_input_tokens": 6839,
+            "cache_read_input_tokens": 99428,
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 0,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "speed": "standard"
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-29",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-8",
+        "timestamp": "2026-10-07T12:09:00Z",
+        "message": {
+          "id": "msg-8",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 1003,
+            "cache_creation_input_tokens": 6839,
+            "cache_read_input_tokens": 99428,
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 0,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "speed": "standard"
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-30",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-9",
+        "timestamp": "2026-10-07T12:10:00Z",
+        "message": {
+          "id": "msg-9",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 1075,
+            "cache_creation_input_tokens": 2783,
+            "cache_read_input_tokens": 106267,
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 0,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "speed": "standard"
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-31",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-9",
+        "timestamp": "2026-10-07T12:10:00Z",
+        "message": {
+          "id": "msg-9",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 1075,
+            "cache_creation_input_tokens": 2783,
+            "cache_read_input_tokens": 106267,
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 0,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "speed": "standard"
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-32",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-9",
+        "timestamp": "2026-10-07T12:10:00Z",
+        "message": {
+          "id": "msg-9",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 1075,
+            "cache_creation_input_tokens": 2783,
+            "cache_read_input_tokens": 106267,
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 0,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "speed": "standard"
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-33",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-10",
+        "timestamp": "2026-10-07T12:11:00Z",
+        "message": {
+          "id": "msg-10",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 695,
+            "cache_creation_input_tokens": 2077,
+            "cache_read_input_tokens": 109050,
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 0,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "speed": "standard"
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-34",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-10",
+        "timestamp": "2026-10-07T12:11:00Z",
+        "message": {
+          "id": "msg-10",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 695,
+            "cache_creation_input_tokens": 2077,
+            "cache_read_input_tokens": 109050,
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 0,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "speed": "standard"
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-35",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-11",
+        "timestamp": "2026-10-07T12:12:00Z",
+        "message": {
+          "id": "msg-11",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 642,
+            "cache_creation_input_tokens": 670,
+            "cache_read_input_tokens": 111127,
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 0,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "speed": "standard"
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-36",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-11",
+        "timestamp": "2026-10-07T12:12:00Z",
+        "message": {
+          "id": "msg-11",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 642,
+            "cache_creation_input_tokens": 670,
+            "cache_read_input_tokens": 111127,
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 0,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "speed": "standard"
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-37",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-12",
+        "timestamp": "2026-10-07T12:13:00Z",
+        "message": {
+          "id": "msg-12",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 901,
+            "cache_creation_input_tokens": 374,
+            "cache_read_input_tokens": 111797,
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 0,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "speed": "standard"
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-38",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-12",
+        "timestamp": "2026-10-07T12:13:00Z",
+        "message": {
+          "id": "msg-12",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 901,
+            "cache_creation_input_tokens": 374,
+            "cache_read_input_tokens": 111797,
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 0,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "speed": "standard"
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-39",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-13",
+        "timestamp": "2026-10-07T12:14:00Z",
+        "message": {
+          "id": "msg-13",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 1247,
+            "cache_creation_input_tokens": 2882,
+            "cache_read_input_tokens": 112171,
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 0,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "speed": "standard"
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-40",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-13",
+        "timestamp": "2026-10-07T12:14:00Z",
+        "message": {
+          "id": "msg-13",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 1247,
+            "cache_creation_input_tokens": 2882,
+            "cache_read_input_tokens": 112171,
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 0,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "speed": "standard"
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-41",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-14",
+        "timestamp": "2026-10-07T12:15:00Z",
+        "message": {
+          "id": "msg-14",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 198,
+            "cache_creation_input_tokens": 978,
+            "cache_read_input_tokens": 115053,
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 0,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "speed": "standard"
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-42",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-14",
+        "timestamp": "2026-10-07T12:15:00Z",
+        "message": {
+          "id": "msg-14",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 198,
+            "cache_creation_input_tokens": 978,
+            "cache_read_input_tokens": 115053,
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 0,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "speed": "standard"
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-43",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-15",
+        "timestamp": "2026-10-07T12:16:00Z",
+        "message": {
+          "id": "msg-15",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 1609,
+            "cache_creation_input_tokens": 1888,
+            "cache_read_input_tokens": 116031,
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 0,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "speed": "standard"
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-44",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-15",
+        "timestamp": "2026-10-07T12:16:00Z",
+        "message": {
+          "id": "msg-15",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 1609,
+            "cache_creation_input_tokens": 1888,
+            "cache_read_input_tokens": 116031,
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 0,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "speed": "standard"
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-45",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-15",
+        "timestamp": "2026-10-07T12:16:00Z",
+        "message": {
+          "id": "msg-15",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 1609,
+            "cache_creation_input_tokens": 1888,
+            "cache_read_input_tokens": 116031,
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 0,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "speed": "standard"
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-46",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-16",
+        "timestamp": "2026-10-07T12:17:00Z",
+        "message": {
+          "id": "msg-16",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 4071,
+            "cache_creation_input_tokens": 1509,
+            "cache_read_input_tokens": 117919,
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 0,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "speed": "standard"
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-47",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-16",
+        "timestamp": "2026-10-07T12:17:00Z",
+        "message": {
+          "id": "msg-16",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 4071,
+            "cache_creation_input_tokens": 1509,
+            "cache_read_input_tokens": 117919,
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 0,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "speed": "standard"
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-48",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-17",
+        "timestamp": "2026-10-07T12:18:00Z",
+        "message": {
+          "id": "msg-17",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 31,
+            "cache_creation_input_tokens": 2476,
+            "cache_read_input_tokens": 119428,
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 0,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "speed": "standard"
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-49",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-18",
+        "timestamp": "2026-10-07T12:19:00Z",
+        "message": {
+          "id": "msg-18",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 2665,
+            "cache_creation_input_tokens": 2842,
+            "cache_read_input_tokens": 121904,
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 0,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "speed": "standard"
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-50",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-18",
+        "timestamp": "2026-10-07T12:19:00Z",
+        "message": {
+          "id": "msg-18",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 2665,
+            "cache_creation_input_tokens": 2842,
+            "cache_read_input_tokens": 121904,
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 0,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "speed": "standard"
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-51",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-19",
+        "timestamp": "2026-10-07T12:20:00Z",
+        "message": {
+          "id": "msg-19",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 642,
+            "cache_creation_input_tokens": 2372,
+            "cache_read_input_tokens": 124746,
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 0,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "speed": "standard"
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-52",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-19",
+        "timestamp": "2026-10-07T12:20:00Z",
+        "message": {
+          "id": "msg-19",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 642,
+            "cache_creation_input_tokens": 2372,
+            "cache_read_input_tokens": 124746,
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 0,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "speed": "standard"
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-53",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-19",
+        "timestamp": "2026-10-07T12:20:00Z",
+        "message": {
+          "id": "msg-19",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 642,
+            "cache_creation_input_tokens": 2372,
+            "cache_read_input_tokens": 124746,
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 0,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "speed": "standard"
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-54",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-20",
+        "timestamp": "2026-10-07T12:21:00Z",
+        "message": {
+          "id": "msg-20",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 1574,
+            "cache_creation_input_tokens": 797,
+            "cache_read_input_tokens": 127118,
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 0,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "speed": "standard"
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-55",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-20",
+        "timestamp": "2026-10-07T12:21:00Z",
+        "message": {
+          "id": "msg-20",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 1574,
+            "cache_creation_input_tokens": 797,
+            "cache_read_input_tokens": 127118,
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 0,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "speed": "standard"
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-56",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-20",
+        "timestamp": "2026-10-07T12:21:00Z",
+        "message": {
+          "id": "msg-20",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 1574,
+            "cache_creation_input_tokens": 797,
+            "cache_read_input_tokens": 127118,
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 0,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "speed": "standard"
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-57",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-21",
+        "timestamp": "2026-10-07T12:22:00Z",
+        "message": {
+          "id": "msg-21",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 194,
+            "cache_creation_input_tokens": 4996,
+            "cache_read_input_tokens": 127915,
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 0,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "speed": "standard"
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-58",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-21",
+        "timestamp": "2026-10-07T12:22:00Z",
+        "message": {
+          "id": "msg-21",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 194,
+            "cache_creation_input_tokens": 4996,
+            "cache_read_input_tokens": 127915,
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 0,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "speed": "standard"
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-59",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-22",
+        "timestamp": "2026-10-07T12:23:00Z",
+        "message": {
+          "id": "msg-22",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 136,
+            "cache_creation_input_tokens": 458,
+            "cache_read_input_tokens": 132911,
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 0,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "speed": "standard"
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-60",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-23",
+        "timestamp": "2026-10-07T12:24:00Z",
+        "message": {
+          "id": "msg-23",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 889,
+            "cache_creation_input_tokens": 598,
+            "cache_read_input_tokens": 133369,
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 0,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "speed": "standard"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "name": "telemetry",
+    "expectedVisibleCost": 1.3015691,
+    "expectedSessionCost": 1.3084091,
+    "records": [
+      {
+        "type": "user",
+        "uuid": "prompt",
+        "sessionId": "accounting-fixture",
+        "timestamp": "2026-10-07T12:00:00Z",
+        "message": {
+          "role": "user",
+          "content": "Synthetic prompt"
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-1",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-0",
+        "timestamp": "2026-10-07T12:01:00Z",
+        "message": {
+          "id": "msg-0",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 487,
+            "cache_creation_input_tokens": 42808,
+            "cache_read_input_tokens": 0,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "speed": "standard",
+            "iterations": []
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-2",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-1",
+        "timestamp": "2026-10-07T12:02:00Z",
+        "message": {
+          "id": "msg-1",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 420,
+            "cache_creation_input_tokens": 3290,
+            "cache_read_input_tokens": 42808,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "speed": "standard",
+            "iterations": []
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-3",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-1",
+        "timestamp": "2026-10-07T12:02:00Z",
+        "message": {
+          "id": "msg-1",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 420,
+            "cache_creation_input_tokens": 3290,
+            "cache_read_input_tokens": 42808,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "speed": "standard",
+            "iterations": []
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-4",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-1",
+        "timestamp": "2026-10-07T12:02:00Z",
+        "message": {
+          "id": "msg-1",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 420,
+            "cache_creation_input_tokens": 3290,
+            "cache_read_input_tokens": 42808,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "speed": "standard",
+            "iterations": []
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-5",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-1",
+        "timestamp": "2026-10-07T12:02:00Z",
+        "message": {
+          "id": "msg-1",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 420,
+            "cache_creation_input_tokens": 3290,
+            "cache_read_input_tokens": 42808,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "speed": "standard",
+            "iterations": []
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-6",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-2",
+        "timestamp": "2026-10-07T12:03:00Z",
+        "message": {
+          "id": "msg-2",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 558,
+            "cache_creation_input_tokens": 13866,
+            "cache_read_input_tokens": 46098,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "speed": "standard",
+            "iterations": []
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-7",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-2",
+        "timestamp": "2026-10-07T12:03:00Z",
+        "message": {
+          "id": "msg-2",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 558,
+            "cache_creation_input_tokens": 13866,
+            "cache_read_input_tokens": 46098,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "speed": "standard",
+            "iterations": []
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-8",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-2",
+        "timestamp": "2026-10-07T12:03:00Z",
+        "message": {
+          "id": "msg-2",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 558,
+            "cache_creation_input_tokens": 13866,
+            "cache_read_input_tokens": 46098,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "speed": "standard",
+            "iterations": []
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-9",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-2",
+        "timestamp": "2026-10-07T12:03:00Z",
+        "message": {
+          "id": "msg-2",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 558,
+            "cache_creation_input_tokens": 13866,
+            "cache_read_input_tokens": 46098,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "speed": "standard",
+            "iterations": []
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-10",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-2",
+        "timestamp": "2026-10-07T12:03:00Z",
+        "message": {
+          "id": "msg-2",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 558,
+            "cache_creation_input_tokens": 13866,
+            "cache_read_input_tokens": 46098,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "speed": "standard",
+            "iterations": []
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-11",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-3",
+        "timestamp": "2026-10-07T12:04:00Z",
+        "message": {
+          "id": "msg-3",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 350,
+            "cache_creation_input_tokens": 13728,
+            "cache_read_input_tokens": 59964,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "speed": "standard",
+            "iterations": []
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-12",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-3",
+        "timestamp": "2026-10-07T12:04:00Z",
+        "message": {
+          "id": "msg-3",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 350,
+            "cache_creation_input_tokens": 13728,
+            "cache_read_input_tokens": 59964,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "speed": "standard",
+            "iterations": []
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-13",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-3",
+        "timestamp": "2026-10-07T12:04:00Z",
+        "message": {
+          "id": "msg-3",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 350,
+            "cache_creation_input_tokens": 13728,
+            "cache_read_input_tokens": 59964,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "speed": "standard",
+            "iterations": []
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-14",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-4",
+        "timestamp": "2026-10-07T12:05:00Z",
+        "message": {
+          "id": "msg-4",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 646,
+            "cache_creation_input_tokens": 3266,
+            "cache_read_input_tokens": 73692,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "speed": "standard",
+            "iterations": []
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-15",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-4",
+        "timestamp": "2026-10-07T12:05:00Z",
+        "message": {
+          "id": "msg-4",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 646,
+            "cache_creation_input_tokens": 3266,
+            "cache_read_input_tokens": 73692,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "speed": "standard",
+            "iterations": []
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-16",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-4",
+        "timestamp": "2026-10-07T12:05:00Z",
+        "message": {
+          "id": "msg-4",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 646,
+            "cache_creation_input_tokens": 3266,
+            "cache_read_input_tokens": 73692,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "speed": "standard",
+            "iterations": []
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-17",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-5",
+        "timestamp": "2026-10-07T12:06:00Z",
+        "message": {
+          "id": "msg-5",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 1991,
+            "cache_creation_input_tokens": 4748,
+            "cache_read_input_tokens": 76958,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "speed": "standard",
+            "iterations": []
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-18",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-5",
+        "timestamp": "2026-10-07T12:06:00Z",
+        "message": {
+          "id": "msg-5",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 1991,
+            "cache_creation_input_tokens": 4748,
+            "cache_read_input_tokens": 76958,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "speed": "standard",
+            "iterations": []
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-19",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-5",
+        "timestamp": "2026-10-07T12:06:00Z",
+        "message": {
+          "id": "msg-5",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 1991,
+            "cache_creation_input_tokens": 4748,
+            "cache_read_input_tokens": 76958,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "speed": "standard",
+            "iterations": []
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-20",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-5",
+        "timestamp": "2026-10-07T12:06:00Z",
+        "message": {
+          "id": "msg-5",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 1991,
+            "cache_creation_input_tokens": 4748,
+            "cache_read_input_tokens": 76958,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "speed": "standard",
+            "iterations": []
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-21",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-5",
+        "timestamp": "2026-10-07T12:06:00Z",
+        "message": {
+          "id": "msg-5",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 1991,
+            "cache_creation_input_tokens": 4748,
+            "cache_read_input_tokens": 76958,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "speed": "standard",
+            "iterations": []
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-22",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-6",
+        "timestamp": "2026-10-07T12:07:00Z",
+        "message": {
+          "id": "msg-6",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 2480,
+            "cache_creation_input_tokens": 16812,
+            "cache_read_input_tokens": 81706,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "speed": "standard",
+            "iterations": []
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-23",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-6",
+        "timestamp": "2026-10-07T12:07:00Z",
+        "message": {
+          "id": "msg-6",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 2480,
+            "cache_creation_input_tokens": 16812,
+            "cache_read_input_tokens": 81706,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "speed": "standard",
+            "iterations": []
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-24",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-6",
+        "timestamp": "2026-10-07T12:07:00Z",
+        "message": {
+          "id": "msg-6",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 2480,
+            "cache_creation_input_tokens": 16812,
+            "cache_read_input_tokens": 81706,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "speed": "standard",
+            "iterations": []
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-25",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-7",
+        "timestamp": "2026-10-07T12:08:00Z",
+        "message": {
+          "id": "msg-7",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 3658,
+            "cache_creation_input_tokens": 2114,
+            "cache_read_input_tokens": 98518,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "speed": "standard",
+            "iterations": []
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-26",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-7",
+        "timestamp": "2026-10-07T12:08:00Z",
+        "message": {
+          "id": "msg-7",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 3658,
+            "cache_creation_input_tokens": 2114,
+            "cache_read_input_tokens": 98518,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "speed": "standard",
+            "iterations": []
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-27",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-7",
+        "timestamp": "2026-10-07T12:08:00Z",
+        "message": {
+          "id": "msg-7",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 3658,
+            "cache_creation_input_tokens": 2114,
+            "cache_read_input_tokens": 98518,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "speed": "standard",
+            "iterations": []
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-28",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-8",
+        "timestamp": "2026-10-07T12:09:00Z",
+        "message": {
+          "id": "msg-8",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 387,
+            "cache_creation_input_tokens": 1054,
+            "cache_read_input_tokens": 100632,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "speed": "standard",
+            "iterations": []
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-29",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-8",
+        "timestamp": "2026-10-07T12:09:00Z",
+        "message": {
+          "id": "msg-8",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 387,
+            "cache_creation_input_tokens": 1054,
+            "cache_read_input_tokens": 100632,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "speed": "standard",
+            "iterations": []
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-30",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-8",
+        "timestamp": "2026-10-07T12:09:00Z",
+        "message": {
+          "id": "msg-8",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 387,
+            "cache_creation_input_tokens": 1054,
+            "cache_read_input_tokens": 100632,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "speed": "standard",
+            "iterations": []
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-31",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-9",
+        "timestamp": "2026-10-07T12:10:00Z",
+        "message": {
+          "id": "msg-9",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 2493,
+            "cache_creation_input_tokens": 3796,
+            "cache_read_input_tokens": 101686,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "speed": "standard",
+            "iterations": []
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-32",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-9",
+        "timestamp": "2026-10-07T12:10:00Z",
+        "message": {
+          "id": "msg-9",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 2493,
+            "cache_creation_input_tokens": 3796,
+            "cache_read_input_tokens": 101686,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "speed": "standard",
+            "iterations": []
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-33",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-10",
+        "timestamp": "2026-10-07T12:11:00Z",
+        "message": {
+          "id": "msg-10",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 162,
+            "cache_creation_input_tokens": 347,
+            "cache_read_input_tokens": 105482,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "speed": "standard",
+            "iterations": []
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-34",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-10",
+        "timestamp": "2026-10-07T12:11:00Z",
+        "message": {
+          "id": "msg-10",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 162,
+            "cache_creation_input_tokens": 347,
+            "cache_read_input_tokens": 105482,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "speed": "standard",
+            "iterations": []
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-35",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-11",
+        "timestamp": "2026-10-07T12:12:00Z",
+        "message": {
+          "id": "msg-11",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 5657,
+            "cache_creation_input_tokens": 7485,
+            "cache_read_input_tokens": 105829,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "speed": "standard",
+            "iterations": []
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-36",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-11",
+        "timestamp": "2026-10-07T12:12:00Z",
+        "message": {
+          "id": "msg-11",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 5657,
+            "cache_creation_input_tokens": 7485,
+            "cache_read_input_tokens": 105829,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "speed": "standard",
+            "iterations": []
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-37",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-12",
+        "timestamp": "2026-10-07T12:13:00Z",
+        "message": {
+          "id": "msg-12",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 5829,
+            "cache_creation_input_tokens": 603,
+            "cache_read_input_tokens": 113314,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "speed": "standard",
+            "iterations": []
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-38",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-12",
+        "timestamp": "2026-10-07T12:13:00Z",
+        "message": {
+          "id": "msg-12",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 5829,
+            "cache_creation_input_tokens": 603,
+            "cache_read_input_tokens": 113314,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "speed": "standard",
+            "iterations": []
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-39",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-13",
+        "timestamp": "2026-10-07T12:14:00Z",
+        "message": {
+          "id": "msg-13",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 6110,
+            "cache_creation_input_tokens": 706,
+            "cache_read_input_tokens": 113917,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "speed": "standard",
+            "iterations": []
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-40",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-13",
+        "timestamp": "2026-10-07T12:14:00Z",
+        "message": {
+          "id": "msg-13",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 6110,
+            "cache_creation_input_tokens": 706,
+            "cache_read_input_tokens": 113917,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "speed": "standard",
+            "iterations": []
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-41",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-14",
+        "timestamp": "2026-10-07T12:15:00Z",
+        "message": {
+          "id": "msg-14",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 10979,
+            "cache_creation_input_tokens": 795,
+            "cache_read_input_tokens": 114623,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "speed": "standard",
+            "iterations": []
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-42",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-14",
+        "timestamp": "2026-10-07T12:15:00Z",
+        "message": {
+          "id": "msg-14",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 10979,
+            "cache_creation_input_tokens": 795,
+            "cache_read_input_tokens": 114623,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "speed": "standard",
+            "iterations": []
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-43",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-14",
+        "timestamp": "2026-10-07T12:15:00Z",
+        "message": {
+          "id": "msg-14",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 10979,
+            "cache_creation_input_tokens": 795,
+            "cache_read_input_tokens": 114623,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "speed": "standard",
+            "iterations": []
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-44",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-15",
+        "timestamp": "2026-10-07T12:16:00Z",
+        "message": {
+          "id": "msg-15",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 752,
+            "cache_creation_input_tokens": 6341,
+            "cache_read_input_tokens": 115418,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "speed": "standard",
+            "iterations": []
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-45",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-15",
+        "timestamp": "2026-10-07T12:16:00Z",
+        "message": {
+          "id": "msg-15",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 752,
+            "cache_creation_input_tokens": 6341,
+            "cache_read_input_tokens": 115418,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "speed": "standard",
+            "iterations": []
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-46",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-15",
+        "timestamp": "2026-10-07T12:16:00Z",
+        "message": {
+          "id": "msg-15",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 752,
+            "cache_creation_input_tokens": 6341,
+            "cache_read_input_tokens": 115418,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "speed": "standard",
+            "iterations": []
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-47",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-15",
+        "timestamp": "2026-10-07T12:16:00Z",
+        "message": {
+          "id": "msg-15",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 752,
+            "cache_creation_input_tokens": 6341,
+            "cache_read_input_tokens": 115418,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "speed": "standard",
+            "iterations": []
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-48",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-16",
+        "timestamp": "2026-10-07T12:17:00Z",
+        "message": {
+          "id": "msg-16",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 1789,
+            "cache_creation_input_tokens": 1023,
+            "cache_read_input_tokens": 121759,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "speed": "standard",
+            "iterations": []
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-49",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-16",
+        "timestamp": "2026-10-07T12:17:00Z",
+        "message": {
+          "id": "msg-16",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 1789,
+            "cache_creation_input_tokens": 1023,
+            "cache_read_input_tokens": 121759,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "speed": "standard",
+            "iterations": []
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-50",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-16",
+        "timestamp": "2026-10-07T12:17:00Z",
+        "message": {
+          "id": "msg-16",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 1789,
+            "cache_creation_input_tokens": 1023,
+            "cache_read_input_tokens": 121759,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "speed": "standard",
+            "iterations": []
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-51",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-16",
+        "timestamp": "2026-10-07T12:17:00Z",
+        "message": {
+          "id": "msg-16",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 1789,
+            "cache_creation_input_tokens": 1023,
+            "cache_read_input_tokens": 121759,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "speed": "standard",
+            "iterations": []
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-52",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-16",
+        "timestamp": "2026-10-07T12:17:00Z",
+        "message": {
+          "id": "msg-16",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 1789,
+            "cache_creation_input_tokens": 1023,
+            "cache_read_input_tokens": 121759,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "speed": "standard",
+            "iterations": []
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-53",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-16",
+        "timestamp": "2026-10-07T12:17:00Z",
+        "message": {
+          "id": "msg-16",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 1789,
+            "cache_creation_input_tokens": 1023,
+            "cache_read_input_tokens": 121759,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "speed": "standard",
+            "iterations": []
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-54",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-17",
+        "timestamp": "2026-10-07T12:18:00Z",
+        "message": {
+          "id": "msg-17",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 621,
+            "cache_creation_input_tokens": 2219,
+            "cache_read_input_tokens": 122782,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "speed": "standard",
+            "iterations": []
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-55",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-17",
+        "timestamp": "2026-10-07T12:18:00Z",
+        "message": {
+          "id": "msg-17",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 621,
+            "cache_creation_input_tokens": 2219,
+            "cache_read_input_tokens": 122782,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "speed": "standard",
+            "iterations": []
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-56",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-17",
+        "timestamp": "2026-10-07T12:18:00Z",
+        "message": {
+          "id": "msg-17",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 621,
+            "cache_creation_input_tokens": 2219,
+            "cache_read_input_tokens": 122782,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "speed": "standard",
+            "iterations": []
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-57",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-17",
+        "timestamp": "2026-10-07T12:18:00Z",
+        "message": {
+          "id": "msg-17",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 621,
+            "cache_creation_input_tokens": 2219,
+            "cache_read_input_tokens": 122782,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "speed": "standard",
+            "iterations": []
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-58",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-18",
+        "timestamp": "2026-10-07T12:19:00Z",
+        "message": {
+          "id": "msg-18",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 2288,
+            "cache_creation_input_tokens": 841,
+            "cache_read_input_tokens": 125001,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "speed": "standard",
+            "iterations": []
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-59",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-18",
+        "timestamp": "2026-10-07T12:19:00Z",
+        "message": {
+          "id": "msg-18",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 2288,
+            "cache_creation_input_tokens": 841,
+            "cache_read_input_tokens": 125001,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "speed": "standard",
+            "iterations": []
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-60",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-18",
+        "timestamp": "2026-10-07T12:19:00Z",
+        "message": {
+          "id": "msg-18",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 2288,
+            "cache_creation_input_tokens": 841,
+            "cache_read_input_tokens": 125001,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "speed": "standard",
+            "iterations": []
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-61",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-18",
+        "timestamp": "2026-10-07T12:19:00Z",
+        "message": {
+          "id": "msg-18",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 2288,
+            "cache_creation_input_tokens": 841,
+            "cache_read_input_tokens": 125001,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "speed": "standard",
+            "iterations": []
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-62",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-19",
+        "timestamp": "2026-10-07T12:20:00Z",
+        "message": {
+          "id": "msg-19",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 151,
+            "cache_creation_input_tokens": 2472,
+            "cache_read_input_tokens": 125842,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "speed": "standard",
+            "iterations": []
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-63",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-19",
+        "timestamp": "2026-10-07T12:20:00Z",
+        "message": {
+          "id": "msg-19",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 151,
+            "cache_creation_input_tokens": 2472,
+            "cache_read_input_tokens": 125842,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "speed": "standard",
+            "iterations": []
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-64",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-20",
+        "timestamp": "2026-10-07T12:21:00Z",
+        "message": {
+          "id": "msg-20",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 235,
+            "cache_creation_input_tokens": 3445,
+            "cache_read_input_tokens": 128314,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "speed": "standard",
+            "iterations": []
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-65",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-20",
+        "timestamp": "2026-10-07T12:21:00Z",
+        "message": {
+          "id": "msg-20",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 235,
+            "cache_creation_input_tokens": 3445,
+            "cache_read_input_tokens": 128314,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "speed": "standard",
+            "iterations": []
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-66",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-21",
+        "timestamp": "2026-10-07T12:22:00Z",
+        "message": {
+          "id": "msg-21",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 201,
+            "cache_creation_input_tokens": 1161,
+            "cache_read_input_tokens": 131759,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "speed": "standard",
+            "iterations": []
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-67",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-21",
+        "timestamp": "2026-10-07T12:22:00Z",
+        "message": {
+          "id": "msg-21",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 201,
+            "cache_creation_input_tokens": 1161,
+            "cache_read_input_tokens": 131759,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "speed": "standard",
+            "iterations": []
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-68",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-21",
+        "timestamp": "2026-10-07T12:22:00Z",
+        "message": {
+          "id": "msg-21",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 201,
+            "cache_creation_input_tokens": 1161,
+            "cache_read_input_tokens": 131759,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "speed": "standard",
+            "iterations": []
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-69",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-22",
+        "timestamp": "2026-10-07T12:23:00Z",
+        "message": {
+          "id": "msg-22",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 123,
+            "cache_creation_input_tokens": 636,
+            "cache_read_input_tokens": 132920,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "speed": "standard",
+            "iterations": []
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-70",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-22",
+        "timestamp": "2026-10-07T12:23:00Z",
+        "message": {
+          "id": "msg-22",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 123,
+            "cache_creation_input_tokens": 636,
+            "cache_read_input_tokens": 132920,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "speed": "standard",
+            "iterations": []
+          }
+        }
+      },
+      {
+        "type": "assistant",
+        "uuid": "fragment-71",
+        "sessionId": "accounting-fixture",
+        "requestId": "req-23",
+        "timestamp": "2026-10-07T12:24:00Z",
+        "message": {
+          "id": "msg-23",
+          "role": "assistant",
+          "model": "anthropic/claude-sonnet-5.5",
+          "content": [
+            {
+              "type": "text",
+              "text": "Synthetic response"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 870,
+            "cache_creation_input_tokens": 279,
+            "cache_read_input_tokens": 133556,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "speed": "standard",
+            "iterations": []
+          }
+        }
+      },
+      {
+        "type": "synthetic-accounting-metadata",
+        "sessionId": "accounting-fixture",
+        "modelUsage": {
+          "claude-sonnet-5-5[1m]": {
+            "inputTokens": 2518,
+            "outputTokens": 49427,
+            "cacheReadInputTokens": 2372578,
+            "cacheCreationInputTokens": 133835,
+            "costUSD": 1.3084091000000004,
+            "webSearchRequests": 0
+          }
+        }
+      }
+    ]
+  }
+]
