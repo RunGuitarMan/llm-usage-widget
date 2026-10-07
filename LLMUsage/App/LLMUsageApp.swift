@@ -6,6 +6,7 @@ final class UsageAppDelegate: NSObject, NSApplicationDelegate, ObservableObject 
     let dashboard = DashboardWindowCoordinator()
     private var menuBarController: MenuBarController?
     private let menuLocalization = AppMenuLocalization()
+    private weak var telemetry: ClaudeTelemetryCoordinator?
     private let iconAppearance = AppIconAppearance()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -22,10 +23,18 @@ final class UsageAppDelegate: NSObject, NSApplicationDelegate, ObservableObject 
     func installMenuBar(store: UsageStore, openRoute: @escaping (UsageRoute) -> Void) {
         iconAppearance.start(application: .shared)
         guard menuBarController == nil else { return }
+        telemetry = store.telemetry
         menuBarController = MenuBarController(store: store, openRoute: openRoute)
     }
 
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard let telemetry else { return .terminateNow }
+        Task { await telemetry.shutdown(); sender.reply(toApplicationShouldTerminate: true) }
+        return .terminateLater
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
+        telemetry?.stopImmediately()
         menuBarController?.tearDown()
         ManualReviewController.active?.cleanup()
     }
@@ -110,6 +119,7 @@ struct AppRootView: View {
 
     var body: some View {
         DashboardView(store: store, dashboardWindow: appDelegate.dashboard)
+            .modifier(ClaudeTelemetryPresentation(store: store, maintenancePresented: updates.presentsSetup))
             .sheet(isPresented: $updates.presentsSetup) { AppMaintenanceSetup(updates: updates) }
             .environment(\.locale, store.interfaceLanguage.locale)
             .id(store.interfaceLanguage)
@@ -119,6 +129,7 @@ struct AppRootView: View {
                     store.navigate(route)
                     appDelegate.dashboard.show { openWindow(id: "dashboard") }
                 }
+                await store.telemetry.start()
                 if store.isDemo || store.isManualReview { store.start() }
                 else {
                     updates.start(store: store) {

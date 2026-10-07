@@ -14,7 +14,7 @@ struct CCUsageManifest: Codable, Equatable, Sendable {
             throw UsageError.runtimeUnavailable
         }
         let value = try JSONDecoder().decode(Self.self, from: Data(contentsOf: url))
-        guard value.schemaVersion == 1, value.contractVersion == 2,
+        guard value.schemaVersion == 1, value.contractVersion == 3,
               value.architecture == "arm64", value.binarySHA256.count == 64,
               value.binarySHA256.allSatisfy({ $0.isHexDigit && !$0.isUppercase }) else {
             throw UsageError.runtimeUnavailable

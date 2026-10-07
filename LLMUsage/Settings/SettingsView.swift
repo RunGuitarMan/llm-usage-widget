@@ -36,6 +36,7 @@ struct UsageSettingsView: View {
                 Text(L10n.text("Приложение продолжает обновлять данные после закрытия окна. Управление доступно в строке меню."))
                     .font(.caption).foregroundStyle(.secondary)
             }
+            ClaudeTelemetrySettings(coordinator: store.telemetry, timezone: store.timezone)
             Section(L10n.text("Исключённые модели")) {
                 ModelExclusionControls(store: store)
             }

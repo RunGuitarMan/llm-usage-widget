@@ -49,6 +49,7 @@ struct SessionChatView: View {
     var policy: ModelExclusionPolicy
     var customPath: String
     var pricingKey: String?
+    var telemetry: ClaudeTelemetryCoordinator?
     @StateObject private var reader: TranscriptReaderModel
     @StateObject private var results: SearchResults<TranscriptSearchRequest, TranscriptSearchResult>
     @Environment(\.transcriptServices) private var transcriptServices
@@ -71,7 +72,8 @@ struct SessionChatView: View {
     init(session: UsageSession, timezone: String, isDemo: Bool = false, preview: SessionTranscript? = nil,
          day: UsageDay? = nil, policy: ModelExclusionPolicy = .init(), customPath: String = "", pricingKey: String? = nil,
          initialTab: TranscriptAnalysisTab = .chat, initialFilter: TranscriptEventFilter = .all,
-         initiallyExpandedTools: Set<String> = []) {
+         initiallyExpandedTools: Set<String> = [], telemetry: ClaudeTelemetryCoordinator? = nil) {
+        self.telemetry = telemetry
         self.session = session
         self.timezone = timezone
         self.isDemo = isDemo
@@ -97,6 +99,10 @@ struct SessionChatView: View {
         VStack(spacing: 0) {
             header
             Divider().opacity(0.6)
+            if let telemetry, session.sourceID == "claude" {
+                ClaudeSessionTelemetryView(coordinator: telemetry, session: session, transcript: reader.transcript,
+                    day: scope == .day ? day : nil, timezone: timezone, pricingKey: pricingKey, navigate: navigate)
+            }
             searchToolbar
             Divider().opacity(0.4)
             if let transcript = reader.transcript {

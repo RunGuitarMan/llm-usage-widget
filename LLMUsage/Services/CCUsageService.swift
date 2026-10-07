@@ -210,13 +210,17 @@ struct CCUsageService: CCUsageServing {
         let extraArguments = pricingArguments
         async let claude = fetchReport(.claude, day: day, executable: executable, extraArguments: extraArguments)
         guard mode == .allAgents else {
-            var result = try await claude
+            let focused = try await claude
+            var result = try await ClaudeAccountingService(environment: executionEnvironment(for: executable))
+                .reconcile(focused, executable: executable, configuration: contents)
             result.pricingKey = pricingKey
             return result
         }
 
         async let unified = fetchReport(.unified, day: day, executable: executable, extraArguments: extraArguments)
-        let (focused, combined) = try await (claude, unified)
+        let (rawFocused, combined) = try await (claude, unified)
+        let focused = try await ClaudeAccountingService(environment: executionEnvironment(for: executable))
+            .reconcile(rawFocused, executable: executable, configuration: contents)
         // ccusage 20.0.24/26 filters whole Claude sessions by lastActivity in the
         // unified report. The focused command filters entries before summing.
         // Always replace Claude, including when its focused report is empty.

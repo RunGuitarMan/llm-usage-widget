@@ -17,6 +17,7 @@ Run from the repository root with macOS SDK 26+ selected (see [Development](deve
 | `bash Scripts/manual-review.sh --self-check` | Production window geometry, first-show and reopen chrome, sidebar corners after automatic inspector expansion, trailing toolbar, sidebar/focus, scrolling, session navigation, real chat sheets, catalogue scenarios, loading/error recovery and report persistence |
 | `bash Scripts/manual-review.sh --widget-check` | Focused real-file app → provider publication, gallery without storage, stale/midnight transitions, corruption recovery, cached launch-job recovery and replacement of a running signed process; same common app |
 | `bash Scripts/manual-review.sh --focus-check` | Focused sidebar pixels and live SwiftUI/native focus in both themes; active cases precede final app deactivation |
+| `bash Scripts/manual-review.sh --telemetry-check` | Focused production telemetry settings/status/consent/export/chat in RU/EN, light/dark and compact windows; waits for the export snapshot to populate |
 | `python3 Scripts/widget_host_check.py --since <ISO-8601>` | Actual system WidgetKit deliveries for all 9 kind/size pairs; fails on missing/stale deliveries, old extension versions, storage errors, archive rejection or launchd registration/executable errors |
 
 CI runs the first four commands and the shipping build. `check.sh` calls `check-windows.sh`, which launches the already built common application in normal and review modes. Native checks are visible on screen and require a logged-in macOS GUI session. Product windows must come from `LLMUsageApp` and its scenes: do not add a separate `@main` or hand-built `NSWindow` around a product screen for regression checks. Windowless component measurements remain in the same process. These checks do not substitute for a manual system-widget check.
@@ -26,6 +27,10 @@ CI runs the first four commands and the shipping build. `check.sh` calls `check-
 The required **Tests** check rejects PRs whose `.github/release.json` version is unchanged or lower than their `main` base, including documentation-only PRs. To check the comparison locally, fetch the latest base with `git fetch origin main`, then run `python3 Scripts/release_version.py --check-increase origin/main`. Python tests cover numeric version ordering, parallel PR collisions, unchanged/lower versions, shared app/widget metadata, publication retries and rejection of older releases.
 
 `LLMUsage/Tests/*Scenarios.swift` contains the shared assertions used by both the portable harness and XCTest wrappers. Add checks there instead of duplicating them. Existing coverage includes date/timezone boundaries, model attribution and exclusions, stream/replay deduplication, pricing persistence, transcript timing, search cancellation, stale responses, cache validation, clock changes and CLI process cleanup.
+
+Claude telemetry adds 21 shared scenario groups covering add-only settings transactions, races/faults, privacy canaries, numeric/framing/gzip bounds, loopback HTTP, restart/dedup/recovery, retention/quota, reconciliation and anonymous ZIP exports. After compilation, `build/portable-checks --telemetry-only` runs that focused subset without launching a UI. Tests use private temporary configurations/stores and never edit the user's Claude settings.
+
+The catalogue adds onboarding, preview/conflict, ready/receiving/waiting/error/off, export and chat telemetry scenarios. Native checks inspect the production controls and sheets in RU/EN, light/dark and compact sizes. Review uses isolated synthetic settings and a free loopback port; automatic checks preserve `build/UIReview`.
 
 Run `python3 Scripts/check-claude-streams.py` after building the app to check both real CLI loaders against the shared response-boundary fixtures (streams, reused gateway IDs, replays and midnight). `build/portable-checks --bundled-cli` additionally compares the application reports in both source modes with priced chat detail on those same fixtures.
 
@@ -42,7 +47,7 @@ xcodebuild -project LLMUsage.xcodeproj -scheme LLMUsage \
 
 CI also builds the Xcode app and embedded widget without launching them and checks their version metadata against the same repository version and Git build number as script builds.
 
-Run `bash Scripts/build-local.sh` once, then `bash Scripts/manual-review.sh` to launch that same app in review mode. The catalogue offers 89 curated scenarios, RU/EN, light/dark appearance and width presets. It is a checklist, not exhaustive coverage of every UI combination. **⌘1** reopens the catalogue. Use Next/Back to navigate and record Passed, Problem or Skip with notes. Loading scenarios can be released with **Успешный ответ источника**.
+Run `bash Scripts/build-local.sh` once, then `bash Scripts/manual-review.sh` to launch that same app in review mode. The catalogue offers 99 curated scenarios, RU/EN, light/dark appearance and width presets. It is a checklist, not exhaustive coverage of every UI combination. **⌘1** reopens the catalogue. Use Next/Back to navigate and record Passed, Problem or Skip with notes. Loading scenarios can be released with **Успешный ответ источника**.
 
 Files under `build/UIReview/`:
 

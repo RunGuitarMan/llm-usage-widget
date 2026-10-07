@@ -52,6 +52,12 @@ struct PortableChecks {
             do { try await action(); passed += 1; print("PASS \(name)") }
             catch { failures.append(name); print("FAIL \(name): \(error)") }
         }
+        if CommandLine.arguments.contains("--telemetry-only") {
+            await ClaudeTelemetryScenarios.run(check: check)
+            print("\(passed) telemetry checks passed; \(failures.count) failed.")
+            if !failures.isEmpty { exit(1) }
+            return
+        }
         let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
         let fixtures = root.appendingPathComponent("LLMUsage/Tests/Fixtures")
         let now = ISO8601DateFormatter().date(from: "2026-09-28T18:00:00Z")!
@@ -324,6 +330,8 @@ struct PortableChecks {
         L10n.preference = .russian // Existing transcript fixtures assert Russian helper labels.
         await TranscriptChecks.run(check: check)
         await TranscriptUsageScenarios.run(check: check)
+        await ClaudeAccountingScenarios.run(check: check)
+        await ClaudeTelemetryScenarios.run(check: check)
         await ClaudeResponseScenarios.run(check: check)
         await TranscriptTimingScenarios.run(check: check)
         await RegressionScenarios.run(check: check)
@@ -376,6 +384,9 @@ struct PortableChecks {
         }
         if ProcessInfo.processInfo.arguments.contains("--bundled-cli") {
             let helper = root.appendingPathComponent("build/LLM Usage.app/Contents/Helpers/ccusage").path
+            await check("Bundled ccusage: captured prices and complete Claude session totals") {
+                try await ClaudeAccountingScenarios.liveCheck(executablePath: helper)
+            }
             await check("Bundled ccusage: response boundaries agree across daily reports, all agents and chat") {
                 try await ClaudeResponseScenarios.liveCheck(executablePath: helper)
             }

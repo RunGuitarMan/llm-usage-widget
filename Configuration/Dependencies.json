@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
   "ccusage": {
-    "version": "20.0.26-llmusage.3",
+    "version": "20.0.26-llmusage.4",
     "upstreamVersion": "20.0.26",
-    "contractVersion": 2,
+    "contractVersion": 3,
     "architecture": "arm64",
     "source": {
       "commit": "d9821088b98aa536c7a385aa1a4579d6fa02269b",
@@ -12,7 +12,7 @@
     },
     "patch": {
       "path": "Configuration/Patches/ccusage-20.0.26-response-boundaries.patch",
-      "sha256": "648e9cdbd005b03feedd00c28eb2315739e9beb29c24e312963fc692437119a6"
+      "sha256": "2c20bd129611fc5e68d0f15ccf4cbea7f8db430313a149e5f616121e04516d90"
     },
     "rust": {
       "version": "1.97.1",

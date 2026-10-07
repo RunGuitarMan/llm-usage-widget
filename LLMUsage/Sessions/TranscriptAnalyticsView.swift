@@ -111,7 +111,7 @@ struct TranscriptUserUsageDetails: View {
                     ForEach(requests) { request in
                         VStack(alignment: .leading, spacing: 6) {
                             HStack(spacing: 8) {
-                                Text("#" + (request.id.components(separatedBy: "-").last ?? request.id))
+                                Text(request.isSupplemental ? L10n.text("Служебные расходы сессии") : "#" + (request.id.components(separatedBy: "-").last ?? request.id))
                                     .font(.system(size: 10, design: .monospaced)).foregroundStyle(.secondary)
                                 Text(request.model.isEmpty ? L10n.text("Модель неизвестна") : request.model)
                                     .font(.system(size: 11)).lineLimit(1).truncationMode(.middle).help(request.model)
@@ -196,6 +196,7 @@ struct TranscriptRequestDetails: View {
             Text(TranscriptUsageFormat.cost(request.usage)).font(.system(size: 14, weight: .semibold))
             if let speed = request.billing.speed { Text("Service tier: " + speed).font(.system(size: 10)).foregroundStyle(.secondary) }
             if !policy.includes(request.modelForAccounting) { Text(L10n.text("Не учитывается в итогах")).font(.system(size: 11)).foregroundStyle(.secondary) }
+            if request.isSupplemental { Text(L10n.text("Служебные расходы сессии")).font(.system(size: 11)).foregroundStyle(.secondary) }
             if request.isReplay { Text(L10n.text("Перенесённая история")).font(.system(size: 11)).foregroundStyle(.secondary) }
         }
     }
@@ -245,7 +246,8 @@ struct TranscriptMetricsView: View {
             Text("·")
             Text(L10n.text("\(UsageFormat.tokens(summary.reported.total)) токенов"))
             Text("·")
-            Text(L10n.text("Обращений: \(summary.requests.count)"))
+            Text(L10n.text("Обращений: \(summary.requests.filter { !$0.isSupplemental }.count)"))
+            if summary.requests.contains(where: \.isSupplemental) { Text(L10n.text("+ служебные расходы")) }
             }
         }.foregroundStyle(.secondary)
     }
@@ -304,6 +306,7 @@ struct TranscriptAnalysisView: View {
                             HStack(alignment: .top, spacing: 12) {
                                 VStack(alignment: .leading, spacing: 5) {
                                     Text(request.model.isEmpty ? L10n.text("Модель неизвестна") : request.model).fontWeight(.medium)
+                                    if request.isSupplemental { Text(L10n.text("Служебные расходы сессии")).foregroundStyle(.secondary) }
                                     if let event = request.eventIDs.compactMap({ lookup[$0] }).first {
                                         Text(event.text.isEmpty ? event.title : event.text).lineLimit(2).foregroundStyle(.secondary)
                                     }
@@ -315,8 +318,10 @@ struct TranscriptAnalysisView: View {
                                     .popover(isPresented: Binding(get: { selected == request.id }, set: { if !$0 { selected = nil } })) {
                                         TranscriptRequestDetails(request: request, policy: policy).padding(18).frame(width: 330)
                                     }
-                                Button { if let id = request.anchorID { jump(id) } } label: { Image(systemName: "arrow.up.forward") }
-                                    .help(L10n.text("Перейти к сообщению"))
+                                if let anchor = request.anchorID {
+                                    Button { jump(anchor) } label: { Image(systemName: "arrow.up.forward") }
+                                        .help(L10n.text("Перейти к сообщению"))
+                                }
                             }.buttonStyle(.borderless)
                             Button { selected = request.id } label: {
                                 TranscriptTokenLine(usage: request.usage).padding(.vertical, 4).contentShape(Rectangle())

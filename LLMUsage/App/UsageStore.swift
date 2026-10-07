@@ -87,6 +87,8 @@ final class UsageStore: ObservableObject {
         if started { scheduleAutomaticRefresh() }
     }
 
+    lazy var telemetry = ClaudeTelemetryCoordinator(defaults: defaults, isolated: isDemo || isManualReview)
+
     let isDemo: Bool
     var isManualReview = false
     @Published private(set) var reviewChatRevision = 0
