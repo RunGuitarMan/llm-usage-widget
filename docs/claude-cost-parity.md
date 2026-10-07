@@ -1,6 +1,6 @@
 # Claude Code ↔ LLM Usage: стоимость через корпоративный прокси
 
-Обновлено: 2026-10-07. **Исправления 1.5.5 реализованы, локальные проверки пройдены; PR готовится.**
+Обновлено: 2026-10-07. **Исправления 1.5.5 закоммичены и отправлены в [draft PR #29](https://github.com/RunGuitarMan/llm-usage-widget/pull/29); не слит.**
 Единый источник знаний сессии: устаревшие выводы заменяем, ограничения сохраняем. OpenSpec: proposal → evidence → requirements/scenarios → design → tasks.
 
 ## Proposal — цель
@@ -68,6 +68,6 @@ Claude Code **2.1.280**; исходные ccusage CLI **20.0.24**, helper при
 - [x] **185 Rust-тестов**, **84 Python-теста**, **210 portable-проверок**, AppKit-проверки меню, typecheck app/widget, потоковые CLI-фикстуры. Проверка version increase относительно main 1.5.4 проходит.
 - [x] Полный `swift test` запущен: локально недоступен модуль XCTest в Command Line Tools. Общие сценарии прошли portable-набор; полный XCTest проверяется CI с Xcode.
 - [x] Финальная проверка native-окон: 89 сценариев; единственный `build/LLM Usage.app`, обычный запуск и `--review`, по актуальному AGENTS.md main (выбор подтверждён пользователем).
-- [ ] Коммит, push и PR 1.5.5; **не сливать и не публиковать release**, следующая фича пойдёт в ту же ветку.
+- [x] Код: `34b2836`, ветка `feat/claude-cost-parity`, push и draft PR #29. **Не сливать и не публиковать release**; следующая фича — в эту же ветку. Полный CI запускается GitHub на каждом обновлении PR.
 
 При новом необъяснённом расхождении: [сборщик](../Scripts/claude-usage-capture.py), `listen` → `status` → после `/usage`, `/exit` и Ctrl+C приёмника — `export`. Claude запускается корпоративным способом; env пользователь объединяет с settings.json. Пять тестов сборщика входят в 84 Python-теста.
