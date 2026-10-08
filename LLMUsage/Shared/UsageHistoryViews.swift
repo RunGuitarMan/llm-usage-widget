@@ -89,9 +89,8 @@ struct HistoryCoverageCaption: View {
     var points: [UsageHistoryPoint]
     var compact = false
     private var missing: Int { points.filter { $0.total == nil }.count }
-    private var incomplete: Bool { points.contains { $0.total?.usage.costIsIncomplete == true } }
     var body: some View {
-        Text(missing > 0 ? L10n.text("Дней без данных: \(missing) · —") : incomplete ? L10n.text("Стоимость неполная") : L10n.text("Сегодня — неполный день"))
+        Text(L10n.text("Дней с данными: \(points.count - missing) из \(points.count)"))
             .font(.system(size: compact ? 9 : 10)).foregroundStyle(.secondary)
             .lineLimit(1).minimumScaleFactor(0.75)
     }

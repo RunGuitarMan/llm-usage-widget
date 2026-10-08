@@ -114,7 +114,7 @@ import QuartzCore
             try ReviewCheck.require(window.toolbar === toolbar && window.contentView === content,
                                     "Close tore down the production window or toolbar")
             try requireSame(geometry(window), normal, "hidden dashboard")
-            NotificationCenter.default.post(name: .openUsageDashboard, object: nil)
+            review.appDelegate?.activation.present()
             // Sample immediately, then on subsequent frames; do not wait for a
             // settled toolbar, which would conceal a titlebar-only first frame.
             for _ in 0..<12 {
@@ -127,13 +127,13 @@ import QuartzCore
         // The catalogue has commandsRemoved(). Keep it from taking menu focus
         // when the dashboard hides; it does not exist in the shipping app.
         review.panel?.orderOut(nil)
-        try await otherPresentationPaths(window, normal: normal)
+        try await otherPresentationPaths(window, normal: normal, review: review)
         print("PASS Native corners after automatic expansion/cancellation in RU/EN, light/dark; close/reopen, menu, minimization and full-screen preserve chrome")
     }
 
     @MainActor private final class FullScreenState { var entered = false }
 
-    private static func otherPresentationPaths(_ window: NSWindow, normal: Geometry) async throws {
+    private static func otherPresentationPaths(_ window: NSWindow, normal: Geometry, review: ManualReviewController) async throws {
         func findOpenDashboard(in menu: NSMenu) -> (NSMenu, Int)? {
             menu.update()
             for (index, item) in menu.items.enumerated() {
@@ -157,7 +157,7 @@ import QuartzCore
         try requireSame(geometry(window), normal, "Open Dashboard menu command")
         window.miniaturize(nil)
         try await ReviewCheck.wait("Dashboard did not minimize") { window.isMiniaturized }
-        NotificationCenter.default.post(name: .openUsageDashboard, object: nil)
+        review.appDelegate?.activation.present()
         try await ReviewCheck.wait("Dashboard did not restore from the Dock") { window.isVisible && !window.isMiniaturized }
         try requireSame(geometry(window), normal, "restoring minimized dashboard")
 
@@ -173,7 +173,7 @@ import QuartzCore
         try await ReviewCheck.wait("Closing full-screen dashboard did not exit its Space and hide it") {
             !window.isVisible && !window.styleMask.contains(.fullScreen)
         }
-        NotificationCenter.default.post(name: .openUsageDashboard, object: nil)
+        review.appDelegate?.activation.present()
         try await ReviewCheck.wait("Dashboard did not reopen after leaving full-screen") { window.isVisible }
         try requireSame(geometry(window), normal, "reopening after full-screen")
     }

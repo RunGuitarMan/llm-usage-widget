@@ -270,29 +270,22 @@ struct DashboardView: View {
     }
 
     @ViewBuilder private var detail: some View {
-        if store.tab == .settings {
-            UsageSettingsView(store: store)
-        } else {
-            VStack(spacing: 0) {
-                if let error = store.error, store.snapshot != nil {
-                    HStack(spacing: 8) {
-                        Image(systemName: "exclamationmark.triangle").foregroundStyle(.orange)
-                        Text(error.errorDescription ?? L10n.text("Не удалось обновить данные")).lineLimit(2)
-                        Spacer()
-                        Button(L10n.text("Настройки")) { store.tab = .settings }.buttonStyle(.borderless)
-                    }
-                    .font(.caption).padding(.horizontal, 28).padding(.vertical, 10)
-                    .background(Color.orange.opacity(0.06), ignoresSafeAreaEdges: [])
+        VStack(spacing: 0) {
+            UsageProblemBanner(store: store)
+            if store.tab == .settings {
+                UsageSettingsView(store: store)
+            } else {
+                Group {
+                    if let snapshot = store.displaySnapshot {
+                        switch store.tab {
+                        case .overview: overview(snapshot)
+                        case .models: ModelsView(store: store, snapshot: snapshot)
+                        case .settings: EmptyView()
+                        }
+                    } else { initialState }
                 }
-                if let snapshot = store.displaySnapshot {
-                    switch store.tab {
-                    case .overview: overview(snapshot)
-                    case .models: ModelsView(store: store, snapshot: snapshot)
-                    case .settings: EmptyView()
-                    }
-                } else { initialState }
+                .background { DashboardBackdrop().ignoresSafeArea() }
             }
-            .background { DashboardBackdrop().ignoresSafeArea() }
         }
     }
 
@@ -375,10 +368,6 @@ struct DashboardView: View {
                                 if store.sessionList.isExpanded { scrollToSessions(using: proxy) }
                             }
                         }
-                    }
-                    if snapshot.totals.costIsIncomplete == true {
-                        Label(L10n.text("Часть данных для расчёта недоступна. Показаны только учтённые токены и известная стоимость."), systemImage: "info.circle")
-                            .font(.caption).foregroundStyle(.secondary)
                     }
                     if showTokenDetails {
                         DashboardSection {

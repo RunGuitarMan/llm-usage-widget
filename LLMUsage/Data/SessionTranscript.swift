@@ -52,6 +52,8 @@ struct TranscriptEvent: Identifiable, Sendable {
     var isUsageOnly = false
     var isToolResultOnly = false
     var timing: TranscriptTiming?
+    var service: TranscriptServiceEvent?
+    var isHiddenContext: Bool { kind == .context && service == nil }
     var origin: String? { records.compactMap(\.origin).first.map { ($0 as NSString).lastPathComponent } }
     var raw: String { records.map(\.text).joined(separator: "\n\n") }
 
@@ -82,9 +84,9 @@ struct TranscriptEvent: Identifiable, Sendable {
         return nil
     }
 
-    var searchableText: String { [title, text, input, output, raw].joined(separator: "\n") }
+    var searchableText: String { ([title, text, input, output, raw] + (service?.facts ?? [])).joined(separator: "\n") }
     func matches(_ query: String) -> Bool {
-        [title, text, input, output].contains { $0.localizedCaseInsensitiveContains(query) }
+        ([title, text, input, output] + (service?.facts ?? [])).contains { $0.localizedCaseInsensitiveContains(query) }
             || records.contains { $0.text.localizedCaseInsensitiveContains(query) }
     }
     var isMessage: Bool { kind == .user || kind == .assistant }
@@ -114,6 +116,7 @@ struct SessionTranscript: Sendable {
             var parts = ["## \(event.title)"]
             if let date = event.timestamp { parts.append(date.ISO8601Format()) }
             if let timing = event.timing { parts.append(timing.exportText) }
+            if let service = event.service, !service.facts.isEmpty { parts.append(service.facts.joined(separator: " · ")) }
             if !event.text.isEmpty { parts.append(event.text) }
             if !event.input.isEmpty { parts.append(L10n.text("Передано:\n\(event.input)")) }
             if !event.output.isEmpty { parts.append(L10n.text("Получено:\n\(event.output)")) }
@@ -179,6 +182,14 @@ struct TranscriptDecoder {
         let raw = TranscriptRecord(text: TranscriptJSON.render(record), sequence: recordSequence, origin: origin)
         let type = record["type"] as? String ?? ""
         let timestamp = TranscriptJSON.date(record["timestamp"] ?? record["created_at"] ?? record["time_created"] ?? record["time"])
+        if source == "claude", let decoded = TranscriptServiceEvent.decode(record) {
+            var event = make(.context, text: decoded.text, raw: raw, timestamp: timestamp)
+            event.service = decoded.service
+            event.title = decoded.service.title
+            event.isError = decoded.isError
+            events.append(event)
+            return
+        }
         if record["role"] != nil { decodeMessage(record, raw: raw, timestamp: timestamp); return }
         if source == "codex" {
             let payload = TranscriptJSON.object(record["payload"])

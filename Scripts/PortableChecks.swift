@@ -348,6 +348,8 @@ struct PortableChecks {
         await ClaudeTelemetryScenarios.run(check: check)
         await ClaudeResponseScenarios.run(check: check)
         await TranscriptTimingScenarios.run(check: check)
+        await TranscriptServiceScenarios.run(check: check)
+        await UsageHealthScenarios.run(check: check)
         await RegressionScenarios.run(check: check)
         await PricingScenarios.run(check: check)
         await RuntimeScenarios.run(check: check)

@@ -29,6 +29,9 @@ final class UsageStore: ObservableObject {
     @Published private(set) var diagnostics: CLIDiagnostics?
     @Published private(set) var diagnosticError: UsageError?
     @Published private(set) var lastAttempt: Date?
+    @Published var presentedProblem: UsageProblemReference?
+    @Published var showStorageSettings = false
+    @Published private(set) var isRetryingProblem = false
     @Published var period: DataPeriod = .today
     @Published var customDate = Date()
     @Published var sourceFilter = ""
@@ -112,6 +115,12 @@ final class UsageStore: ObservableObject {
     private var historyRetryAfter: [String: Date] = [:]
     private var todayFailure: UsageError?
     private var restored = false
+    private var restoreTask: Task<Void, Never>?
+    private var healthClock: Task<Void, Never>?
+    @Published private var refreshFailures: [String: UsageRefreshFailure] = [:]
+    private var storageFailures: [String: UsageError] = [:]
+    private var presentationRevision = UUID()
+    private var restoredCostIssues: [UsageCostIssue] = []
 
     init(service: any CCUsageServing = CCUsageService(), repository: any SnapshotPersisting = SnapshotRepository(),
          defaults: UserDefaults = .standard, demo: Bool = false,
@@ -151,7 +160,66 @@ final class UsageStore: ObservableObject {
         }
     }
 
-    deinit { refreshLoop?.cancel(); historyTask?.cancel() }
+    deinit { refreshLoop?.cancel(); historyTask?.cancel(); healthClock?.cancel(); restoreTask?.cancel() }
+
+    var presentationStatus: RefreshStatus { makePresentationStatus() }
+
+    private func makePresentationStatus(publishing: Bool = false) -> RefreshStatus {
+        let storage = publishing ? storageFailures.filter { $0.key != "status" }.sorted { $0.key < $1.key }.first?.value : storageError
+        var knownSnapshots = cache
+        for data in [todaySnapshot, previousSnapshot].compactMap({ $0 }) { knownSnapshots[data.day.cacheKey] = data }
+        let costs = restoredCostIssues.filter { knownSnapshots[$0.day.cacheKey] == nil }
+            + knownSnapshots.values.compactMap { UsageCostIssue(snapshot: $0) }
+        let presentation = UsagePresentation(revision: presentationRevision, snapshot: todaySnapshot,
+            previous: previousSnapshot, history: history, failures: refreshFailures.values.sorted { $0.day.cacheKey < $1.day.cacheKey },
+            storageError: storage, costIssues: Array(costs.sorted { $0.day.cacheKey > $1.day.cacheKey }.prefix(32)), lastAttempt: lastAttempt)
+        return RefreshStatus(attemptedAt: lastAttempt ?? now(), message: todayFailure?.errorDescription,
+            refreshMinutes: refreshIntervals.slowMinutes, dailyBudget: dailyBudget, dataContext: dataContext,
+            interfaceLanguage: interfaceLanguage, refreshIntervalSeconds: refreshInterval,
+            modelExclusionPolicy: modelExclusionPolicy, presentation: presentation)
+    }
+
+    func problems(at date: Date? = nil) -> [UsageProblem] {
+        UsageHealth.problems(snapshot: todaySnapshot, history: history, status: presentationStatus, now: date ?? now())
+    }
+
+    private func scheduleHealthTransition() {
+        healthClock?.cancel()
+        guard let next = UsageHealth.transitionDates(snapshot: todaySnapshot, history: history,
+            status: presentationStatus, now: now()).first else { return }
+        let delay = max(0.01, next.timeIntervalSince(now()))
+        healthClock = Task { [weak self] in
+            do { try await Task.sleep(for: .seconds(delay)) } catch { return }
+            guard !Task.isCancelled, let self else { return }
+            self.objectWillChange.send()
+            self.scheduleHealthTransition()
+        }
+    }
+
+    private func storageResult(_ failure: UsageError?, operation: String) {
+        storageFailures[operation] = failure
+        storageError = storageFailures.sorted { $0.key < $1.key }.first?.value
+    }
+
+    func retryProblem(_ reference: UsageProblemReference) async {
+        guard !isRefreshing, !isRetryingProblem, !isDemo else { return }
+        isRetryingProblem = true
+        defer { isRetryingProblem = false }
+        if let day = reference.day, day != UsageDay(date: now(), timezone: timezone),
+           reference.kind == .refresh || reference.kind == .cost {
+            let revision = generation
+            do { _ = try await loadHistorical(day, context: dataContext, revision: revision, force: true) }
+            catch is CancellationError { return }
+            catch {
+                guard revision == generation else { return }
+                refreshFailures[day.cacheKey] = .init(day: day, attemptedAt: now(), error: Self.presentable(error))
+            }
+            await publishStatus()
+        } else {
+            historyRetryAfter.removeAll()
+            await refresh()
+        }
+    }
 
     var selectedDay: UsageDay {
         let today = UsageDay(date: now(), timezone: timezone)
@@ -191,6 +259,7 @@ final class UsageStore: ObservableObject {
         todaySnapshot = todaySnapshot?.applyingExclusions(policy)
         previousSnapshot = previousSnapshot?.applyingExclusions(policy)
         history = history?.applyingExclusions(policy)
+        restoredCostIssues.removeAll { !$0.models.isEmpty && $0.models.allSatisfy { !policy.includes($0) } }
         // Widget readers apply the latest policy to raw values retained in every file.
         // This also avoids racing a preference change with an in-flight CLI write.
         preferencesChanged()
@@ -260,15 +329,54 @@ final class UsageStore: ObservableObject {
     }
 
     private func restore() async {
+        guard !isDemo else { return }
+        if let restoreTask { await restoreTask.value; return }
         guard !restored else { return }
-        restored = true
+        let task = Task { await self.restorePresentation() }
+        restoreTask = task
+        await task.value
+        restoreTask = nil
+    }
+
+    private func restorePresentation() async {
         let context = dataContext
-        // History is optional: a damaged history file must not hide a valid today's snapshot.
+        let revision = generation
+        defer { if revision == generation { restored = true; scheduleHealthTransition() } }
+        do {
+            let status = try await repository.readStatus()
+            guard revision == generation, !Task.isCancelled else { return }
+            if status?.dataContext?.canDisplay(alongside: context) == true {
+                lastAttempt = status?.attemptedAt
+                if let presentation = status?.presentation {
+                    restoredCostIssues = presentation.costIssues
+                    lastAttempt = presentation.lastAttempt
+                    history = presentation.history?.applyingExclusions(modelExclusionPolicy)
+                    todaySnapshot = presentation.snapshot?.applyingExclusions(modelExclusionPolicy)
+                    previousSnapshot = presentation.previous?.applyingExclusions(modelExclusionPolicy)
+                    for data in [todaySnapshot, previousSnapshot].compactMap({ $0 }) {
+                        if data.dataContext == context { cacheSnapshot(data) }
+                    }
+                    snapshot = todaySnapshot?.day == selectedDay ? todaySnapshot : nil
+                    if let snapshot { state = snapshot.dataContext != context || snapshot.isStale(now: now(), interval: refreshInterval) ? .stale : .loaded }
+                    else { state = .idle }
+                    refreshFailures = Dictionary(presentation.failures.map { ($0.day.cacheKey, $0) }, uniquingKeysWith: { _, newer in newer })
+                    todayFailure = refreshFailures[UsageDay(date: now(), timezone: timezone).cacheKey]?.error
+                    // Recheck failed cache operations on the next successful refresh.
+                    storageResult(presentation.storageError, operation: "restored")
+                    return
+                }
+                if let message = status?.message, let attemptedAt = status?.attemptedAt {
+                    let day = UsageDay(date: attemptedAt, timezone: timezone)
+                    refreshFailures[day.cacheKey] = .init(day: day, attemptedAt: attemptedAt, error: nil, legacyMessage: message)
+                }
+            }
+        } catch { if context == dataContext { storageResult(Self.presentable(error), operation: "status") } }
+        // Legacy caches, or recovery after an unreadable presentation file.
         do {
             let savedHistory = try await repository.readHistory()
             guard context == dataContext else { return }
             if savedHistory?.context.canDisplay(alongside: context) == true { history = savedHistory?.applyingExclusions(modelExclusionPolicy) }
-        } catch { if context == dataContext { storageError = Self.presentable(error) } }
+        } catch { if context == dataContext { storageResult(Self.presentable(error), operation: "history") } }
         for slot in [SnapshotSlot.today, .yesterday] {
             do {
                 let saved = try await repository.read(slot)
@@ -280,14 +388,14 @@ final class UsageStore: ObservableObject {
                     todaySnapshot = data
                     if data.day == selectedDay { snapshot = data; state = data.dataContext != context || data.isStale(now: now(), interval: refreshInterval) ? .stale : .loaded }
                 } else { previousSnapshot = data }
-            } catch { if context == dataContext { storageError = Self.presentable(error) } }
+            } catch { if context == dataContext { storageResult(Self.presentable(error), operation: slot.rawValue) } }
         }
     }
 
     /// Preferences publish independently of a running or failed CLI query.
     func preferencesChanged() {
         guard !isDemo else { return }
-        Task { await publishStatus() }
+        Task { await restore(); await publishStatus() }
     }
 
     @discardableResult
@@ -315,18 +423,24 @@ final class UsageStore: ObservableObject {
         previousSnapshot = nil
         history = nil
         todayFailure = nil
+        refreshFailures.removeAll()
+        restoredCostIssues.removeAll()
         error = nil
         state = .idle
         preferencesChanged()
     }
 
     private func publishStatus() async {
-        let status = RefreshStatus(attemptedAt: lastAttempt ?? now(), message: todayFailure?.errorDescription,
-                                   refreshMinutes: refreshIntervals.slowMinutes, dailyBudget: dailyBudget, dataContext: dataContext,
-                                   interfaceLanguage: interfaceLanguage, refreshIntervalSeconds: refreshInterval,
-                                   modelExclusionPolicy: modelExclusionPolicy)
-        do { try await repository.writeStatus(status) }
-        catch { storageError = Self.presentable(error) }
+        if refreshFailures.count > 32 {
+            let recent = refreshFailures.values.sorted { $0.attemptedAt > $1.attemptedAt }.prefix(32)
+            refreshFailures = Dictionary(uniqueKeysWithValues: recent.map { ($0.day.cacheKey, $0) })
+        }
+        presentationRevision = UUID()
+        scheduleHealthTransition()
+        do {
+            try await repository.writeStatus(makePresentationStatus(publishing: true))
+            storageResult(nil, operation: "status")
+        } catch { storageResult(Self.presentable(error), operation: "status") }
         reloadWidget()
     }
 
@@ -413,10 +527,12 @@ final class UsageStore: ObservableObject {
             state = .loaded
             todaySucceeded = true
             todayFailure = nil
+            refreshFailures.removeValue(forKey: today.cacheKey)
             await persist(data, slot: .today, revision: revision)
             guard revision == generation, !Task.isCancelled else { return }
             await persistHistory(revision: revision)
             guard revision == generation, !Task.isCancelled else { return }
+            storageResult(nil, operation: "restored")
             await publishStatus()
 
             // Historical dashboard selection has priority over background history.
@@ -451,8 +567,11 @@ final class UsageStore: ObservableObject {
             if !todaySucceeded {
                 schedule.failed(reason: reason, at: now())
                 todayFailure = failure
-                await publishStatus()
+                refreshFailures[today.cacheKey] = .init(day: today, attemptedAt: lastAttempt ?? now(), error: failure)
+            } else {
+                refreshFailures[selectedDay.cacheKey] = .init(day: selectedDay, attemptedAt: lastAttempt ?? now(), error: failure)
             }
+            await publishStatus()
         }
     }
 
@@ -499,6 +618,7 @@ final class UsageStore: ObservableObject {
         data = data.applyingExclusions(modelExclusionPolicy)
         data.dataContext = context
         cacheSnapshot(data)
+        refreshFailures.removeValue(forKey: day.cacheKey)
         recordHistory(data)
         if selectedDay == day { snapshot = data }
         if day == UsageDay(date: now(), timezone: context.timezone).adding(days: -1) {
@@ -508,7 +628,7 @@ final class UsageStore: ObservableObject {
         guard revision == generation else { return nil }
         await persistHistory(revision: revision)
         guard revision == generation else { return nil }
-        reloadWidget()
+        await publishStatus()
         return cache[day.cacheKey]
     }
 
@@ -539,6 +659,8 @@ final class UsageStore: ObservableObject {
                     guard revision == self.generation else { return }
                     // Failed days stay missing. Retry no more than once an hour; preserve successes.
                     self.historyRetryAfter[day.cacheKey] = self.now().addingTimeInterval(3600)
+                    self.refreshFailures[day.cacheKey] = .init(day: day, attemptedAt: self.now(), error: Self.presentable(error))
+                    await self.publishStatus()
                 }
             }
         }
@@ -550,14 +672,16 @@ final class UsageStore: ObservableObject {
     private func persist(_ data: UsageSnapshot, slot: SnapshotSlot, revision: Int) async {
         do {
             try await repository.write(data, to: slot)
-            if revision == generation { storageError = nil }
-        } catch { if revision == generation { storageError = Self.presentable(error) } }
+            if revision == generation { storageResult(nil, operation: slot.rawValue) }
+        } catch { if revision == generation { storageResult(Self.presentable(error), operation: slot.rawValue) } }
     }
 
     private func persistHistory(revision: Int) async {
         guard revision == generation, let history else { return }
-        do { try await repository.writeHistory(history) }
-        catch { if revision == generation { storageError = Self.presentable(error) } }
+        do {
+            try await repository.writeHistory(history)
+            if revision == generation { storageResult(nil, operation: "history") }
+        } catch { if revision == generation { storageResult(Self.presentable(error), operation: "history") } }
     }
 
     func testCLI(autoDetect: Bool = false) async {
@@ -578,6 +702,8 @@ final class UsageStore: ObservableObject {
     func navigate(_ route: UsageRoute) {
         sourceFilter = ""
         switch route {
+        case .problem(let reference):
+            presentedProblem = reference
         case .overview:
             sessionList = .init()
             tab = .overview
@@ -624,6 +750,9 @@ extension UsageStore {
     func resetForManualReview() {
         precondition(isManualReview)
         startupTask?.cancel()
+        restoreTask?.cancel()
+        restoreTask = nil
+        healthClock?.cancel()
         refreshLoop?.cancel()
         historyTask?.cancel()
         historyTask = nil
@@ -633,6 +762,8 @@ extension UsageStore {
         restored = false
         isRefreshing = false
         storageError = nil
+        storageFailures.removeAll()
+        presentedProblem = nil
         diagnostics = nil
         diagnosticError = nil
         lastAttempt = nil

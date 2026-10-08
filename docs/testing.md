@@ -67,7 +67,11 @@ For disposable interactive checks without changing saved notes or position, use 
 
 ## Visual and system checks
 
+`LLM_REVIEW_CHECKS=widget bash Scripts/check-windows.sh` runs a focused check in the same production review app: real URL Apple events reopen its hidden/minimized dashboard, preserve dated problem destinations, and ignore invalid routes. It also runs the shared data-status scenarios, including startup URL buffering and atomic replacement of an incomplete cost. It does not launch the installed app or validate the system WidgetKit host. The full self-check includes these assertions too.
+
 `bash Scripts/render-previews.sh` writes previews to `build/Previews`. Useful filters include `--widgets`, `--menus`, `--sidebars`, `--models`, `--ui-polish` and `--language=ru`/`en`. These render content; native titlebar glass, popover positioning and window focus require a live app.
+
+The shared data-status checks cover pure staleness without a CLI failure, simultaneous failures and incomplete costs, persisted app/widget parity, historical error dates, retry recovery and problem deep links. `overview-stale`, `overview-multiple`, `overview-storage`, the matching menu scenarios and all three widget variants exercise the same production diagnostics. Widget gallery links are handled inside the review app; they never launch an installed copy. Native self-checks click the actual warning controls and the production details sheet in RU/EN and both appearances. Gallery checks do not validate WidgetKit's system refresh scheduling.
 
 Before a UI release, verify:
 
@@ -76,6 +80,7 @@ Before a UI release, verify:
 - Calendar and budget: select a date in both locales; step through days with the date capsule, including rapid clicks, month boundaries and today's disabled forward arrow. Verify that a day arrow dismisses the open calendar and that the capsule stays in place. Change a budget in Settings and check its meter, including with a source filter.
 - Provider logos: use `provider-sessions`, `provider-models` and `provider-inspector` for GLM in Claude Code, the T-Bank shield for `tgpt…`, all bundled brands, unknown/empty models and mixed sessions. Self-checks validate bundled marks and production logo bindings and labels in RU/EN and both themes. Review-only native probes observe the real logo groups; no product window is recreated.
 - Chat: token details, tool/request links, search, full-text reading and long messages at narrow width in both themes.
+- Claude service events: `chat-service-events` and `chat-service-errors` cover compaction metrics, API retries, hook failures, expandable hook instructions and editor diagnostics. Self-checks click the production disclosures, full-text and JSON readers in RU/EN and both themes at compact width. Shared core scenarios cover incomplete records, search, day/error/tool filters, lossless exports and unchanged turn-duration attribution.
 - Sidebar: active/inactive windows, dark/light appearance, increased contrast and reduced transparency.
 
 Install the app to check WidgetKit placement, gallery registration, refreshes and dated links. The review catalogue shows actual widget content but does not reproduce the system WidgetKit host. Cross-machine installation and interrupted system-level installation are also separate manual checks.

@@ -15,7 +15,7 @@ import Foundation
             guard request == revision else { throw CancellationError() }
         } while fixture == .loading || fixture == .refreshing
         if fixture == .missing { throw UsageError.missingExecutable }
-        if fixture == .failure || fixture == .stale || fixture == .storage { throw UsageError.timedOut }
+        if fixture == .failure || fixture == .multiple { throw UsageError.timedOut }
         if fixture == .gaps && day != UsageDay(timezone: day.timezone) { throw UsageError.timedOut }
         var data = fixture.snapshot(day: day) ?? SampleData.multiSourceSnapshot()
         data.day = day
@@ -41,10 +41,11 @@ import Foundation
             value.days = value.days.enumerated().filter { $0.offset % 2 == 0 }.map(\.element)
             history = value
         }
-        if [.failure, .refreshing, .stale].contains(fixture) {
+        if [.failure, .refreshing, .stale, .multiple].contains(fixture) {
             var cached = SampleData.multiSourceSnapshot()
             cached.day = UsageDay(timezone: context.timezone)
             cached.generatedAt = Date().addingTimeInterval(-7200)
+            if fixture == .multiple { cached.sessions[0].usage.costIsIncomplete = true }
             cached.dataContext = context
             snapshots[.today] = cached
         }

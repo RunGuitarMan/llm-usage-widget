@@ -1,5 +1,36 @@
 import Foundation
 
+/// A menu-bar app can receive a widget URL before its dashboard has installed
+/// navigation. Keep the intent until the production scene is ready. A plain
+/// reopen must not replace a more specific URL received during the same launch.
+@MainActor final class UsageActivation {
+    private var handler: ((UsageRoute?) -> Void)?
+    private var pending = false
+    private var pendingRoute: UsageRoute?
+
+    func install(_ handler: @escaping (UsageRoute?) -> Void) {
+        self.handler = handler
+        guard pending else { return }
+        let route = pendingRoute
+        pending = false
+        pendingRoute = nil
+        handler(route)
+    }
+
+    func open(_ url: URL) {
+        guard let route = UsageRoute(url: url) else { return }
+        present(route)
+    }
+
+    func present(_ route: UsageRoute? = nil) {
+        if let handler { handler(route) }
+        else {
+            pending = true
+            if let route { pendingRoute = route }
+        }
+    }
+}
+
 enum DashboardTab: String, CaseIterable, Identifiable {
     case overview = "Обзор", models = "Модели", settings = "Настройки"
     var id: String { rawValue }
@@ -16,6 +47,7 @@ enum DashboardTab: String, CaseIterable, Identifiable {
 enum UsageRoute: Equatable {
     case overview, sessions, session(String), settings
     case datedSessions(UsageDay), datedSession(String, UsageDay)
+    case problem(UsageProblemReference)
     init?(url: URL) {
         guard ["llmusage", "claudeusage"].contains(url.scheme?.lowercased() ?? ""), url.user == nil, url.port == nil,
               url.password == nil, url.fragment == nil else { return nil }
@@ -46,6 +78,10 @@ enum UsageRoute: Equatable {
             let parts = url.pathComponents.filter { $0 != "/" }
             guard parts.count == 1, !parts[0].isEmpty else { return nil }
             self = day.map { .datedSession(parts[0], $0) } ?? .session(parts[0])
+        case "problem":
+            let parts = url.pathComponents.filter { $0 != "/" }
+            guard parts.count == 1, let kind = UsageProblemKind(rawValue: parts[0]) else { return nil }
+            self = .problem(.init(kind: kind, day: day))
         default: return nil
         }
     }
@@ -57,6 +93,9 @@ enum UsageRoute: Equatable {
         case .session(let id): return URL(string: "llmusage://session")!.appendingPathComponent(id)
         case .datedSessions(let day): return Self.withDay(day, url: Self.sessions.url)
         case .datedSession(let id, let day): return Self.withDay(day, url: Self.session(id).url)
+        case .problem(let reference):
+            let url = URL(string: "llmusage://problem")!.appendingPathComponent(reference.kind.rawValue)
+            return reference.day.map { Self.withDay($0, url: url) } ?? url
         }
     }
     private static func withDay(_ day: UsageDay, url: URL) -> URL {

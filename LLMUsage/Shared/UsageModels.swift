@@ -331,7 +331,7 @@ struct UsageSnapshot: Codable, Equatable, Sendable {
     }
 
     func isStale(now: Date = Date(), interval: TimeInterval = 180) -> Bool {
-        now.timeIntervalSince(generatedAt) > max(interval * 2, 600) || !day.isToday(now: now)
+        now >= UsageHealth.staleDate(generatedAt: generatedAt, interval: interval) || !day.isToday(now: now)
     }
 
     func canReuse(for requestedDay: UsageDay, now: Date, liveInterval: TimeInterval) -> Bool {
@@ -437,7 +437,7 @@ enum SessionSort: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
-enum UsageError: Error, LocalizedError, Equatable, Sendable {
+enum UsageError: Error, LocalizedError, Codable, Equatable, Sendable {
     case missingExecutable
     case runtimeConsentRequired
     case runtimeUnavailable
