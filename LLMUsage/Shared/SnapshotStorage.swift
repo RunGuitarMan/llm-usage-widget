@@ -59,6 +59,7 @@ struct RefreshStatus: Codable, Equatable, Sendable {
     var presentation: UsagePresentation? = nil
     var isRecalculating: Bool? = nil
     var publishedAt: Date? = nil
+    var hiddenProblems: [String: String]? = nil
     // Optional presentation preferences can be added here without changing the snapshot schema.
 
     var refreshInterval: TimeInterval {

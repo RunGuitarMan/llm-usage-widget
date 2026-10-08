@@ -268,14 +268,14 @@ enum TranscriptUsageParser {
                 guard model != "<synthetic>", root["isApiErrorMessage"] as? Bool != true else { continue }
                 guard var tokens = numbers(raw, keys: ["input_tokens", "output_tokens", "cache_creation_input_tokens", "cache_read_input_tokens"]),
                       let cache = numbers(TranscriptJSON.object(raw["cache_creation"]), keys: ["ephemeral_5m_input_tokens", "ephemeral_1h_input_tokens"]) else {
-                    transcript.usageUncertain = true; continue
+                    transcript.markUsageUncertain(at: date); continue
                 }
                 let aggregate = tokens["cache_creation_input_tokens", default: 0]
                 let split = cache.values.reduce(0, +)
                 if aggregate > 0, raw["cache_creation"] != nil, split == 0 {
                     let notice = L10n.text("Для записи кэша без разбивки TTL применена ставка 5 минут.")
                     if !transcript.notices.contains(notice) { transcript.notices.append(notice) }
-                } else if aggregate > 0, split > 0, aggregate != split { transcript.usageUncertain = true }
+                } else if aggregate > 0, split > 0, aggregate != split { transcript.markUsageUncertain(at: date) }
                 if split > 0 { tokens["cache_creation_input_tokens"] = split }
                 let usage = TokenUsage(input: tokens["input_tokens", default: 0], output: tokens["output_tokens", default: 0],
                     cacheCreate: tokens["cache_creation_input_tokens", default: 0], cacheRead: tokens["cache_read_input_tokens", default: 0], costIsIncomplete: true)
@@ -291,7 +291,7 @@ enum TranscriptUsageParser {
                 for (index, iteration) in (raw["iterations"] as? [[String: Any]] ?? []).enumerated()
                     where iteration["type"] as? String == "advisor_message" {
                     guard let tokens = numbers(iteration, keys: ["input_tokens", "output_tokens", "cache_creation_input_tokens", "cache_read_input_tokens"]),
-                          let advisor = iteration["model"] as? String else { transcript.usageUncertain = true; continue }
+                          let advisor = iteration["model"] as? String else { transcript.markUsageUncertain(at: date); continue }
                     append(model: advisor, date: date, events: events,
                         billing: .init(tokens: tokens), usage: .init(input: tokens["input_tokens", default: 0], output: tokens["output_tokens", default: 0],
                             cacheCreate: tokens["cache_creation_input_tokens", default: 0], cacheRead: tokens["cache_read_input_tokens", default: 0], costIsIncomplete: true),

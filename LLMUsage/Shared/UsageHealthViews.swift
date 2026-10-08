@@ -7,11 +7,14 @@ struct UsageProblemLabel: View {
     private var strings: UsageLocalizer { .init(language: interfaceLanguage) }
     var problems: [UsageProblem]
     var compact = false
+    private var informational: Bool { problems.allSatisfy(\.isInformational) }
+    private var label: String { informational ? strings.text("Частичный расчёт") : UsageHealth.summary(problems, language: interfaceLanguage) }
 
     var body: some View {
         HStack(spacing: 4) {
-            Image(systemName: "exclamationmark.triangle").foregroundStyle(.orange)
-            if !compact { Text(UsageHealth.summary(problems, language: interfaceLanguage)).lineLimit(1).truncationMode(.tail) }
+            Image(systemName: informational ? "info.circle" : "exclamationmark.triangle")
+                .foregroundStyle(informational ? Color.secondary : Color.orange)
+            if !compact { Text(label).lineLimit(1).truncationMode(.tail) }
             else if problems.count > 1 { Text(String(problems.count)).monospacedDigit() }
         }
         .accessibilityElement(children: .ignore)

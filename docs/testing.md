@@ -74,6 +74,8 @@ For disposable interactive checks without changing saved notes or position, use 
 
 The shared data-status checks cover pure staleness without a CLI failure, simultaneous failures and incomplete costs, persisted app/widget parity, historical error dates, retry recovery and problem deep links. `overview-stale`, `overview-multiple`, `overview-storage`, the matching menu scenarios and all three widget variants exercise the same production diagnostics. Widget gallery links are handled inside the review app; they never launch an installed copy. Native self-checks click the actual warning controls and the production details sheet in RU/EN and both appearances. Gallery checks do not validate WidgetKit's system refresh scheduling.
 
+The 1.6.3 dated-diagnostics regressions browse ten incomplete historical days while today's app/menu/widget stay clean, acknowledge a notice across retries and relaunch, expose a changed cause, force a seven-day repair with full/partial/failed outcomes, and evict a repaired restored report without resurrecting its old warning. Daily telemetry checks retain late completions and cross-day conflicts while excluding unrelated future events; the accounting reader is exercised with a valid log larger than 32 MiB. The production health controls use runtime-only review probes and the common native self-check clicks the partial-cost indicator, retry, result and hide controls in RU/EN and light/dark appearances.
+
 Before a UI release, verify:
 
 - Statistics: expand/collapse sessions with one main scroll area; sort/search/filter and follow a session link.

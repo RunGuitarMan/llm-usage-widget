@@ -1,4 +1,3 @@
-#if MANUAL_REVIEW
 import AppKit
 import SwiftUI
 
@@ -47,7 +46,7 @@ struct ReviewHealthControlProbe: NSViewRepresentable {
 
                 try await ReviewCheck.select("menu-multiple", in: review)
                 try await ReviewCheck.wait("Popover did not bind the shared problem list") {
-                    menuProbe(excluding: window)?.problems == store.problems()
+                    menuProbe(excluding: window)?.problems == store.problems(for: store.selectedDay, includeHidden: false)
                 }
                 guard let menu = menuProbe(excluding: window) else { throw CocoaError(.validationMissingMandatoryProperty) }
                 try ReviewCheck.require(menu.problems.count >= 3, "Popover masked simultaneous problems")
@@ -55,25 +54,41 @@ struct ReviewHealthControlProbe: NSViewRepresentable {
                 try await ReviewCheck.wait("Menu problem did not open its sheet: requested=\(String(describing: store.presentedProblem)), menuVisible=\(menu.window?.isVisible ?? false), sheet=\(String(describing: window.attachedSheet))") { control("details", in: window.attachedSheet) != nil }
                 try await closeSheet(window)
 
-                for variant in UsageWidgetVariant.allCases {
-                    try await ReviewCheck.select("widget-\(variant.rawValue)-multiple", in: review)
-                    try await ReviewCheck.wait("Widget gallery did not bind all three sizes") {
-                        guard let widgets = widgetWindow() else { return false }
-                        return probes(in: widgets).count == 3 && probes(in: widgets).allSatisfy { $0.problems == store.problems() }
-                    }
-                    let widgets = widgetWindow()!
-                    widgets.makeKeyAndOrderFront(nil)
-                    // A real Link inside the medium/large widget uses the review
-                    // scene's OpenURL handler; the installed app is never opened.
-                    guard let link = probes(in: widgets).first(where: { $0.bounds.width > 40 }) else {
-                        throw CocoaError(.validationMissingMandatoryProperty)
-                    }
-                    try await click(link)
-                    try await ReviewCheck.wait("\(variant.rawValue) widget link lost the problem route") { control("details", in: window.attachedSheet) != nil }
-                    try ReviewCheck.require(store.presentedProblem == store.problems().first?.reference, "Widget opened an unrelated problem")
-                    try await closeSheet(window)
+                try await ReviewCheck.select("overview-partial", in: review)
+                try await ReviewCheck.wait("Missing partial-cost control") { control("partial-cost", in: window) != nil }
+                try ReviewCheck.require(probes(in: window).isEmpty, "Partial cost still shows a dashboard banner")
+                try await click(control("partial-cost", in: window)!)
+                try await ReviewCheck.wait("Partial-cost details did not open") { control("retry", in: window.attachedSheet) != nil }
+                try await click(control("retry", in: window.attachedSheet)!)
+                try await ReviewCheck.wait("Partial retry has no visible result") {
+                    control("result", in: window.attachedSheet) != nil && store.recoveryResult?.incomplete == 1
                 }
-                print("PASS Shared problems and native banner/menu/widget links, retry and resolved sheet in \(language.rawValue)/\(appearance.rawValue)")
+                try await click(control("hide", in: window.attachedSheet)!)
+                try await ReviewCheck.wait("Hide did not dismiss the cost notice") {
+                    window.attachedSheet == nil && control("partial-cost", in: window) == nil
+                }
+                await store.refresh()
+                try ReviewCheck.require(control("partial-cost", in: window) == nil, "Refresh resurrected hidden cost notice")
+                try ReviewCheck.require(WidgetPresentation(status: store.presentationStatus).problems(at: Date()).allSatisfy { $0.reference.kind != .cost }, "Widget ignored hidden cost notice")
+
+                try await ReviewCheck.select("overview", in: review)
+                review.service.usePartialHistory()
+                let today = store.selectedDay
+                for offset in 1...10 { await store.selectCustomDate(today.adding(days: -offset).date) }
+                try await ReviewCheck.wait("Historical partial-cost control missing") { control("partial-cost", in: window) != nil }
+                try await click(control("partial-cost", in: window)!)
+                try await ReviewCheck.wait("Historical details missing") { control("details", in: window.attachedSheet) != nil }
+                try ReviewCheck.require(store.presentedProblem?.day == today.adding(days: -10), "Partial-cost click opened the wrong date")
+                try await closeSheet(window)
+                await store.selectCustomDate(today.date)
+                try await ReviewCheck.wait("Returning to today kept a historical notice") {
+                    control("partial-cost", in: window) == nil && probes(in: window).isEmpty
+                }
+                try ReviewCheck.require(WidgetPresentation(status: store.presentationStatus).problems(at: Date()).isEmpty, "Browsing dates contaminated widget diagnostics")
+                store.navigate(.settings)
+                try await ReviewCheck.settle()
+                try ReviewCheck.require(probes(in: window).isEmpty, "Settings show a report banner")
+                print("PASS Native dated diagnostics, retry outcome, persistent dismissal and ten-day isolation in \(language.rawValue)/\(appearance.rawValue)")
             }
         }
         try await ReviewCheck.select("overview", in: review)
@@ -112,4 +127,3 @@ struct ReviewHealthControlProbe: NSViewRepresentable {
         window.sendEvent(down)
     }
 }
-#endif

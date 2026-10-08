@@ -1,5 +1,37 @@
 import Foundation
 
+enum UsageCostReason: String, Codable, CaseIterable, Sendable {
+    case missingPrice, sourceUnavailable, sourceTooLarge, ambiguousSource, sourceMismatch
+    case sourceIncomplete, telemetryUnavailable, telemetryAmbiguous, dayBoundary, calculationFailed
+
+    var explanation: String {
+        switch self {
+        case .missingPrice: return L10n.text("Для части моделей не найден тариф. Пересчёт повторно проверит доступные тарифы.")
+        case .sourceUnavailable: return L10n.text("Не удалось прочитать исходный журнал сессии. Проверьте доступ к файлам и повторите пересчёт.")
+        case .sourceTooLarge: return L10n.text("Журнал превышает безопасный предел обработки. Учтена доступная часть расходов.")
+        case .ambiguousSource: return L10n.text("Найдено несколько журналов с одинаковым идентификатором сессии. Дополнительные расходы нельзя объединить однозначно.")
+        case .sourceMismatch: return L10n.text("Счётчики журнала и отчёта различаются. Сохранена стоимость отчёта без неподтверждённых дополнений.")
+        case .sourceIncomplete: return L10n.text("В исходных записях отсутствуют или противоречат друг другу данные расхода. Повторный расчёт поможет после появления исправленных записей.")
+        case .telemetryUnavailable: return L10n.text("Не удалось прочитать локальную телеметрию Claude. Пересчёт повторит чтение.")
+        case .telemetryAmbiguous: return L10n.text("Некоторые API-вызовы нельзя однозначно сопоставить с журналом или оценить по тарифам. Без дополнительных исходных данных точную сумму восстановить нельзя.")
+        case .dayBoundary: return L10n.text("Общие расходы сессии пересекают границу дней. В журнале нет данных для точного распределения этой части по датам.")
+        case .calculationFailed: return L10n.text("Дополнительный расчёт расходов завершился ошибкой. Сохранён предыдущий результат расчётчика; повторите пересчёт.")
+        }
+    }
+}
+
+enum UsageProblemScope {
+    case all, currentDay, day(UsageDay)
+}
+
+struct UsageRecoveryResult: Equatable {
+    var days: [UsageDay]
+    var repaired: Int
+    var incomplete: Int
+    var failed: Int
+    var completedAt: Date
+}
+
 enum UsageProblemKind: String, Codable, CaseIterable, Sendable {
     case storage, refresh, context, stale, cost, history
 
@@ -34,6 +66,7 @@ struct UsageCostIssue: Codable, Equatable, Sendable {
     var day: UsageDay
     var capturedAt: Date
     var models: [String]
+    var reasons: [UsageCostReason]? = nil
 
     init?(snapshot: UsageSnapshot) {
         guard snapshot.totals.costIsIncomplete == true else { return nil }
@@ -44,6 +77,7 @@ struct UsageCostIssue: Codable, Equatable, Sendable {
                 let parts = session.modelBreakdowns.filter { $0.usage.costIsIncomplete == true }
                 return parts.isEmpty ? session.models : parts.map(\.id)
             })).filter { !$0.isEmpty }.sorted()
+        reasons = snapshot.costReasons
     }
 }
 
@@ -70,6 +104,7 @@ struct UsageProblem: Codable, Equatable, Identifiable, Sendable {
     var legacyMessage: String? = nil
     var models: [String] = []
     var missingDays: [UsageDay] = []
+    var costReasons: [UsageCostReason]? = nil
     var id: String { reference.id }
     var title: String { localizedTitle(language: nil) }
     func localizedTitle(language: InterfaceLanguage?) -> String {
@@ -87,6 +122,19 @@ struct UsageProblem: Codable, Equatable, Identifiable, Sendable {
         }
     }
     var details: String? { error?.details ?? legacyMessage }
+    var isInformational: Bool { reference.kind == .cost || reference.kind == .history }
+
+    // Stable across retries, price changes and publication timestamps. A new
+    // cause/model is new information; the same limitation stays acknowledged.
+    var dismissalFingerprint: String {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        var stable = self
+        stable.lastSuccess = nil; stable.attemptedAt = nil
+        stable.models = models.sorted()
+        stable.costReasons = costReasons?.sorted { $0.rawValue < $1.rawValue }
+        return (try? encoder.encode(stable).base64EncodedString()) ?? id
+    }
 }
 
 /// The only policy for app, menu and every widget variant. Callers supply time,
@@ -105,11 +153,14 @@ enum UsageHealth {
     }
 
     static func problems(snapshot: UsageSnapshot?, history: UsageHistory? = nil, status: RefreshStatus? = nil,
-                         storageUnavailable: Bool = false, now: Date) -> [UsageProblem] {
+                         storageUnavailable: Bool = false, now: Date, scope: UsageProblemScope = .all,
+                         includeHidden: Bool = true) -> [UsageProblem] {
         let presentation = status?.presentation
         let context = status?.dataContext
         let zone = context?.timezone ?? snapshot?.day.timezone ?? history?.context.timezone ?? "UTC"
         let today = UsageDay(date: now, timezone: zone)
+        let scopedDay: UsageDay?
+        switch scope { case .all: scopedDay = nil; case .currentDay: scopedDay = today; case .day(let day): scopedDay = day }
         var result: [UsageProblem] = []
         if storageUnavailable || presentation?.storageError != nil {
             result.append(.init(reference: .init(kind: .storage), error: presentation?.storageError))
@@ -129,27 +180,43 @@ enum UsageHealth {
             result.append(.init(reference: .init(kind: .context, day: snapshot.day), lastSuccess: snapshot.generatedAt))
         }
         let capturedAt = snapshot?.generatedAt ?? history?.days.first(where: { $0.day == today })?.capturedAt
-        if let capturedAt,
+        if scopedDay == nil || scopedDay == today, let capturedAt,
            now >= staleDate(generatedAt: capturedAt, interval: status?.refreshInterval ?? 180)
             || snapshot.map({ $0.day != today }) == true {
             result.append(.init(reference: .init(kind: .stale, day: snapshot?.day ?? today), lastSuccess: capturedAt,
                                 attemptedAt: presentation == nil ? status?.attemptedAt : presentation?.lastAttempt))
         }
-        var costs = presentation?.costIssues ?? []
-        if let snapshot, let cost = UsageCostIssue(snapshot: snapshot) { costs.append(cost) }
+        // A current report supersedes a restored diagnostic, including a repair.
+        var costs = presentation?.costIssues.filter { $0.day != snapshot?.day } ?? []
+        if let snapshot, let cost = UsageCostIssue(snapshot: snapshot) { costs.insert(cost, at: 0) }
         for cost in costs {
-            result.append(.init(reference: .init(kind: .cost, day: cost.day), lastSuccess: cost.capturedAt, models: cost.models))
+            result.append(.init(reference: .init(kind: .cost, day: cost.day), lastSuccess: cost.capturedAt,
+                                attemptedAt: cost.capturedAt, models: cost.models, costReasons: cost.reasons))
         }
         if let history {
-            for total in history.days where total.usage.costIsIncomplete == true {
+            for total in history.days where total.usage.costIsIncomplete == true && total.day != snapshot?.day {
                 result.append(.init(reference: .init(kind: .cost, day: total.day), lastSuccess: total.capturedAt,
-                                    models: total.usageComponents?.filter { $0.reportedUsage.costIsIncomplete == true }.flatMap(\.models) ?? []))
+                                    attemptedAt: total.capturedAt,
+                                    models: total.usageComponents?.filter { $0.reportedUsage.costIsIncomplete == true }.flatMap(\.models) ?? [],
+                                    costReasons: total.costReasons))
             }
             let missing = history.points(ending: today).filter { $0.day != today && $0.total == nil }.map(\.day)
             if !missing.isEmpty { result.append(.init(reference: .init(kind: .history), missingDays: missing)) }
         }
         var seen: Set<String> = []
-        return result.filter { seen.insert($0.id).inserted }.sorted {
+        return result.filter { problem in
+            if let scopedDay {
+                switch problem.reference.kind {
+                case .history: return false
+                case .storage: break
+                case .stale, .context:
+                    guard problem.reference.day == scopedDay || scopedDay == today && problem.reference.day == snapshot?.day else { return false }
+                default: guard problem.reference.day == scopedDay else { return false }
+                }
+            }
+            return (includeHidden || status?.hiddenProblems?[problem.id] != problem.dismissalFingerprint)
+                && seen.insert(problem.id).inserted
+        }.sorted {
             let left = UsageProblemKind.allCases.firstIndex(of: $0.reference.kind)!
             let right = UsageProblemKind.allCases.firstIndex(of: $1.reference.kind)!
             return left == right ? $0.id > $1.id : left < right

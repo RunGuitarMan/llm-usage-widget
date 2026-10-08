@@ -21,12 +21,12 @@ enum ClaudeSessionAccounting {
             guard row["type"] as? String == "assistant" else { return nil }
             return row["sessionId"] as? String
         })
-        guard sessions.count == 1, let session = sessions.first else { result.usageUncertain = true; return result }
+        guard sessions.count == 1, let session = sessions.first else { result.markUsageUncertain(at: nil); return result }
         var accepted: [String: TranscriptRequest] = [:]
         for (record, row) in snapshots {
-            guard row["sessionId"] as? String == session else { result.usageUncertain = true; continue }
+            guard row["sessionId"] as? String == session else { result.markUsageUncertain(at: nil); continue }
             let prefix = original.requests.filter { $0.sequence <= record.sequence && !$0.isReplay }
-            guard !prefix.isEmpty else { result.usageUncertain = true; continue }
+            guard !prefix.isEmpty else { result.markUsageUncertain(at: nil); continue }
             let groups = Dictionary(grouping: prefix, by: { canonical($0.model) })
             var proposal: [String: TranscriptRequest] = [:]
             var valid = true
@@ -62,7 +62,7 @@ enum ClaudeSessionAccounting {
                 }
             }
             guard valid, used == Set(groups.keys), Set(accepted.keys).isSubset(of: used) else {
-                result.usageUncertain = true; continue
+                result.markUsageUncertain(at: nil); continue
             }
             result.claudeSnapshotValidated = true
             result.claudeAccountingCoverage = used.sorted().map {

@@ -85,7 +85,8 @@ enum CCUsageDecoder {
                                 lastActivity: parseDate(activity, timezone: timezone),
                                 activityHasTime: activity?.contains("T") ?? false,
                                 projectPath: metadata?.projectPath ?? projectPath, modelBreakdowns: breakdowns,
-                                agent: source, originalID: rawID, reasoningOutputTokens: reasoning)
+                                agent: source, originalID: rawID, reasoningOutputTokens: reasoning,
+                                costReasons: usage.costIsIncomplete == true ? [.missingPrice] : nil)
         }
     }
 

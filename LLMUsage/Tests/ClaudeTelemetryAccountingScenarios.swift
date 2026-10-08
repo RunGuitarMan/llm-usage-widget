@@ -167,6 +167,26 @@ enum ClaudeTelemetryAccountingScenarios {
             let next = TranscriptUsageSummary(transcript: recovered, day: UsageDay(date: after, timezone: "UTC"), policy: .init())
             try require(previous.reported.input == 100 && next.reported.input == 1, "Costs moved across midnight")
         }
+        await check("Telemetry accounting: daily uncertainty excludes unrelated dates but retains late completions and conflicts") {
+            let day = UsageDay(date: date, timezone: "UTC")
+            let original = try decode([row("call", tokens: [100, 20, 300, 0])])
+            var malformed = event("unrelated", at: date.addingTimeInterval(86400)); malformed.speed = nil
+            let earlier = ClaudeTelemetryAccounting.recover(original, sessionID: sid, events: [malformed], day: day)
+            try require(!earlier.usageIsUncertain(on: day), "Next-day telemetry contaminated a complete prior day")
+            malformed.timestamp = date
+            try require(ClaudeTelemetryAccounting.recover(original, sessionID: sid, events: [malformed], day: day).usageIsUncertain(on: day), "Same-day ambiguity was hidden")
+            let partial = try decode([row("call", tokens: nil)])
+            let completion = event("call", at: date.addingTimeInterval(86400))
+            let repaired = ClaudeTelemetryAccounting.recover(partial, sessionID: sid, events: [completion], day: day)
+            try require(total(repaired).input == 100 && repaired.requests[0].timestamp == date, "Late completion lost the original billing day")
+            var conflict = completion; conflict.input = 101
+            let conflicted = ClaudeTelemetryAccounting.recover(original, sessionID: sid, events: [event("call"), conflict], day: day)
+            try require(conflicted.usageIsUncertain(on: day), "Date filtering concealed a conflicting delivery")
+            let invalidRow = row("bad", tokens: [-1, 2, 3, 0], at: date.addingTimeInterval(86400))
+            let transcript = try decode([row("call", tokens: [100, 20, 300, 0]), invalidRow])
+            try require(transcript.usageUncertain && !transcript.usageIsUncertain(on: day)
+                && transcript.usageIsUncertain(on: day.adding(days: 1)), "Malformed dated source rows lost their actual scope")
+        }
         await check("Telemetry accounting: export distinguishes missing values, explicit zeros and recovered counters") {
             let original = try decode([row("call", tokens: nil)])
             let api = event("call")
@@ -241,6 +261,12 @@ enum ClaudeTelemetryAccountingScenarios {
         let nextDay = try await service.fetch(day: UsageDay(date: tomorrow, timezone: "UTC"), customPath: wrapper.path)
         try require(nextDay.sessions.count == 1 && tokens(nextDay.totals) == [100, 20, 300, 0]
             && abs(nextDay.totals.cost - 0.00086) < 1e-10, "A day with only telemetry disappeared from the report")
+
+        var malformed = event("unrelated-future", at: tomorrow.addingTimeInterval(86400)); malformed.speed = nil
+        try await store.accept(.init(events: [malformed]), now: tomorrow)
+        let unaffected = try await service.fetch(day: day, customPath: wrapper.path)
+        try require(unaffected.totals.costIsIncomplete != true && abs(unaffected.totals.cost - fixture.expectedCost) < 1e-9,
+            "Unrelated future telemetry tainted the real daily report")
 
         let failing = "#!/bin/sh\ncase \"$CLAUDE_CONFIG_DIR\" in */llmusage-accounting-*) printf '%s\\n' '{\"sessions\":[]}' ; exit 0 ;; esac\n" + script
         try Data(failing.utf8).write(to: wrapper)

@@ -89,11 +89,15 @@ struct WidgetPresentation: Codable, Equatable, Sendable {
         status = source
         status.presentation = nil
         status.modelExclusionPolicy = nil
+        // Acknowledgements are applied to the bounded states below. Their
+        // fingerprints can contain app-only diagnostics and stay in the app.
+        status.hiddenProblems = nil
         // Keep health semantics separate from the provider's fallback schedule.
         let date = now ?? source.publishedAt ?? source.attemptedAt
         let dates = [date] + UsageHealth.transitionDates(snapshot: current, history: visibleHistory, status: source, now: date)
         states = dates.map { date in
-            let problems = UsageHealth.problems(snapshot: current, history: visibleHistory, status: source, now: date)
+            let problems = UsageHealth.problems(snapshot: current, history: visibleHistory, status: source, now: date,
+                                                scope: .currentDay, includeHidden: false)
                 .prefix(64).map { problem in
                     var result = problem
                     result.models = []

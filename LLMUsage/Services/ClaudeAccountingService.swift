@@ -46,12 +46,18 @@ struct ClaudeAccountingService: Sendable {
         var owners: [String: Int] = [:]
         var replacements = Set<Int>()
         var incomplete = Set<Int>()
+        func mark(_ index: Int, _ reason: UsageCostReason) {
+            result.sessions[index].usage.costIsIncomplete = true
+            let reasons = (result.sessions[index].costReasons ?? []) + [reason]
+            result.sessions[index].costReasons = Array(Set(reasons)).sorted { $0.rawValue < $1.rawValue }
+            incomplete.insert(index)
+        }
         for index in result.sessions.indices where result.sessions[index].sourceID == "claude" {
             try Task.checkCancellation()
             let session = result.sessions[index]
-            if telemetryFailed { result.sessions[index].usage.costIsIncomplete = true }
+            if telemetryFailed { mark(index, .telemetryUnavailable) }
             guard let paths = files[session.rawID] else { continue }
-            guard paths.count == 1 else { result.sessions[index].usage.costIsIncomplete = true; continue }
+            guard paths.count == 1 else { mark(index, .ambiguousSource); continue }
             let parsed: SessionTranscript?
             let events = telemetryEvents[session.rawID.lowercased()] ?? []
             do {
@@ -62,9 +68,16 @@ struct ClaudeAccountingService: Sendable {
                     parsed = try await reader.load(session: session)
                 }
             } catch is CancellationError { throw CancellationError() }
-            catch { result.sessions[index].usage.costIsIncomplete = true; continue }
+            catch {
+                switch error {
+                case UsageError.outputTooLarge, TranscriptError.tooLarge: mark(index, .sourceTooLarge)
+                default: mark(index, .sourceUnavailable)
+                }
+                continue
+            }
             guard var transcript = parsed else { continue }
-            if transcript.usageUncertain { result.sessions[index].usage.costIsIncomplete = true }
+            let sourceUncertain = transcript.usageIsUncertain(on: original.day)
+            if sourceUncertain { mark(index, .sourceIncomplete) }
             let main = transcript.requests.filter { !$0.isSupplemental && !$0.isReplay && $0.belongs(to: original.day)
                 && $0.billing.tokens["input_tokens"] != nil && $0.billing.tokens["output_tokens"] != nil }
             let observed = Dictionary(grouping: main, by: \.modelForAccounting).mapValues { $0.reduce(TokenUsage.zero) { $0 + $1.usage } }.filter { $0.value.total > 0 }
@@ -72,23 +85,22 @@ struct ClaudeAccountingService: Sendable {
             guard Set(observed.keys) == Set(reported.keys), observed.allSatisfy({ name, value in
                 guard let other = reported[name] else { return false }
                 return TokenCategory.allCases.allSatisfy { value.value(for: $0) == other.value(for: $0) }
-            }) else { result.sessions[index].usage.costIsIncomplete = true; continue }
+            }) else { mark(index, .sourceMismatch); continue }
             if !events.isEmpty {
-                transcript = ClaudeTelemetryAccounting.recover(transcript, sessionID: session.rawID, events: events)
+                transcript = ClaudeTelemetryAccounting.recover(transcript, sessionID: session.rawID, events: events, day: original.day)
                 replacements.insert(index)
             }
-            if transcript.usageUncertain { incomplete.insert(index) }
+            if !sourceUncertain, transcript.usageIsUncertain(on: original.day) { mark(index, .telemetryAmbiguous) }
             for var request in transcript.requests where !request.isReplay && (replacements.contains(index) || request.isSupplemental) {
                 if !request.belongs(to: original.day) {
                     if (request.accountingIntervalStart ?? .distantFuture) < original.day.end,
                        (request.accountingIntervalEnd ?? .distantPast) >= original.day.date {
-                        result.sessions[index].usage.costIsIncomplete = true
-                        incomplete.insert(index)
+                        mark(index, .dayBoundary)
                     }
                     continue
                 }
                 guard request.billing.tokens["input_tokens"] != nil, request.billing.tokens["output_tokens"] != nil else {
-                    incomplete.insert(index); continue
+                    mark(index, .sourceIncomplete); continue
                 }
                 request.id = "request-" + UUID().uuidString
                 owners[request.id] = index
@@ -119,8 +131,9 @@ struct ClaudeAccountingService: Sendable {
                 guard rows.allSatisfy({ request in
                     guard let usage = prices[request.id] else { return false }
                     return TokenCategory.allCases.allSatisfy { usage.value(for: $0) == request.usage.value(for: $0) }
-                }) else { failed.insert(index); result.sessions[index].usage.costIsIncomplete = true; continue }
+                }) else { failed.insert(index); mark(index, .calculationFailed); continue }
                 result.sessions[index].usage = .zero
+                result.sessions[index].costReasons?.removeAll { $0 == .missingPrice }
                 result.sessions[index].modelBreakdowns = []
                 result.sessions[index].models = []
             }
@@ -128,8 +141,9 @@ struct ClaudeAccountingService: Sendable {
                 guard let index = owners[request.id] else { continue }
                 guard !failed.contains(index) else { continue }
                 guard let usage = prices[request.id], TokenCategory.allCases.allSatisfy({ usage.value(for: $0) == request.usage.value(for: $0) }) else {
-                    result.sessions[index].usage.costIsIncomplete = true; continue
+                    mark(index, .calculationFailed); continue
                 }
+                if usage.costIsIncomplete == true { mark(index, .missingPrice) }
                 result.sessions[index].usage = result.sessions[index].usage + usage
                 if let model = result.sessions[index].modelBreakdowns.firstIndex(where: { $0.id == request.modelForAccounting }) {
                     result.sessions[index].modelBreakdowns[model].usage = result.sessions[index].modelBreakdowns[model].usage + usage
@@ -139,7 +153,7 @@ struct ClaudeAccountingService: Sendable {
                 }
             }
         } catch is CancellationError { throw CancellationError() }
-        catch { for index in Set(owners.values) { result.sessions[index].usage.costIsIncomplete = true } }
+        catch { for index in Set(owners.values) { mark(index, .calculationFailed) } }
         for index in incomplete { result.sessions[index].usage.costIsIncomplete = true }
         return result
     }
@@ -149,23 +163,58 @@ struct ClaudeAccountingService: Sendable {
         return try await withTaskCancellationHandler(operation: { try await task.value }, onCancel: { task.cancel() })
     }
 
+    /// Read bounded chunks and retain accounting fields only. Large message/tool
+    /// bodies must not impose the old 32 MiB whole-file limit on daily accounting.
     static func read(_ file: URL, sessionID: String) throws -> SessionTranscript? {
-        guard let size = try file.resourceValues(forKeys: [.fileSizeKey]).fileSize, size <= 32 * 1024 * 1024 else {
-            throw UsageError.outputTooLarge
-        }
-        let data = try Data(contentsOf: file)
-        guard data.count <= 32 * 1024 * 1024 else { throw UsageError.outputTooLarge }
-        guard data.range(of: Data("\"modelUsage\"".utf8)) != nil else { return nil }
-        var decoder = TranscriptDecoder(source: "claude")
-        decoder.origin = file.path
-        for line in data.split(separator: 10) where !line.isEmpty {
+        let maximumBytes = TranscriptService.maximumBytes
+        guard let size = try file.resourceValues(forKeys: [.fileSizeKey]).fileSize, size <= maximumBytes else { throw UsageError.outputTooLarge }
+        let handle = try FileHandle(forReadingFrom: file)
+        defer { try? handle.close() }
+        var pending = Data(), readBytes = 0, retainedBytes = 0
+        var events: [TranscriptEvent] = []
+        var hasSnapshot = false
+        func consume(_ line: Data) throws {
             try Task.checkCancellation()
-            guard let row = try JSONSerialization.jsonObject(with: Data(line)) as? [String: Any] else { continue }
-            if row["modelUsage"] != nil, row["sessionId"] as? String != sessionID {
-                throw UsageError.malformedJSON("Session accounting identity mismatch")
+            guard !line.allSatisfy({ $0 == 32 || $0 == 9 || $0 == 13 }) else { return }
+            guard let root = try JSONSerialization.jsonObject(with: line) as? [String: Any] else { return }
+            if root["modelUsage"] != nil {
+                guard root["sessionId"] as? String == sessionID else { throw UsageError.malformedJSON("Session accounting identity mismatch") }
+                hasSnapshot = true
             }
-            decoder.append(row)
+            let keys = Set(["type", "timestamp", "created_at", "sessionId", "requestId", "clientRequestId", "client_request_id", "uuid", "parentUuid", "isSidechain", "isApiErrorMessage", "modelUsage", "role", "model", "usage"])
+            var row = root.filter { keys.contains($0.key) }
+            if let attachment = root["attachment"] as? [String: Any] { row["attachment"] = attachment.filter { $0.key == "type" } }
+            if let message = root["message"] as? [String: Any] {
+                var safe = message.filter { ["id", "role", "model", "usage"].contains($0.key) }
+                if let blocks = message["content"] as? [[String: Any]] {
+                    safe["content"] = blocks.map { $0.filter { ["type", "id", "tool_use_id"].contains($0.key) } }
+                }
+                row["message"] = safe
+            }
+            let bytes = try JSONSerialization.data(withJSONObject: row, options: [.sortedKeys])
+            retainedBytes += bytes.count
+            guard retainedBytes <= 32 * 1024 * 1024, events.count < 200_000 else { throw UsageError.outputTooLarge }
+            let record = TranscriptRecord(text: String(decoding: bytes, as: UTF8.self), sequence: events.count, origin: file.path)
+            var event = TranscriptEvent(id: "accounting-\(events.count)", kind: .context, title: "")
+            event.attach(record)
+            events.append(event)
         }
-        return try TranscriptUsageParser.annotate(.init(events: decoder.finish()), source: "claude")
+        while let chunk = try handle.read(upToCount: 64 * 1024), !chunk.isEmpty {
+            try Task.checkCancellation()
+            readBytes += chunk.count
+            guard readBytes <= maximumBytes else { throw UsageError.outputTooLarge }
+            pending.append(chunk)
+            var start = pending.startIndex
+            while let newline = pending[start...].firstIndex(of: 10) {
+                guard newline - start <= 16 * 1024 * 1024 else { throw UsageError.outputTooLarge }
+                try consume(Data(pending[start..<newline]))
+                start = newline + 1
+            }
+            pending = Data(pending[start...])
+            guard pending.count <= 16 * 1024 * 1024 else { throw UsageError.outputTooLarge }
+        }
+        if !pending.isEmpty { try consume(pending) }
+        guard hasSnapshot else { return nil }
+        return try TranscriptUsageParser.annotate(.init(events: events), source: "claude")
     }
 }

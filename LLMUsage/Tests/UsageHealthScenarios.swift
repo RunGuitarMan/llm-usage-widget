@@ -14,14 +14,24 @@ private actor HealthService: CCUsageServing {
     var date: Date
     var failures: [String: UsageError] = [:]
     var held = false
+    var incomplete: [String: UsageCostReason] = [:]
+    var calls: [String: Int] = [:]
     init(date: Date) { self.date = date }
     func fail(_ error: UsageError?, day: UsageDay) { failures[day.cacheKey] = error }
     func hold(_ held: Bool) { self.held = held }
+    func cost(_ reason: UsageCostReason?, day: UsageDay) { incomplete[day.cacheKey] = reason }
+    func setDate(_ date: Date) { self.date = date }
+    func count(_ day: UsageDay) -> Int { calls[day.cacheKey, default: 0] }
     func fetch(day: UsageDay, customPath: String, mode: UsageUpdateMode) async throws -> UsageSnapshot {
+        calls[day.cacheKey, default: 0] += 1
         while held { try await Task.sleep(for: .milliseconds(10)) }
         if let error = failures[day.cacheKey] { throw error }
         var data = SampleData.snapshot(now: date)
         data.day = day
+        if let reason = incomplete[day.cacheKey] {
+            data.sessions[0].usage.costIsIncomplete = true
+            data.sessions[0].costReasons = [reason]
+        }
         return data
     }
     func diagnose(customPath: String, forceDetect: Bool) -> CLIDiagnostics { .init(path: "fixture", version: "1") }
@@ -220,6 +230,97 @@ enum UsageHealthScenarios {
             await service.fail(nil, day: failedDay)
             await reopened.retryProblem(expected)
             try requireHealth(reopened.problems().isEmpty && reopened.selectedDay == today, "Retry did not repair the failed day or changed the selected day")
+        }
+        await check("Health: browsing ten incomplete dates never contaminates today's app or widget") {
+            let suite = "health-scope-\(UUID())", repository = HealthRepository(), service = HealthService(date: now)
+            let prefs = UserDefaults(suiteName: suite)!
+            defer { prefs.removePersistentDomain(forName: suite) }
+            for offset in 1...10 { await service.cost(.sourceIncomplete, day: today.adding(days: -offset)) }
+            let store = UsageStore(service: service, repository: repository, defaults: prefs, now: { now }, widgetReloadDelay: 0, reloadWidget: {})
+            await store.refresh(); await store.waitForHistoryBackfill()
+            for offset in 1...10 {
+                let day = today.adding(days: -offset)
+                await store.selectCustomDate(day.date)
+                let scoped = store.problems(for: day)
+                try requireHealth(scoped.map(\.reference) == [.init(kind: .cost, day: day)], "Selected day leaked other dates or became stale")
+                try requireHealth(store.problems(for: today).isEmpty, "History browsing contaminated today's report")
+                let widget = WidgetPresentation(status: store.presentationStatus, now: now)
+                try requireHealth(widget.problems(at: now).isEmpty, "History browsing contaminated the widget")
+            }
+            try requireHealth(store.problems().filter { $0.reference.kind == .cost }.count == 10, "Explicit diagnostics lost historical issues")
+            store.navigate(.overview)
+            try requireHealth(store.problems(for: store.selectedDay).isEmpty, "Returning to today retained old warnings")
+        }
+        await check("Health: acknowledgements survive retries and restart; new causes are visible") {
+            let suite = "health-dismiss-\(UUID())", repository = HealthRepository(), service = HealthService(date: now)
+            let prefs = UserDefaults(suiteName: suite)!
+            defer { prefs.removePersistentDomain(forName: suite) }
+            await service.cost(.sourceIncomplete, day: today)
+            let store = UsageStore(service: service, repository: repository, defaults: prefs, now: { now }, widgetReloadDelay: 0, reloadWidget: {})
+            await store.refresh(); await store.waitForHistoryBackfill()
+            let issue = store.problems(for: today).first!
+            store.hideProblem(issue)
+            await store.retryProblem(issue.reference)
+            try requireHealth(store.problems(for: today, includeHidden: false).isEmpty, "Retry resurrected an acknowledged limitation")
+            try requireHealth(WidgetPresentation(status: store.presentationStatus, now: now).problems(at: now).isEmpty, "Widget ignored acknowledgement")
+            let reopened = UsageStore(service: service, repository: repository, defaults: prefs, now: { now }, widgetReloadDelay: 0, reloadWidget: {})
+            await reopened.restoreSavedData()
+            try requireHealth(reopened.problems(for: today, includeHidden: false).isEmpty && reopened.problems(for: today).count == 1, "Relaunch lost acknowledgement or hid detailed diagnostics")
+            await service.cost(.sourceMismatch, day: today)
+            await reopened.retryProblem(issue.reference)
+            try requireHealth(reopened.problems(for: today, includeHidden: false).count == 1, "A different cause stayed hidden")
+            try requireHealth(reopened.recoveryResult?.incomplete == 1 && reopened.recoveryResult?.failed == 0, "Partial retry has no explicit outcome")
+            await service.cost(nil, day: today)
+            await reopened.retryProblem(issue.reference)
+            try requireHealth(reopened.recoveryResult?.repaired == 1 && reopened.problems(for: today).isEmpty, "Repair retained warning")
+            await service.cost(.sourceIncomplete, day: today)
+            await reopened.retryProblem(issue.reference)
+            try requireHealth(reopened.problems(for: today, includeHidden: false).count == 1, "A new occurrence after repair stayed hidden")
+        }
+        await check("Health: explicit recovery forces all seven dates and reports partial and failed outcomes") {
+            let suite = "health-recovery-\(UUID())", repository = HealthRepository(), service = HealthService(date: now)
+            let prefs = UserDefaults(suiteName: suite)!
+            defer { prefs.removePersistentDomain(forName: suite) }
+            for offset in 0...6 { await service.cost(.missingPrice, day: today.adding(days: -offset)) }
+            let store = UsageStore(service: service, repository: repository, defaults: prefs, now: { now }, widgetReloadDelay: 0, reloadWidget: {})
+            await store.refresh(); await store.waitForHistoryBackfill()
+            await store.retryAllProblems()
+            for offset in 0...6 {
+                let count = await service.count(today.adding(days: -offset))
+                try requireHealth(count == 2, "Explicit recovery reused an incomplete historical report or fetched it twice")
+            }
+            try requireHealth(store.recoveryResult?.incomplete == 7 && store.recoveryCompleted == 7, "Recovery did not report unchanged partial data")
+            for offset in 0...4 { await service.cost(nil, day: today.adding(days: -offset)) }
+            await service.fail(.timedOut, day: today.adding(days: -6))
+            await store.retryAllProblems()
+            try requireHealth(store.recoveryResult?.repaired == 5 && store.recoveryResult?.incomplete == 1 && store.recoveryResult?.failed == 1,
+                              "Mixed recovery outcomes were collapsed into success")
+            try requireHealth(store.problems(for: today).isEmpty, "A historical retry failure contaminated today")
+            await repository.failStatus(true)
+            await store.retryProblem(.init(kind: .cost, day: today))
+            await repository.failStatus(false)
+            await store.retryAllProblems()
+            try requireHealth(store.recoveryResult?.days.contains(today) == true && store.storageError == nil, "Bulk recovery did not retry a global storage problem")
+        }
+        await check("Health: repaired restored issues never return after cache eviction or relaunch") {
+            let suite = "health-eviction-\(UUID())", repository = HealthRepository(), service = HealthService(date: now.addingTimeInterval(-1))
+            let prefs = UserDefaults(suiteName: suite)!
+            defer { prefs.removePersistentDomain(forName: suite) }
+            let day = today.adding(days: -10)
+            var old = snapshot(); old.day = day; old.sessions[0].usage.costIsIncomplete = true
+            var saved = status(snapshot())
+            saved.presentation?.costIssues = [UsageCostIssue(snapshot: old)!]
+            try await repository.writeStatus(saved)
+            let store = UsageStore(service: service, repository: repository, defaults: prefs, now: { now }, widgetReloadDelay: 0, reloadWidget: {})
+            await store.restoreSavedData()
+            let reference = UsageProblemReference(kind: .cost, day: day)
+            await store.retryProblem(reference)
+            await service.setDate(now)
+            for offset in 11...50 { await store.retryProblem(.init(kind: .cost, day: today.adding(days: -offset))) }
+            try requireHealth(!store.problems().contains { $0.reference == reference }, "Cache eviction resurrected a repaired warning")
+            let reopened = UsageStore(service: service, repository: repository, defaults: prefs, now: { now }, reloadWidget: {})
+            await reopened.restoreSavedData()
+            try requireHealth(!reopened.problems().contains { $0.reference == reference }, "Repaired warning was persisted again")
         }
         await check("Health: an early preference write cannot replace un-restored saved reports with an empty envelope") {
             let suite = "health-\(UUID())"

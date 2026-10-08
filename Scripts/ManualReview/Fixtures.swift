@@ -4,8 +4,10 @@ import Foundation
 @MainActor final class ReviewFixtureService: CCUsageServing {
     private var fixture = ReviewFixture.normal
     private var revision = 0
+    private var partialHistory = false
     private(set) var fetchCount = 0
-    func configure(_ fixture: ReviewFixture) { revision += 1; self.fixture = fixture }
+    func configure(_ fixture: ReviewFixture) { revision += 1; self.fixture = fixture; partialHistory = false }
+    func usePartialHistory() { partialHistory = true }
     func releaseResponse() { fixture = .normal }
     func fetch(day: UsageDay, customPath: String, mode: UsageUpdateMode) async throws -> UsageSnapshot {
         fetchCount += 1
@@ -17,7 +19,8 @@ import Foundation
         if fixture == .missing { throw UsageError.missingExecutable }
         if fixture == .failure || fixture == .multiple { throw UsageError.timedOut }
         if fixture == .gaps && day != UsageDay(timezone: day.timezone) { throw UsageError.timedOut }
-        var data = fixture.snapshot(day: day) ?? SampleData.multiSourceSnapshot()
+        let selected = partialHistory && day != UsageDay(timezone: day.timezone) ? ReviewFixture.partial : fixture
+        var data = selected.snapshot(day: day) ?? SampleData.multiSourceSnapshot()
         data.day = day
         return data
     }

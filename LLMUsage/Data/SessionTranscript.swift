@@ -101,12 +101,26 @@ struct SessionTranscript: Sendable {
     var requests: [TranscriptRequest] = []
     var usageSupported = false
     var usageUncertain = false
+    var usageUncertaintyDates: [Date] = []
+    var usageHasUnscopedUncertainty = false
     var imported = false
     var telemetryPricingSpeed: String?
     var claudeSnapshotValidated = false
     var claudeSessionID: String?
     var claudeAccountingCoverage: [ClaudeAccountingCoverage] = []
     var telemetryRates: [String: [String: Double]] = [:]
+
+    mutating func markUsageUncertain(at date: Date?) {
+        if usageUncertain && usageUncertaintyDates.isEmpty { usageHasUnscopedUncertainty = true }
+        usageUncertain = true
+        if let date { usageUncertaintyDates.append(date) }
+        else { usageHasUnscopedUncertainty = true }
+    }
+
+    func usageIsUncertain(on day: UsageDay) -> Bool {
+        usageUncertain && (usageHasUnscopedUncertainty || usageUncertaintyDates.isEmpty
+            || usageUncertaintyDates.contains { $0 >= day.date && $0 < day.end })
+    }
 
     var messageCount: Int { events.filter { $0.isMessage && !$0.isUsageOnly }.count }
     var toolCount: Int { events.filter { $0.kind == .tool }.count }

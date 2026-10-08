@@ -84,6 +84,30 @@ enum ClaudeAccountingScenarios {
                 try require(value.requests.allSatisfy { !$0.isSupplemental } && value.usageUncertain, "Unvalidated snapshot accepted")
             }
         }
+        await check("Claude accounting: large logs stream accounting fields without retaining message bodies") {
+            let root = FileManager.default.temporaryDirectory.appendingPathComponent("accounting-large-\(UUID())")
+            try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+            defer { try? FileManager.default.removeItem(at: root) }
+            let file = root.appendingPathComponent("accounting-fixture.jsonl")
+            FileManager.default.createFile(atPath: file.path, contents: nil)
+            let handle = try FileHandle(forWritingTo: file)
+            let payload = String(repeating: "large-private-tool-body", count: 50_000)
+            var large = try JSONSerialization.data(withJSONObject: ["type": "progress", "data": payload]); large.append(10)
+            for _ in 0..<34 { try handle.write(contentsOf: large) }
+            let rows = try fixtures()[1]["records"] as! [[String: Any]]
+            for row in rows {
+                var data = try JSONSerialization.data(withJSONObject: row); data.append(10)
+                try handle.write(contentsOf: data)
+            }
+            try handle.close()
+            let expected = try decode(rows)
+            let parsed = try ClaudeAccountingService.read(file, sessionID: "accounting-fixture")!
+            try require(parsed.requests.count == expected.requests.count && !parsed.usageUncertain,
+                        "A valid log larger than 32 MiB became incomplete")
+            try require(parsed.requests.reduce(TokenUsage.zero) { $0 + $1.usage } == expected.requests.reduce(TokenUsage.zero) { $0 + $1.usage },
+                        "Streaming changed accounting totals")
+            try require(!TranscriptUsageParser.records(parsed).contains { $0.text.contains("large-private-tool-body") }, "Accounting retained message bodies")
+        }
         await check("Claude accounting: cumulative overhead crossing midnight stays out of arbitrary daily buckets") {
             var rows = try fixtures()[1]["records"] as! [[String: Any]]
             rows[0]["timestamp"] = "2026-10-06T23:59:00Z"

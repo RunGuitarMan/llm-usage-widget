@@ -95,6 +95,7 @@ struct UsageSession: Codable, Equatable, Identifiable, Sendable {
     var agent: String? = nil
     var originalID: String? = nil
     var reasoningOutputTokens: Int64? = nil
+    var costReasons: [UsageCostReason]? = nil
 
     var sourceID: String { agent ?? "claude" }
     var sourceLabel: String { UsageSource.label(sourceID) }
@@ -308,6 +309,10 @@ struct UsageSnapshot: Codable, Equatable, Sendable {
     var pricingKey: String? = nil
     // Derived totals prevent a stale or inconsistent CLI totals object from contradicting rows.
     var totals: TokenUsage { sessions.reduce(.zero) { $0 + $1.usage } }
+    var costReasons: [UsageCostReason] {
+        Array(Set(sessions.filter { $0.usage.costIsIncomplete == true }.flatMap { $0.costReasons ?? [] }))
+            .sorted { $0.rawValue < $1.rawValue }
+    }
     var topModel: String { modelSummaries.first?.id ?? "—" }
     var sortedSessions: [UsageSession] { SessionSort.tokens.sorted(sessions) }
 

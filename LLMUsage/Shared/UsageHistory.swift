@@ -31,6 +31,7 @@ struct DailyUsageTotal: Codable, Equatable, Identifiable, Sendable {
     var reportedUsage: TokenUsage? = nil
     var engineID: String? = nil
     var id: String { day.cacheKey }
+    var costReasons: [UsageCostReason]? = nil
     // A snapshot collected before midnight is never promoted to a complete day at rollover.
     var isPartialDay: Bool { capturedAt < day.end }
 
@@ -40,6 +41,7 @@ struct DailyUsageTotal: Codable, Equatable, Identifiable, Sendable {
         sessionCount = snapshot.sessions.count
         capturedAt = snapshot.generatedAt
         engineID = snapshot.dataContext?.engineID
+        costReasons = snapshot.costReasons
         reportedUsage = snapshot.sessions.reduce(.zero) { $0 + $1.usage.reported }
         // Keep model allocations, not session IDs, paths or transcripts, in history.
         var grouped: [[String]: TokenUsage] = [:]
