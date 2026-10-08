@@ -93,7 +93,7 @@ private actor WidgetFixtureService: CCUsageServing {
         try ReviewCheck.require(!WidgetExtensionLifecycle.shouldRetire(process, current: current, executable: path), "Invalid PID was selected for termination")
         print("PASS Widget lifecycle: stale executable/path detection, current process and other bundle isolation")
         try await cachedHostRecovery()
-        try await replacementLifecycle()
+        try await WidgetProcessFixture.run()
     }
 
     private static func cachedHostRecovery() async throws {
@@ -162,51 +162,5 @@ private actor WidgetFixtureService: CCUsageServing {
             && Lifecycle.recoveryAllowed(lastRecovery: now.addingTimeInterval(-300), now: now)
             && Lifecycle.recoveryAllowed(lastRecovery: now.addingTimeInterval(1), now: now), "Host recovery cooldown is incorrect")
         print("PASS Widget host recovery: deleted launch path, healthy/foreign jobs, fail-closed parsing, PID/job races and restart cooldown")
-    }
-
-    /// Non-UI process fixture: a signed copy of the system sleep utility, never
-    /// another application/scene. Reproduces the mapped-old-code update failure.
-    private static func replacementLifecycle() async throws {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent("WidgetProcessCheck-\(UUID().uuidString)")
-        defer { try? FileManager.default.removeItem(at: root) }
-        let executable = root.appendingPathComponent("LLMUsageWidget.appex/Contents/MacOS/LLMUsageWidget")
-        try FileManager.default.createDirectory(at: executable.deletingLastPathComponent(), withIntermediateDirectories: true)
-        func signedCopy(_ source: String, to destination: URL) async throws {
-            try FileManager.default.copyItem(atPath: source, toPath: destination.path)
-            let signer = Process()
-            signer.executableURL = URL(fileURLWithPath: "/usr/bin/codesign")
-            signer.arguments = ["--force", "--sign", "-", "--identifier", "local.LLMUsage.LifecycleFixture.Widget", destination.path]
-            signer.standardOutput = FileHandle.nullDevice
-            signer.standardError = FileHandle.nullDevice
-            try signer.run()
-            while signer.isRunning { try await Task.sleep(for: .milliseconds(10)) }
-            try ReviewCheck.require(signer.terminationStatus == 0, "Could not sign non-UI process fixture")
-        }
-        try await signedCopy("/bin/sleep", to: executable)
-        let process = Process()
-        process.executableURL = executable
-        process.arguments = ["60"]
-        try process.run()
-        defer { if process.isRunning { process.terminate() } }
-        try await Task.sleep(for: .milliseconds(100))
-        guard let original = WidgetExtensionLifecycle.staticIdentity(at: executable),
-              let running = WidgetExtensionLifecycle.processIdentity(process.processIdentifier) else {
-            throw NSError(domain: "WidgetChecks", code: 1, userInfo: [NSLocalizedDescriptionKey: "Cannot identify running signed extension fixture"])
-        }
-        try ReviewCheck.require(!WidgetExtensionLifecycle.retire(running, current: original, executable: executable.path),
-                                "Lifecycle stopped the current executable")
-        // Replace the inode, like Sparkle/Finder; the old process keeps its map.
-        let replacement = root.appendingPathComponent("replacement")
-        try await signedCopy("/bin/cat", to: replacement)
-        try ReviewCheck.require(rename(replacement.path, executable.path) == 0, "Could not replace fixture executable")
-        guard let updated = WidgetExtensionLifecycle.staticIdentity(at: executable),
-              let stale = WidgetExtensionLifecycle.processIdentity(process.processIdentifier) else {
-            throw NSError(domain: "WidgetChecks", code: 2, userInfo: [NSLocalizedDescriptionKey: "Lost identity after replacing the mapped executable"])
-        }
-        try ReviewCheck.require(updated != original, "Update fixture did not change signing identity")
-        try ReviewCheck.require(WidgetExtensionLifecycle.retire(stale, current: updated, executable: executable.path),
-                                "Mapped old executable survived replacement at the same path")
-        try await ReviewCheck.wait("Retired widget process did not exit") { !process.isRunning }
-        print("PASS Widget process integration: current executable survives; mapped old executable retires after atomic replacement")
     }
 }

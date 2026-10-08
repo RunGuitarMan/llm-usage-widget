@@ -5,7 +5,8 @@ mkdir -p build/ModuleCache build/CheckModules
 source Scripts/toolchain.sh
 CORE=(LLMUsage/Data/*.swift LLMUsage/Services/*.swift LLMUsage/Shared/UsageModels.swift LLMUsage/Shared/UsageHealth.swift
       LLMUsage/Shared/Localization.swift LLMUsage/Shared/UsageFormatting.swift LLMUsage/Shared/UsageHistory.swift LLMUsage/Shared/UsageRoute.swift
-      LLMUsage/Shared/SnapshotStorage.swift LLMUsage/Shared/SampleData.swift LLMUsage/App/RefreshSchedule.swift LLMUsage/App/UsageStore.swift)
+      LLMUsage/Shared/SnapshotStorage.swift LLMUsage/Shared/SampleData.swift LLMUsage/App/RefreshSchedule.swift LLMUsage/App/UsageStore.swift
+      LLMUsage/App/WidgetExtensionLifecycle.swift Scripts/ManualReview/WidgetProcessFixture.swift)
 SCENARIOS=(LLMUsage/Tests/*Scenarios.swift)
 # Check the SwiftPM module boundary even on CLT hosts without XCTest.
 "$LLM_SWIFTC" -parse-as-library -D SWIFT_PACKAGE -enable-testing -emit-module -module-name LLMUsageCore \

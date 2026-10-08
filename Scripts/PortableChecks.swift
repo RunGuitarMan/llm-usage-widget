@@ -52,6 +52,12 @@ struct PortableChecks {
             do { try await action(); passed += 1; print("PASS \(name)") }
             catch { failures.append(name); print("FAIL \(name): \(error)") }
         }
+        if CommandLine.arguments.contains("--widget-lifecycle-only") {
+            await check("Widget process replacement") { try await WidgetProcessFixture.run() }
+            print("\(passed) widget lifecycle checks passed; \(failures.count) failed.")
+            if !failures.isEmpty { exit(1) }
+            return
+        }
         if CommandLine.arguments.contains("--telemetry-only") {
             await ClaudeTelemetryScenarios.run(check: check)
             print("\(passed) telemetry checks passed; \(failures.count) failed.")
@@ -71,6 +77,7 @@ struct PortableChecks {
             if !failures.isEmpty { exit(1) }
             return
         }
+        await check("Widget process replacement") { try await WidgetProcessFixture.run() }
         let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
         let fixtures = root.appendingPathComponent("LLMUsage/Tests/Fixtures")
         let now = ISO8601DateFormatter().date(from: "2026-09-28T18:00:00Z")!

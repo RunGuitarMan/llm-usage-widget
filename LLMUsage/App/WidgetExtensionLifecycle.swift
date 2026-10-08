@@ -200,15 +200,14 @@ enum WidgetExtensionLifecycle {
             return replacedProcess(pid, info: info, executable: executable, loaded: loaded)
         }
         guard let guest else { return nil }
-        // CopyStaticCode/CopySigningInformation can read the replacement from
-        // disk. Dynamic validation is what detects the still-running old image.
-        let validity = SecCodeCheckValidity(guest, [], nil)
-        guard validity == errSecSuccess || validity == errSecCSStaticCodeChanged else { return nil }
+        // The dynamic-code guest retains the kernel's original code directory.
+        // Validating it against the replacement on disk rejects the stale
+        // process we need to identify. Compare its retained identity instead;
+        // retirement still rechecks its UID, path, start time and signing ID.
         var code: SecStaticCode?
         guard SecCodeCopyStaticCode(guest, [], &code) == errSecSuccess, let code,
               let identity = identity(code) else { return nil }
         return ProcessIdentity(pid: pid, path: executable, code: identity,
-            staticCodeChanged: validity == errSecCSStaticCodeChanged,
             startSeconds: info.pbi_start_tvsec, startMicroseconds: info.pbi_start_tvusec)
     }
 
