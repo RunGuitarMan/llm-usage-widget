@@ -62,7 +62,14 @@ private actor WidgetFixtureService: CCUsageServing {
         try ReviewCheck.require(provider.readEntry().snapshot?.totals.cost == 56.78,
                                 "Optional history failure hid a valid current snapshot")
         try Data("broken".utf8).write(to: directory.appendingPathComponent(SnapshotSlot.today.rawValue), options: .atomic)
-        try ReviewCheck.require(provider.readEntry().storageUnavailable, "Corrupt snapshot silently appeared as loading")
+        let published = provider.readEntry()
+        try ReviewCheck.require(published.snapshot == second.snapshot && published.history == second.history
+                                && !published.storageUnavailable,
+                                "Damaged legacy files overrode the valid atomic presentation")
+        try Data("broken".utf8).write(to: directory.appendingPathComponent("refresh-status.json"), options: .atomic)
+        let corrupt = provider.readEntry()
+        try ReviewCheck.require(corrupt.snapshot == nil && corrupt.storageUnavailable,
+                                "Corrupt presentation silently appeared as loading")
         await store.refresh()
         await store.waitForHistoryBackfill()
         try ReviewCheck.require(provider.readEntry().snapshot?.totals.cost == 56.78 && !provider.readEntry().storageUnavailable,

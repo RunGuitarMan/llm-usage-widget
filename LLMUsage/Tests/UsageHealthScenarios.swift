@@ -114,6 +114,13 @@ enum UsageHealthScenarios {
             try await repository.writeStatus(status(fresh))
             let updated = try SnapshotFiles.presentation(directory: directory)
             try requireHealth(updated.snapshot == fresh && UsageHealth.problems(snapshot: updated.snapshot, status: updated.status, now: now).isEmpty, "Successful envelope retained warning")
+            try Data("corrupt legacy snapshot".utf8).write(to: directory.appendingPathComponent(SnapshotSlot.today.rawValue), options: .atomic)
+            let intact = try SnapshotFiles.presentation(directory: directory)
+            try requireHealth(intact.snapshot == fresh && !intact.storageUnavailable, "Damaged legacy snapshot overrode the valid envelope")
+            try await repository.write(fresh, to: .today)
+            try Data("corrupt status".utf8).write(to: directory.appendingPathComponent("refresh-status.json"), options: .atomic)
+            do { _ = try SnapshotFiles.presentation(directory: directory); throw HealthCheckFailure(description: "Corrupt envelope fell back to a legacy snapshot") }
+            catch is UsageError { }
             var corrupt = status(fresh)
             corrupt.presentation?.snapshot?.sessions.append(fresh.sessions[0])
             try await repository.writeStatus(corrupt)
