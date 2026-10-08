@@ -170,6 +170,7 @@ struct CCUsageService: CCUsageServing {
     var pricingArchive = TranscriptPricingArchive()
     // Test seam for isolated real-helper checks; production inherits its runtime environment.
     var environment: [String: String]?
+    var telemetryStore: ClaudeTelemetryStore?
 
     private func executionEnvironment(for executable: URL) -> [String: String] {
         environment ?? (runtime == nil ? ProcessRunner.environment(for: executable) : CCUsageRuntime.environment())
@@ -208,19 +209,26 @@ struct CCUsageService: CCUsageServing {
             pricingArguments = ["--config", configuration.path]
         }
         let extraArguments = pricingArguments
+        var telemetryEvents: [String: [ClaudeTelemetryEvent]] = [:]
+        var telemetryFailed = false
+        if let store = telemetryStore ?? (runtime == nil ? nil : .shared) {
+            do { telemetryEvents = try await store.snapshot().sessions }
+            catch is CancellationError { throw CancellationError() }
+            catch { telemetryFailed = true }
+        }
+        let accounting = ClaudeAccountingService(environment: executionEnvironment(for: executable),
+            telemetryEvents: telemetryEvents, telemetryFailed: telemetryFailed)
         async let claude = fetchReport(.claude, day: day, executable: executable, extraArguments: extraArguments)
         guard mode == .allAgents else {
             let focused = try await claude
-            var result = try await ClaudeAccountingService(environment: executionEnvironment(for: executable))
-                .reconcile(focused, executable: executable, configuration: contents)
+            var result = try await accounting.reconcile(focused, executable: executable, configuration: contents)
             result.pricingKey = pricingKey
             return result
         }
 
         async let unified = fetchReport(.unified, day: day, executable: executable, extraArguments: extraArguments)
         let (rawFocused, combined) = try await (claude, unified)
-        let focused = try await ClaudeAccountingService(environment: executionEnvironment(for: executable))
-            .reconcile(rawFocused, executable: executable, configuration: contents)
+        let focused = try await accounting.reconcile(rawFocused, executable: executable, configuration: contents)
         // ccusage 20.0.24/26 filters whole Claude sessions by lastActivity in the
         // unified report. The focused command filters entries before summing.
         // Always replace Claude, including when its focused report is empty.

@@ -77,13 +77,14 @@ enum TelemetryText {
         let days = defaults.integer(forKey: "telemetry.retention")
         let selectedRetention = [7, 30, 90].contains(days) ? days : 30
         retention = selectedRetention
-        store = ClaudeTelemetryStore(directory: directory, retentionDays: selectedRetention)
+        store = isolated ? ClaudeTelemetryStore(directory: directory, retentionDays: selectedRetention) : .shared
         enabled = !isolated && defaults.bool(forKey: "telemetry.enabled")
         port = isolated ? 0 : UInt16(exactly: defaults.integer(forKey: "telemetry.port")) .flatMap { $0 == 0 ? nil : $0 } ?? 4318
         settingsURL = testRoot?.appendingPathComponent(".claude/settings.json") ?? defaults.string(forKey: "telemetry.settingsPath").map { URL(fileURLWithPath: $0) } ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".claude/settings.json")
     }
     func start() async {
         guard !started else { return }; started = true
+        do { try await store.setRetention(retention) } catch { failure = .storage }
         await refresh()
         if enabled { await startReceiver(allowAlternative: !configured) }
         timer = Task { [weak self] in

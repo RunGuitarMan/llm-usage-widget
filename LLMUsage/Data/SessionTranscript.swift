@@ -102,6 +102,8 @@ struct SessionTranscript: Sendable {
     var imported = false
     var telemetryPricingSpeed: String?
     var claudeSnapshotValidated = false
+    var claudeSessionID: String?
+    var claudeAccountingCoverage: [ClaudeAccountingCoverage] = []
     var telemetryRates: [String: [String: Double]] = [:]
 
     var messageCount: Int { events.filter { $0.isMessage && !$0.isUsageOnly }.count }

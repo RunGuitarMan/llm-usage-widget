@@ -61,6 +61,14 @@ struct TelemetrySnapshot: Sendable {
 }
 
 actor ClaudeTelemetryStore {
+    static let shared: ClaudeTelemetryStore = {
+        // A report can open storage before the settings coordinator starts.
+        // Honor the saved retention immediately, especially a 90-day history.
+        let days = UserDefaults.standard.integer(forKey: "telemetry.retention")
+        return ClaudeTelemetryStore(directory: FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Application Support/LLMUsage/Telemetry"),
+            retentionDays: [7, 30, 90].contains(days) ? days : 30)
+    }()
     let directory: URL
     nonisolated let gate = TelemetryWriteGate()
     private let quota: Int

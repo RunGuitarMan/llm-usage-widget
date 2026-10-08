@@ -58,6 +58,19 @@ struct PortableChecks {
             if !failures.isEmpty { exit(1) }
             return
         }
+        if CommandLine.arguments.contains("--accounting-only") {
+            await ClaudeAccountingScenarios.run(check: check)
+            await ClaudeTelemetryAccountingScenarios.run(check: check)
+            await ClaudeTelemetryScenarios.run(check: check)
+            if let index = CommandLine.arguments.firstIndex(of: "--cli"), index + 1 < CommandLine.arguments.count {
+                let helper = CommandLine.arguments[index + 1]
+                await check("Real helper: previous Claude accounting regressions") { try await ClaudeAccountingScenarios.liveCheck(executablePath: helper) }
+                await check("Real helper: captured telemetry recovery, both modes, chat and tariff overrides") { try await ClaudeTelemetryAccountingScenarios.liveCheck(executablePath: helper) }
+            }
+            print("\(passed) accounting/telemetry checks passed; \(failures.count) failed.")
+            if !failures.isEmpty { exit(1) }
+            return
+        }
         let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
         let fixtures = root.appendingPathComponent("LLMUsage/Tests/Fixtures")
         let now = ISO8601DateFormatter().date(from: "2026-09-28T18:00:00Z")!
@@ -331,6 +344,7 @@ struct PortableChecks {
         await TranscriptChecks.run(check: check)
         await TranscriptUsageScenarios.run(check: check)
         await ClaudeAccountingScenarios.run(check: check)
+        await ClaudeTelemetryAccountingScenarios.run(check: check)
         await ClaudeTelemetryScenarios.run(check: check)
         await ClaudeResponseScenarios.run(check: check)
         await TranscriptTimingScenarios.run(check: check)
@@ -384,6 +398,9 @@ struct PortableChecks {
         }
         if ProcessInfo.processInfo.arguments.contains("--bundled-cli") {
             let helper = root.appendingPathComponent("build/LLM Usage.app/Contents/Helpers/ccusage").path
+            await check("Bundled ccusage: recovered telemetry costs agree across reports and chat") {
+                try await ClaudeTelemetryAccountingScenarios.liveCheck(executablePath: helper)
+            }
             await check("Bundled ccusage: captured prices and complete Claude session totals") {
                 try await ClaudeAccountingScenarios.liveCheck(executablePath: helper)
             }

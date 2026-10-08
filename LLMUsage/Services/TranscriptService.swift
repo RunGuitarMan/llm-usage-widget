@@ -53,6 +53,7 @@ struct TranscriptService: Sendable {
                 parent = try? read(session: parentSession, file: nil)
             }
             transcript = try TranscriptUsageParser.annotate(transcript, source: session.sourceID, parent: parent)
+            if session.sourceID == "claude" { transcript.claudeSessionID = ClaudeTelemetrySanitizer.session(session.rawID) }
             transcript = try TranscriptTimingParser.annotate(transcript, source: session.sourceID)
             return transcript
         }

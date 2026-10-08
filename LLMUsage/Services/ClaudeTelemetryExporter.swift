@@ -47,6 +47,9 @@ enum ClaudeTelemetryExporter {
             var speed: ClaudeTelemetryEvent.Speed?
             var appCost: Double?
             var cumulativeSessionContext: Bool
+            var missingCounters: [String]
+            var telemetryRecovery: String?
+            var transcriptCountersBeforeRecovery: [String: Int64]?
         }
         var schemaVersion = 1
         var sessionID: String
@@ -122,7 +125,10 @@ enum ClaudeTelemetryExporter {
                       cacheWrite5m: request.billing.cacheCreation["ephemeral_5m_input_tokens"], cacheWrite1h: request.billing.cacheCreation["ephemeral_1h_input_tokens"],
                       speed: request.billing.speed.flatMap(ClaudeTelemetryEvent.Speed.init(rawValue:)),
                       appCost: request.priced && request.usage.cost.isFinite && request.usage.cost >= 0 ? request.usage.cost : nil,
-                      cumulativeSessionContext: request.isSupplemental)
+                      cumulativeSessionContext: request.isSupplemental,
+                      missingCounters: ClaudeTelemetryAccounting.fields.filter { request.billing.tokens[$0] == nil },
+                      telemetryRecovery: request.telemetryRecovery,
+                      transcriptCountersBeforeRecovery: request.telemetryOriginalTokens.map { $0.filter { ClaudeTelemetryAccounting.fields.contains($0.key) } })
             }
             var rates: [String: [String: Double]] = [:]
             var candidates: [String: [String]] = [:]
@@ -162,9 +168,11 @@ enum ClaudeTelemetryExporter {
         IDs and all model aliases are replaced afresh for each archive. No mapping is included.
         Exact UTC times and the selected timezone are retained. Indirect identification by timing or numbers remains possible.
         costUSD is canonical; costMicros is a rounded fallback, never an additional charge.
-        Errors, conflicts and service calls do not increase LLM Usage totals. Missing values are unknown, not zero.
+        Successful identified API calls can complete accounting; errors and conflicts do not add charges.
+        missingCounters distinguishes absent transcript counters from actual zeros. telemetryRecovery labels completed/added calls.
+        transcriptCountersBeforeRecovery preserves only allowlisted original numeric counters, never transcript content.
         Durations describe individual API calls; their sum is not elapsed session time. TTL is not inferred from telemetry.
-        Accounting includes numeric JSONL requests and validated cumulative modelUsage adjustments only.
+        Accounting includes numeric JSONL requests, validated cumulative modelUsage adjustments and recovered API requests.
         Cumulative values are whole-session context, not daily spending. Same-scope comparisons appear in summary.json.
         Rates are USD per token. Missing rates/comparisons mean unavailable; no receipt or transcript text is included.
         Collection is potentially partial even when every visible request matches. The manifest records known gaps.

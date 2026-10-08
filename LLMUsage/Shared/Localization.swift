@@ -210,6 +210,8 @@ enum L10n {
         "Итог по журналу": ("Итог по журналу", "Log total"),
         "Сверка неполная": ("Сверка неполная", "Not reconciled"),
         "Для записи кэша без разбивки TTL применена ставка 5 минут.": ("Для записи кэша без разбивки TTL применена ставка 5 минут.", "Cache writes without a TTL breakdown use the 5-minute rate."),
+        "Часть API-расходов нельзя однозначно восстановить из телеметрии. Итог может быть неполным.": ("Часть API-расходов нельзя однозначно восстановить из телеметрии. Итог может быть неполным.", "Some API usage cannot be unambiguously recovered from telemetry. The total may be incomplete."),
+        "Недостающие API-расходы восстановлены по локальной телеметрии и рассчитаны по тарифам отчёта.": ("Недостающие API-расходы восстановлены по локальной телеметрии и рассчитаны по тарифам отчёта.", "Missing API usage was recovered from local telemetry and priced using the report's rates."),
         "+ служебные расходы": ("+ служебные расходы", "+ background usage"),
         "Служебные расходы сессии": ("Служебные расходы сессии", "Session background usage"),
         "Сверка расходов": ("Сверка расходов", "Usage reconciliation"),

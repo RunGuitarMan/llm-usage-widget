@@ -20,6 +20,8 @@ struct TranscriptRequest: Identifiable, Sendable {
     var accountingIntervalStart: Date?
     var accountingIntervalEnd: Date?
     var telemetryIdentity: TranscriptTelemetryIdentity?
+    var telemetryRecovery: String?
+    var telemetryOriginalTokens: [String: Int64]?
     var isSupplemental: Bool { accountingIntervalStart != nil }
     func belongs(to day: UsageDay) -> Bool {
         guard let date = timestamp, date >= day.date && date < day.end else { return false }
@@ -263,6 +265,7 @@ enum TranscriptUsageParser {
                 guard message["role"] as? String == "assistant" || root["type"] as? String == "assistant",
                       let raw = message["usage"] as? [String: Any] else { continue }
                 let model = message["model"] as? String ?? ""
+                guard model != "<synthetic>", root["isApiErrorMessage"] as? Bool != true else { continue }
                 guard var tokens = numbers(raw, keys: ["input_tokens", "output_tokens", "cache_creation_input_tokens", "cache_read_input_tokens"]),
                       let cache = numbers(TranscriptJSON.object(raw["cache_creation"]), keys: ["ephemeral_5m_input_tokens", "ephemeral_1h_input_tokens"]) else {
                     transcript.usageUncertain = true; continue
