@@ -31,20 +31,23 @@ enum InterfaceLanguage: String, CaseIterable, Codable, Identifiable, Sendable {
 struct LocalizedPhrase: ExpressibleByStringLiteral, ExpressibleByStringInterpolation, Sendable {
     var key: String
     var arguments: [String] = []
+    var numericArguments: [Int: Int64] = [:]
     init(stringLiteral value: String) { key = value }
     init(stringInterpolation: StringInterpolation) {
         key = stringInterpolation.key
         arguments = stringInterpolation.arguments
+        numericArguments = stringInterpolation.numericArguments
     }
     struct StringInterpolation: StringInterpolationProtocol {
         var key = ""
         var arguments: [String] = []
+        var numericArguments: [Int: Int64] = [:]
         init(literalCapacity: Int, interpolationCount: Int) { arguments.reserveCapacity(interpolationCount) }
         mutating func appendLiteral(_ literal: String) { key += literal }
         mutating func appendInterpolation<T>(_ value: T) {
             key += "{\(arguments.count)}"
-            if let value = value as? Int { arguments.append(UsageFormat.exact(Int64(value))) }
-            else if let value = value as? Int64 { arguments.append(UsageFormat.exact(value)) }
+            if let value = value as? Int { numericArguments[arguments.count] = Int64(value); arguments.append(String(value)) }
+            else if let value = value as? Int64 { numericArguments[arguments.count] = value; arguments.append(String(value)) }
             else { arguments.append(String(describing: value)) }
         }
     }
@@ -71,7 +74,7 @@ enum L10n {
             guard let range = Range(match.range, in: rendered),
                   let indexRange = Range(match.range(at: 1), in: template),
                   let index = Int(template[indexRange]), phrase.arguments.indices.contains(index) else { continue }
-            rendered.replaceSubrange(range, with: phrase.arguments[index])
+            rendered.replaceSubrange(range, with: phrase.numericArguments[index].map { UsageFormat.exact($0, language: language) } ?? phrase.arguments[index])
         }
         return rendered
     }
@@ -122,6 +125,8 @@ enum L10n {
         "Данные виджета недоступны": ("Данные виджета недоступны", "Widget data is unavailable"),
         "Данные требуют пересчёта": ("Данные требуют пересчёта", "Data needs recalculation"),
         "История неполная": ("История неполная", "History is incomplete"),
+        "Пересчёт данных…": ("Пересчёт данных…", "Recalculating…"),
+        "Настройки изменились. Ожидаем новые данные.": ("Настройки изменились. Ожидаем новые данные.", "Settings changed. Waiting for updated data."),
         "Общие данные": ("Общие данные", "Shared data"),
         "Приложению или виджету не удалось прочитать или сохранить общие данные. Виджет может показывать предыдущий результат.": ("Приложению или виджету не удалось прочитать или сохранить общие данные. Виджет может показывать предыдущий результат.", "The app or widget could not read or save shared data. The widget may show an earlier result."),
         "Последняя попытка обновления завершилась ошибкой. Повторите обновление; сохранённые данные останутся доступны.": ("Последняя попытка обновления завершилась ошибкой. Повторите обновление; сохранённые данные останутся доступны.", "The last refresh failed. Try again; your saved data will remain available."),
@@ -136,6 +141,26 @@ enum L10n {
         "Проверяем состояние данных…": ("Проверяем состояние данных…", "Checking data status…"),
         "В приложении эта ошибка сейчас не обнаружена. Если виджет по-прежнему сообщает о ней, проверьте хранилище: доступ расширения может отличаться.": ("В приложении эта ошибка сейчас не обнаружена. Если виджет по-прежнему сообщает о ней, проверьте хранилище: доступ расширения может отличаться.", "The app is not currently detecting this error. If the widget still reports it, check storage: the extension may have different access."),
         "Эта проблема больше не обнаружена в текущих данных. Виджет мог показывать предыдущий результат; macOS обновит его по своему расписанию.": ("Эта проблема больше не обнаружена в текущих данных. Виджет мог показывать предыдущий результат; macOS обновит его по своему расписанию.", "This problem is no longer detected in the current data. The widget may have shown an earlier result; macOS will update it on its own schedule."),
+        "Для части моделей не найден тариф. Пересчёт повторно проверит доступные тарифы.": ("Для части моделей не найден тариф. Пересчёт повторно проверит доступные тарифы.", "Pricing is missing for some models. Recalculating will check the available rates again."),
+        "Не удалось прочитать исходный журнал сессии. Проверьте доступ к файлам и повторите пересчёт.": ("Не удалось прочитать исходный журнал сессии. Проверьте доступ к файлам и повторите пересчёт.", "The source session log could not be read. Check file access and recalculate."),
+        "Журнал превышает безопасный предел обработки. Учтена доступная часть расходов.": ("Журнал превышает безопасный предел обработки. Учтена доступная часть расходов.", "The log exceeds the safe processing limit. The available portion of spending is included."),
+        "Найдено несколько журналов с одинаковым идентификатором сессии. Дополнительные расходы нельзя объединить однозначно.": ("Найдено несколько журналов с одинаковым идентификатором сессии. Дополнительные расходы нельзя объединить однозначно.", "Multiple logs have the same session identity. Additional spending cannot be combined unambiguously."),
+        "Счётчики журнала и отчёта различаются. Сохранена стоимость отчёта без неподтверждённых дополнений.": ("Счётчики журнала и отчёта различаются. Сохранена стоимость отчёта без неподтверждённых дополнений.", "Log and report counters differ. The report cost is retained without unverified additions."),
+        "В исходных записях отсутствуют или противоречат друг другу данные расхода. Повторный расчёт поможет после появления исправленных записей.": ("В исходных записях отсутствуют или противоречат друг другу данные расхода. Повторный расчёт поможет после появления исправленных записей.", "Source usage records are missing or contradictory. Recalculation can help when corrected records become available."),
+        "Не удалось прочитать локальную телеметрию Claude. Пересчёт повторит чтение.": ("Не удалось прочитать локальную телеметрию Claude. Пересчёт повторит чтение.", "Local Claude telemetry could not be read. Recalculating will retry reading it."),
+        "Некоторые API-вызовы нельзя однозначно сопоставить с журналом или оценить по тарифам. Без дополнительных исходных данных точную сумму восстановить нельзя.": ("Некоторые API-вызовы нельзя однозначно сопоставить с журналом или оценить по тарифам. Без дополнительных исходных данных точную сумму восстановить нельзя.", "Some API calls cannot be matched to the log or priced unambiguously. An exact total requires additional source data."),
+        "Общие расходы сессии пересекают границу дней. В журнале нет данных для точного распределения этой части по датам.": ("Общие расходы сессии пересекают границу дней. В журнале нет данных для точного распределения этой части по датам.", "Cumulative session spending crosses a day boundary. The log lacks the data needed to allocate this portion to individual dates."),
+        "Дополнительный расчёт расходов завершился ошибкой. Сохранён предыдущий результат расчётчика; повторите пересчёт.": ("Дополнительный расчёт расходов завершился ошибкой. Сохранён предыдущий результат расчётчика; повторите пересчёт.", "The additional cost calculation failed. The baseline report is retained; try recalculating."),
+        "Скрыть": ("Скрыть", "Hide"),
+        "Скрыть предупреждение": ("Скрыть предупреждение", "Hide notice"),
+        "Другие даты": ("Другие даты", "Other dates"),
+        "Пересчитать проблемные дни": ("Пересчитать проблемные дни", "Recalculate affected days"),
+        "Последний расчёт": ("Последний расчёт", "Last calculation"),
+        "Пересчёт": ("Пересчёт", "Recalculating"),
+        "Пересчёт завершён": ("Пересчёт завершён", "Recalculation complete"),
+        "Рассчитано полностью": ("Рассчитано полностью", "Fully calculated"),
+        "Частичный расчёт": ("Частичный расчёт", "Partial calculation"),
+        "Доступные данные пересчитаны. Оставшиеся ограничения описаны выше; повтор без новых исходных данных может дать тот же результат.": ("Доступные данные пересчитаны. Оставшиеся ограничения описаны выше; повтор без новых исходных данных может дать тот же результат.", "Available data has been recalculated. Remaining limitations are described above; retrying without new source data may give the same result."),
         "Другие проблемы": ("Другие проблемы", "Other problems"),
         "Затронутые модели: {0}": ("Затронутые модели: {0}", "Affected models: {0}"),
         "Открыть сессии": ("Открыть сессии", "Open sessions"),
@@ -667,4 +692,18 @@ enum L10n {
         "Save": ("Сохранить", "Save"),
         "Cancel": ("Отменить", "Cancel"),
     ]
+}
+
+/// Explicit localization for widget subviews, without changing process globals.
+struct UsageLocalizer {
+    var language: InterfaceLanguage?
+    func text(_ phrase: LocalizedPhrase) -> String { L10n.text(phrase, language: language) }
+    func key(_ value: String) -> String { L10n.key(value, language: language) }
+    func tokens(_ value: Int64) -> String { UsageFormat.tokens(value, language: language) }
+    func exact(_ value: Int64) -> String { UsageFormat.exact(value, language: language) }
+    func cost(_ value: Double) -> String { UsageFormat.cost(value, language: language) }
+    func cost(_ value: TokenUsage) -> String { UsageFormat.cost(value, language: language) }
+    func percent(_ value: Double) -> String { UsageFormat.percent(value, language: language) }
+    func time(_ value: Date) -> String { UsageFormat.time(value, language: language) }
+    func date(_ value: Date, timezone: String) -> String { UsageFormat.date(value, timezone: timezone, language: language) }
 }

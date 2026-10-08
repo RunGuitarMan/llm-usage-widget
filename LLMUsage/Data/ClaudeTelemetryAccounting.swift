@@ -14,12 +14,22 @@ struct ClaudeAccountingCoverage: Sendable {
 enum ClaudeTelemetryAccounting {
     static let fields = ["input_tokens", "output_tokens", "cache_read_input_tokens", "cache_creation_input_tokens"]
 
-    static func recover(_ original: SessionTranscript, sessionID: String, events: [ClaudeTelemetryEvent]) -> SessionTranscript {
+    static func recover(_ original: SessionTranscript, sessionID: String, events: [ClaudeTelemetryEvent], day: UsageDay? = nil) -> SessionTranscript {
         guard let sid = ClaudeTelemetrySanitizer.session(sessionID), !original.imported else { return original }
         var result = original
-        let selected = events.filter { $0.sessionID == sid && $0.kind == .apiRequest }
-        var conflicts = TelemetrySnapshot.conflictingKeys(selected)
-        let clients = Dictionary(grouping: selected.filter { $0.clientRequestID != nil }, by: { $0.clientRequestID! })
+        let allEvents = events.filter { $0.sessionID == sid && $0.kind == .apiRequest }
+        let dayRequests = original.requests.filter { request in day.map { request.belongs(to: $0) } ?? true }
+        let requestIDs = Set(dayRequests.compactMap { $0.telemetryIdentity?.requestID })
+        let clientIDs = Set(dayRequests.compactMap { $0.telemetryIdentity?.clientRequestID })
+        let selected = allEvents.filter { event in
+            guard let day else { return true }
+            // Completion can arrive after midnight for a request belonging to this day.
+            if event.requestID.map(requestIDs.contains) == true || event.clientRequestID.map(clientIDs.contains) == true { return true }
+            return event.timestamp.map { $0 >= day.date && $0 < day.end } ?? true
+        }
+        // Conflicting deliveries remain conflicts even across date boundaries.
+        var conflicts = TelemetrySnapshot.conflictingKeys(allEvents)
+        let clients = Dictionary(grouping: allEvents.filter { $0.clientRequestID != nil }, by: { $0.clientRequestID! })
         for calls in clients.values where Set(calls.compactMap(\.requestID)).count > 1 {
             conflicts.formUnion(calls.compactMap(\.callKey))
         }
@@ -112,7 +122,7 @@ enum ClaudeTelemetryAccounting {
             recovered += 1
         }
         if uncertain {
-            result.usageUncertain = true
+            result.markUsageUncertain(at: day?.date)
             let notice = L10n.text("Часть API-расходов нельзя однозначно восстановить из телеметрии. Итог может быть неполным.")
             if !result.notices.contains(notice) { result.notices.append(notice) }
         }

@@ -31,9 +31,7 @@ import AppKit
         if CommandLine.arguments.contains("--review-widget-checks") { return }
         #endif
         try await WindowChromeChecks.run(review)
-        #if MANUAL_REVIEW
         try await HealthChecks.run(review)
-        #endif
         try await DateNavigationChecks.run(review)
         try await WindowChecks.run(review)
         try await SessionNavigationChecks.run(review)

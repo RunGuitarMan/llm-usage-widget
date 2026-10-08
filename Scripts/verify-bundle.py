@@ -68,9 +68,9 @@ if storage_mode == "local-files":
     path = f"Library/Application Support/{host['CFBundleIdentifier']}/WidgetData"
     assert host["UsageLocalWidgetDataPath"] == extension["UsageLocalWidgetDataPath"] == path, "Local data path mismatch"
     expected = {f"/{path}/{name}" for name in
-                ("latest-usage-v2.json", "previous-day-usage-v2.json", "refresh-status.json", "daily-history-v1.json")}
+                ("latest-usage-v2.json", "previous-day-usage-v2.json", "refresh-status.json", "daily-history-v1.json", "widget-presentation-v1.json")}
     read_key = "com.apple.security.temporary-exception.files.home-relative-path.read-only"
-    assert set(entitlements.get(read_key, [])) == expected, "Widget must read only the four data files"
+    assert set(entitlements.get(read_key, [])) == expected, "Widget must read only the five data files"
     assert set(entitlements) == {"com.apple.security.app-sandbox", read_key}, "Unexpected development widget access"
 executable = widget / "Contents/MacOS" / extension["CFBundleExecutable"]
 imports = subprocess.run(["xcrun", "nm", "-u", str(executable)], capture_output=True, text=True, check=True).stdout

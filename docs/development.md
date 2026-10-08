@@ -77,6 +77,10 @@ Provider logos follow model families independently of the coding agent: Anthropi
 
 The daily budget uses the day's included total across sources, even when the screen is filtered to one source.
 
+Daily diagnostics are scoped to the report being displayed. The dashboard uses the selected date; the menu and widgets use the current date. Browsing history cannot add past-date warnings to those surfaces. Incomplete cost is an informational control beside the amount, not a global dashboard banner; settings do not inherit report banners. Hidden notices are acknowledged by date and a stable cause/model fingerprint, survive retries/relaunch, and remain accessible from the amount's **Data status** context menu. New causes and new occurrences after a successful repair are visible again. The explicit diagnostics sheet can expand other dates and force recalculation of all affected days, with progress and separate full/partial/failed outcomes.
+
+Cost diagnostics retain typed reasons, including missing rates, unreadable or ambiguous sources, source/report mismatch, telemetry ambiguity, cross-day cumulative totals and calculation failure. Accepted reports replace restored diagnostics permanently. The accounting adapter's engine revision invalidates old daily caches while retaining displayable totals during migration. Daily telemetry recovery considers events on the requested date and late completions linked to that date's requests, while conflict detection still spans all deliveries. Non-telemetry snapshot accounting streams logs up to 256 MiB, retaining only bounded accounting metadata and response-boundary identities; it does not retain message/tool bodies. Missing historical evidence remains an explicit limitation rather than an invented charge.
+
 ## Chat inspection
 
 Transcript readers support local JSON, JSONL/NDJSON and supported SQLite formats. Request-level usage is available for Claude Code, Codex and Gemini; other supported formats can still be browsed. Parsing and search run away from the UI thread, with cancellation and stale-result rejection.

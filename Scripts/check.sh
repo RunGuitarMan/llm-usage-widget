@@ -5,7 +5,7 @@ mkdir -p build/ModuleCache build/CheckModules
 source Scripts/toolchain.sh
 CORE=(LLMUsage/Data/*.swift LLMUsage/Services/*.swift LLMUsage/Shared/UsageModels.swift LLMUsage/Shared/UsageHealth.swift
       LLMUsage/Shared/Localization.swift LLMUsage/Shared/UsageFormatting.swift LLMUsage/Shared/UsageHistory.swift LLMUsage/Shared/UsageRoute.swift
-      LLMUsage/Shared/SnapshotStorage.swift LLMUsage/Shared/SampleData.swift LLMUsage/App/RefreshSchedule.swift LLMUsage/App/UsageStore.swift
+      LLMUsage/Shared/SnapshotStorage.swift LLMUsage/Shared/WidgetPresentation.swift LLMUsage/Shared/SampleData.swift LLMUsage/App/RefreshSchedule.swift LLMUsage/App/UsageStore.swift
       LLMUsage/App/WidgetExtensionLifecycle.swift Scripts/ManualReview/WidgetProcessFixture.swift)
 SCENARIOS=(LLMUsage/Tests/*Scenarios.swift)
 # Check the SwiftPM module boundary even on CLT hosts without XCTest.
@@ -20,10 +20,12 @@ printf 'PASS Shared test scenarios compile against the SwiftPM core module\n'
   -target "$(uname -m)-apple-macosx14.0" -module-cache-path "$PWD/build/ModuleCache" \
   "${CORE[@]}" "${SCENARIOS[@]}" Scripts/PortableChecks.swift Scripts/TranscriptChecks.swift Scripts/HistoryChecks.swift Scripts/LocalizationChecks.swift Scripts/RefreshChecks.swift -o build/portable-checks
 build/portable-checks "$@"
+# Explicit non-UI mode for local development; CI still runs the full gate.
+if [[ " ${*:-} " == *" --core-only "* ]]; then exit 0; fi
 # Exercise native menu updates in an isolated AppKit process.
 "$LLM_SWIFTC" -parse-as-library -module-name LLMUsageMenuChecks -sdk "$SDK_PATH" \
   -target "$(uname -m)-apple-macosx14.0" -module-cache-path "$PWD/build/ModuleCache" \
-  LLMUsage/Shared/UsageModels.swift LLMUsage/Shared/UsageHealth.swift LLMUsage/Shared/UsageHistory.swift LLMUsage/Shared/SnapshotStorage.swift \
+  LLMUsage/Shared/UsageModels.swift LLMUsage/Shared/UsageHealth.swift LLMUsage/Shared/UsageHistory.swift LLMUsage/Shared/SnapshotStorage.swift LLMUsage/Shared/WidgetPresentation.swift \
   LLMUsage/Shared/Localization.swift LLMUsage/Shared/UsageFormatting.swift \
   LLMUsage/App/AppMenuLocalization.swift Scripts/MenuLocalizationChecks.swift -o build/menu-localization-checks
 build/menu-localization-checks

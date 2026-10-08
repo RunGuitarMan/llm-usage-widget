@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 import WidgetKit
 import Darwin
 
@@ -29,7 +30,7 @@ private actor WidgetFixtureService: CCUsageServing {
         let service = WidgetFixtureService(date: date)
         var reloads = 0
         let store = UsageStore(service: service, repository: repository, defaults: defaults,
-                               now: { date }, reloadWidget: { reloads += 1 })
+                               now: { date }, widgetReloadDelay: 0, reloadWidget: { reloads += 1 })
         let provider = UsageTimelineProvider(directory: directory, now: { date })
 
         let empty = provider.readEntry()
@@ -40,8 +41,9 @@ private actor WidgetFixtureService: CCUsageServing {
 
         await store.refresh()
         await store.waitForHistoryBackfill()
+        await store.waitForWidgetPublication()
         let first = provider.readEntry()
-        try ReviewCheck.require(first.snapshot?.totals.cost == 12.34 && first.snapshot == store.todaySnapshot,
+        try ReviewCheck.require(first.snapshot?.totals.cost == 12.34 && first.snapshot == store.todaySnapshot.map(WidgetSnapshot.init),
                                 "Widget provider does not read the snapshot published by the app")
         try ReviewCheck.require(reloads > 0 && first.history?.days.count == 7, "Publication did not reload widgets or persist history")
         let timeline = provider.makeTimeline()
@@ -54,8 +56,9 @@ private actor WidgetFixtureService: CCUsageServing {
         await service.update(cost: 56.78, date: date)
         await store.refresh()
         await store.waitForHistoryBackfill()
+        await store.waitForWidgetPublication()
         let second = provider.readEntry()
-        try ReviewCheck.require(second.snapshot?.totals.cost == 56.78 && second.snapshot == store.todaySnapshot,
+        try ReviewCheck.require(second.snapshot?.totals.cost == 56.78 && second.snapshot == store.todaySnapshot.map(WidgetSnapshot.init),
                                 "Provider retained A after the app atomically published B")
         try ReviewCheck.require(second.snapshot?.generatedAt == date, "Widget generation timestamp did not advance")
         try Data("broken".utf8).write(to: directory.appendingPathComponent("daily-history-v1.json"), options: .atomic)
@@ -66,12 +69,13 @@ private actor WidgetFixtureService: CCUsageServing {
         try ReviewCheck.require(published.snapshot == second.snapshot && published.history == second.history
                                 && !published.storageUnavailable,
                                 "Damaged legacy files overrode the valid atomic presentation")
-        try Data("broken".utf8).write(to: directory.appendingPathComponent("refresh-status.json"), options: .atomic)
+        try Data("broken".utf8).write(to: directory.appendingPathComponent(WidgetPresentation.filename), options: .atomic)
         let corrupt = provider.readEntry()
         try ReviewCheck.require(corrupt.snapshot == nil && corrupt.storageUnavailable,
                                 "Corrupt presentation silently appeared as loading")
         await store.refresh()
         await store.waitForHistoryBackfill()
+        await store.waitForWidgetPublication()
         try ReviewCheck.require(provider.readEntry().snapshot?.totals.cost == 56.78 && !provider.readEntry().storageUnavailable,
                                 "Widget did not recover after storage was repaired")
         date = first.snapshot!.day.end
@@ -94,6 +98,38 @@ private actor WidgetFixtureService: CCUsageServing {
         print("PASS Widget lifecycle: stale executable/path detection, current process and other bundle isolation")
         try await cachedHostRecovery()
         try await WidgetProcessFixture.run()
+        try renderContentModes()
+    }
+
+    /// Content exports cover our rendering-mode branches, not WidgetKit's
+    /// compositor or native window behavior. Uses views in the common app.
+    private static func renderContentModes() throws {
+        let args = CommandLine.arguments
+        guard let index = args.firstIndex(of: "--review-report-dir"), args.indices.contains(index + 1) else {
+            try ReviewCheck.require(false, "Rendering exports require the review report directory"); return
+        }
+        let directory = URL(fileURLWithPath: args[index + 1]).appendingPathComponent("widget-rendering")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let date = ISO8601DateFormatter().date(from: "2026-10-06T12:00:00Z")!
+        let modes: [(String, WidgetRenderingMode)] = [("fullColor", .fullColor), ("accented", .accented), ("vibrant", .vibrant)]
+        for (name, mode) in modes {
+            for variant in UsageWidgetVariant.allCases {
+                for family in [WidgetFamily.systemSmall, .systemMedium, .systemLarge] {
+                    let view = WidgetPreviewCard(family: family, variant: variant, history: SampleData.history(now: date),
+                        snapshot: SampleData.multiSourceSnapshot(now: date), date: date)
+                        .environment(\.widgetRenderingMode, mode)
+                    let renderer = ImageRenderer(content: view)
+                    renderer.scale = 2
+                    guard let image = renderer.nsImage, let tiff = image.tiffRepresentation,
+                          let bitmap = NSBitmapImageRep(data: tiff), let png = bitmap.representation(using: .png, properties: [:]) else {
+                        throw NSError(domain: "WidgetRendering", code: 1, userInfo: [NSLocalizedDescriptionKey: "Cannot render \(variant.rawValue)/\(family)/\(name)"])
+                    }
+                    try ReviewCheck.require(image.size.width > 100 && image.size.height > 100, "Empty widget content")
+                    try png.write(to: directory.appendingPathComponent("\(variant.rawValue)-\(family.rawValue)-\(name).png"))
+                }
+            }
+        }
+        print("PASS Widget content: 3 rendering modes × 3 variants × 3 sizes (27 exports; system compositor checked separately)")
     }
 
     private static func cachedHostRecovery() async throws {

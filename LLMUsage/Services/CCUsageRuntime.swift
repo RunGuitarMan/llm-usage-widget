@@ -9,7 +9,7 @@ struct CCUsageManifest: Codable, Equatable, Sendable {
     var binarySHA256: String
 
     // The Swift accounting stage changes totals independently of the helper.
-    var engineID: String { "ccusage/\(version)/contract-\(contractVersion)/telemetry-accounting-1" }
+    var engineID: String { "ccusage/\(version)/contract-\(contractVersion)/telemetry-accounting-2" }
     static func load(bundle: Bundle = .main) throws -> Self {
         guard let url = bundle.url(forResource: "CCUsageRuntime", withExtension: "json") else {
             throw UsageError.runtimeUnavailable

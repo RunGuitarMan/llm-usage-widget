@@ -7,9 +7,9 @@ struct UsageWidgetEntryView: View {
     var entry: UsageWidgetEntry
     var variant: UsageWidgetVariant = .summary
     var body: some View {
-        let _ = L10n.preference = entry.status?.interfaceLanguage ?? .system
         UsageWidgetContent(family: family, variant: variant, history: entry.history, snapshot: entry.snapshot, previous: entry.previous,
-                           status: entry.status, date: entry.date, storageUnavailable: entry.storageUnavailable)
+                           status: entry.status, date: entry.date, storageUnavailable: entry.storageUnavailable, problems: entry.problems)
+            .environment(\.usageLanguage, entry.status?.interfaceLanguage ?? .system)
             .environment(\.locale, (entry.status?.interfaceLanguage ?? .system).locale)
             .containerBackground(for: .widget) { Color(nsColor: .windowBackgroundColor) }
     }
@@ -50,9 +50,6 @@ struct LLMUsageTrendWidget: Widget {
 
 @main
 struct LLMUsageWidgetBundle: WidgetBundle {
-    init() {
-        L10n.preference = (try? SnapshotFiles.status(directory: SharedConfiguration.container))?.interfaceLanguage ?? .system
-    }
     var body: some Widget {
         LLMUsageWidget()
         LLMUsageSessionsWidget()

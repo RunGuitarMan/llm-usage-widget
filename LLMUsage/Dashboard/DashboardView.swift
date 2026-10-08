@@ -271,7 +271,7 @@ struct DashboardView: View {
 
     @ViewBuilder private var detail: some View {
         VStack(spacing: 0) {
-            UsageProblemBanner(store: store)
+            if store.tab != .settings { UsageProblemBanner(store: store) }
             if store.tab == .settings {
                 UsageSettingsView(store: store)
             } else {
@@ -314,7 +314,7 @@ struct DashboardView: View {
                 if store.isRefreshing { ProgressView().controlSize(.small) }
                 else { Image(systemName: "arrow.clockwise") }
             }
-            .keyboardShortcut("r").disabled(store.isRefreshing || store.isDemo)
+            .keyboardShortcut("r").disabled(store.isRefreshing || store.isRetryingProblem || store.isDemo)
             .help(L10n.text("Обновить статистику · ⌘R")).accessibilityLabel(L10n.text("Обновить статистику"))
             .background { DashboardWindowConnection(coordinator: dashboardWindow, toolbar: true) }
         }
@@ -451,6 +451,19 @@ struct DashboardView: View {
             Text(UsageFormat.cost(snapshot.totals))
                 .font(.system(size: 76, weight: .semibold)).tracking(-3).lineLimit(1).minimumScaleFactor(0.55)
                 .accessibilityLabel(L10n.text("Расходы: \(UsageFormat.cost(snapshot.totals))"))
+                .contextMenu {
+                    Button(L10n.text("Состояние данных")) {
+                        store.presentedProblem = store.problems(for: snapshot.day).first?.reference ?? .init(kind: .cost, day: snapshot.day)
+                    }
+                }
+            if snapshot.totals.costIsIncomplete == true,
+               let problem = store.problems(for: snapshot.day, includeHidden: false).first(where: { $0.reference.kind == .cost }) {
+                Button { store.presentedProblem = problem.reference } label: {
+                    Label(L10n.text("Частичный расчёт"), systemImage: "info.circle")
+                }.buttonStyle(.plain).font(.caption).foregroundStyle(.secondary)
+                    .accessibilityIdentifier("usage-partial-cost")
+                    .background { if store.isManualReview { ReviewHealthControlProbe(name: "partial-cost") } }
+            }
             if let previous = previousUsage(for: snapshot) {
                 let change = snapshot.totals.cost - previous.cost
                 HStack(spacing: 4) {

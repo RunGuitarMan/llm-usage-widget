@@ -19,7 +19,18 @@ enum SharedConfiguration {
                   !path.split(separator: "/").contains("..") else { return nil }
             return userHomeDirectory?.appendingPathComponent(path, isDirectory: true)
         }
-        return FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroup)
+        let root = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroup)
+        return appGroupDirectory(root: root, bundleIdentifier: Bundle.main.bundleIdentifier,
+            channel: Bundle.main.object(forInfoDictionaryKey: "UsageUpdateChannel") as? String)
+    }
+
+    static func appGroupDirectory(root: URL?, bundleIdentifier: String?, channel: String?) -> URL? {
+        // Preserve the shipped release location. Signed development app/extension
+        // pairs use a namespace within the group, just like local-file builds.
+        guard channel == "development" else { return root }
+        guard let bundleIdentifier, !bundleIdentifier.contains("/"), !bundleIdentifier.contains("..") else { return nil }
+        let host = bundleIdentifier.hasSuffix(".Widget") ? String(bundleIdentifier.dropLast(7)) : bundleIdentifier
+        return root?.appendingPathComponent(host, isDirectory: true)
     }
 
     // Foundation redirects the home directory into the extension's sandbox. The
@@ -46,6 +57,9 @@ struct RefreshStatus: Codable, Equatable, Sendable {
     var refreshIntervalSeconds: TimeInterval? = nil
     var modelExclusionPolicy: ModelExclusionPolicy? = nil
     var presentation: UsagePresentation? = nil
+    var isRecalculating: Bool? = nil
+    var publishedAt: Date? = nil
+    var hiddenProblems: [String: String]? = nil
     // Optional presentation preferences can be added here without changing the snapshot schema.
 
     var refreshInterval: TimeInterval {
@@ -72,8 +86,11 @@ enum SnapshotSlot: String, Sendable {
 // Atomic file replacement means the extension never observes a half-written JSON document.
 // The actor keeps all filesystem work off the main actor.
 actor SnapshotRepository: SnapshotPersisting {
-    private let directory: URL?
-    init(directory: URL? = SharedConfiguration.container) { self.directory = directory }
+    private let directoryOverride: URL?
+    private let resolvesSharedDirectory: Bool
+    private var directory: URL? { resolvesSharedDirectory ? SharedConfiguration.container : directoryOverride }
+    init() { directoryOverride = nil; resolvesSharedDirectory = true }
+    init(directory: URL?) { directoryOverride = directory; resolvesSharedDirectory = false }
 
     func read(_ slot: SnapshotSlot) throws -> UsageSnapshot? {
         try SnapshotFiles.read(slot, directory: directory)
@@ -87,7 +104,12 @@ actor SnapshotRepository: SnapshotPersisting {
         try SnapshotFiles.write(history, name: "daily-history-v1.json", directory: directory)
     }
     func writeStatus(_ status: RefreshStatus) throws {
+        let directory = directory
+        try SnapshotFiles.validate(status)
+        let widget = status.presentation.map { _ in WidgetPresentation(status: status) }
+        try widget?.validate()
         try SnapshotFiles.write(status, name: "refresh-status.json", directory: directory)
+        if let widget { try SnapshotFiles.write(widget, name: WidgetPresentation.filename, directory: directory, dateEncoding: .deferredToDate) }
     }
 }
 
@@ -116,7 +138,12 @@ enum SnapshotFiles {
     }
     static func status(directory: URL?) throws -> RefreshStatus? {
         let status: RefreshStatus? = try readValue(name: "refresh-status.json", directory: directory)
-        if let presentation = status?.presentation {
+        if let status { try validate(status) }
+        return status
+    }
+
+    static func validate(_ status: RefreshStatus) throws {
+        if let presentation = status.presentation {
             guard presentation.schemaVersion == 1,
                   presentation.failures.count <= 64, presentation.costIssues.count <= 64,
                   presentation.failures.allSatisfy({ validDay($0.day) }),
@@ -127,7 +154,6 @@ enum SnapshotFiles {
             try validate(presentation.previous)
             try validate(presentation.history)
         }
-        return status
     }
 
     static func presentation(directory: URL?) throws -> SharedUsageData {
@@ -150,7 +176,8 @@ enum SnapshotFiles {
             guard status?.dataContext == nil || status?.dataContext.map({ data?.dataContext?.canDisplay(alongside: $0) == true }) == true else { return nil }
             return data?.applyingExclusions(policy)
         }
-        let visibleHistory = status?.dataContext.map { history?.context.canDisplay(alongside: $0) == true } == true ? history?.applyingExclusions(policy) : nil
+        let historyMatches = status?.dataContext.map { history?.context.canDisplay(alongside: $0) == true } ?? true
+        let visibleHistory = historyMatches ? history?.applyingExclusions(policy) : nil
         return .init(snapshot: visible(snapshot), previous: visible(previous), history: visibleHistory,
                      status: status, storageUnavailable: storageUnavailable)
     }
@@ -204,28 +231,48 @@ enum SnapshotFiles {
         }
         return true
     }
-    private static func readValue<T: Decodable>(name: String, directory: URL?) throws -> T? {
+    static func readValue<T: Decodable>(name: String, directory: URL?, maximumBytes: Int? = nil, dateDecoding: JSONDecoder.DateDecodingStrategy = .iso8601) throws -> T? {
         guard let directory else { throw UsageError.sharedContainer(SharedConfiguration.appGroup) }
         let url = directory.appendingPathComponent(name)
         do {
             let decoder = JSONDecoder()
-            decoder.dateDecodingStrategy = .iso8601
-            return try decoder.decode(T.self, from: Data(contentsOf: url))
-        } catch let error as CocoaError where error.code == .fileReadNoSuchFile {
+            decoder.dateDecodingStrategy = dateDecoding
+            let data: Data
+            if let maximumBytes {
+                let handle = try FileHandle(forReadingFrom: url)
+                defer { try? handle.close() }
+                data = try handle.read(upToCount: maximumBytes + 1) ?? Data()
+                guard data.count <= maximumBytes else { throw UsageError.outputTooLarge }
+            } else { data = try Data(contentsOf: url) }
+            return try decoder.decode(T.self, from: data)
+        } catch let error as NSError where
+            (error.domain == NSCocoaErrorDomain && [NSFileReadNoSuchFileError, NSFileNoSuchFileError].contains(error.code))
+                || (error.domain == NSPOSIXErrorDomain && error.code == Int(ENOENT)) {
             return nil
         } catch { throw UsageError.sharedContainer(String(describing: error)) }
     }
-    static func write<T: Encodable>(_ value: T, name: String, directory: URL?) throws {
+    static func write<T: Encodable>(_ value: T, name: String, directory: URL?, dateEncoding: JSONEncoder.DateEncodingStrategy = .iso8601) throws {
         guard let directory else { throw UsageError.sharedContainer(SharedConfiguration.appGroup) }
         do {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true,
                                                     attributes: [.posixPermissions: 0o700])
             let encoder = JSONEncoder()
-            encoder.dateEncodingStrategy = .iso8601
+            encoder.dateEncodingStrategy = dateEncoding
             encoder.outputFormatting = [.sortedKeys]
             let destination = directory.appendingPathComponent(name)
-            try encoder.encode(value).write(to: destination, options: .atomic)
-            try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: destination.path)
+            let data = try encoder.encode(value)
+            // Establish permissions before publishing. A chmod failure after
+            // replacement must never turn a successful commit into a failure.
+            let temporary = directory.appendingPathComponent(".snapshot-\(UUID().uuidString)")
+            let descriptor = open(temporary.path, O_WRONLY | O_CREAT | O_EXCL, 0o600)
+            guard descriptor >= 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+            let handle = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
+            defer { try? handle.close(); try? FileManager.default.removeItem(at: temporary) }
+            try handle.write(contentsOf: data)
+            try handle.close()
+            guard rename(temporary.path, destination.path) == 0 else {
+                throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
+            }
         } catch { throw UsageError.sharedContainer(String(describing: error)) }
     }
 }

@@ -86,7 +86,7 @@ enum ReviewFixture: String, CaseIterable {
             data.sessions[0].originalID = String(repeating: "long-session-id-", count: 6)
             data.sessions[1].models = ["claude-sonnet-4.6", "gpt-6-astra"]
         }
-        if self == .partial { data.sessions[0].usage.costIsIncomplete = true }
+        if self == .partial { data.sessions[0].usage.costIsIncomplete = true; data.sessions[0].costReasons = [.sourceIncomplete] }
         if self == .zero {
             for index in data.sessions.indices { data.sessions[index].usage = .zero }
         }

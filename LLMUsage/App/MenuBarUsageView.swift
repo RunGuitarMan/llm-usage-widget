@@ -9,9 +9,10 @@ struct MenuBarUsageView: View {
     var body: some View {
         MenuBarUsageCard(snapshot: store.todaySnapshot, history: store.history, mode: store.menuContent,
                          dailyBudget: store.dailyBudget, timezone: store.timezone,
-                         isRefreshing: store.isRefreshing, isDemo: store.isDemo,
+                         isRefreshing: store.isRefreshing || store.isRetryingProblem, isDemo: store.isDemo,
                          error: store.error?.errorDescription,
                          refreshInterval: store.refreshInterval, status: store.presentationStatus,
+                         reviewActive: store.isManualReview,
                          openProblem: { openRoute(.problem($0)) },
                          openDashboard: { openRoute(.overview) }, openSettings: { openRoute(.settings) },
                          refresh: { Task { await store.refresh() } })
@@ -34,6 +35,7 @@ struct MenuBarUsageCard: View {
     var error: String?
     var refreshInterval: TimeInterval = 180
     var status: RefreshStatus? = nil
+    var reviewActive = false
     var openProblem: (UsageProblemReference) -> Void = { _ in }
     var openDashboard: () -> Void = {}
     var openSettings: () -> Void = {}
@@ -45,7 +47,7 @@ struct MenuBarUsageCard: View {
     private var problems: [UsageProblem] {
         UsageHealth.problems(snapshot: snapshot, history: history,
             status: status ?? RefreshStatus(attemptedAt: Date(), message: error, refreshMinutes: 3,
-                refreshIntervalSeconds: refreshInterval), now: Date())
+                refreshIntervalSeconds: refreshInterval), now: Date(), scope: .currentDay, includeHidden: false)
     }
 
     var body: some View {
@@ -70,6 +72,7 @@ struct MenuBarUsageCard: View {
                         Spacer(minLength: 4)
                         Image(systemName: "chevron.right").font(.system(size: 9))
                     }.font(.system(size: 11)).contentShape(Rectangle())
+                        .background { if reviewActive { ReviewHealthProbe(problems: problems) } }
                 }
                 .buttonStyle(MenuBarActionStyle()).padding(.bottom, 16)
                 .accessibilityIdentifier("usage-problem-menu")

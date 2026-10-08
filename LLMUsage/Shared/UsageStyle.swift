@@ -1,4 +1,16 @@
 import SwiftUI
+import WidgetKit
+
+private struct UsageLanguageKey: EnvironmentKey {
+    static let defaultValue: InterfaceLanguage? = nil
+}
+extension EnvironmentValues {
+    var usageLanguage: InterfaceLanguage? {
+        get { self[UsageLanguageKey.self] }
+        set { self[UsageLanguageKey.self] = newValue }
+    }
+}
+
 
 enum UsageStyle {
     static let orange = Color(red: 0.91, green: 0.47, blue: 0.29)
@@ -43,25 +55,30 @@ extension TokenCategory {
 
 /// The same proportional amount anchors the popover and every widget family.
 struct UsageAmount: View {
+    @Environment(\.usageLanguage) private var interfaceLanguage
+    private var strings: UsageLocalizer { .init(language: interfaceLanguage) }
     var usage: TokenUsage
     var size: CGFloat = 48
     var body: some View {
-        Text(UsageFormat.cost(usage))
+        Text(strings.cost(usage))
+            .widgetAccentable()
             .font(.system(size: size, weight: .semibold)).tracking(-size * 0.035)
             .lineLimit(1).minimumScaleFactor(0.4)
             .frame(height: size * 1.16, alignment: .leading)
-            .accessibilityLabel(L10n.text("Расходы: \(UsageFormat.cost(usage))\(usage.costIsIncomplete == true ? L10n.text(", стоимость неполная") : "")"))
+            .accessibilityLabel(strings.text("Расходы: \(strings.cost(usage))\(usage.costIsIncomplete == true ? strings.text(", стоимость неполная") : "")"))
     }
 }
 
 struct UsageDayCaption: View {
+    @Environment(\.usageLanguage) private var interfaceLanguage
+    private var strings: UsageLocalizer { .init(language: interfaceLanguage) }
     var day: UsageDay
     var now = Date()
     var body: some View {
-        Text(day.isToday(now: now) ? L10n.text("Сегодня") : UsageFormat.date(day.date, timezone: day.timezone))
+        Text(day.isToday(now: now) ? strings.text("Сегодня") : strings.date(day.date, timezone: day.timezone))
             .font(.system(size: 11)).foregroundStyle(.secondary)
             .lineLimit(1).minimumScaleFactor(0.75)
-            .help(day.label())
+            .help(strings.date(day.date, timezone: day.timezone))
     }
 }
 
@@ -96,6 +113,7 @@ struct UsageBrand: View {
 }
 
 struct UsageBar: View {
+    @Environment(\.widgetRenderingMode) private var renderingMode
     var fraction: Double
     var color: Color = .blue
     var height: CGFloat = 6
@@ -103,7 +121,7 @@ struct UsageBar: View {
         GeometryReader { proxy in
             ZStack(alignment: .leading) {
                 Capsule().fill(Color.primary.opacity(0.055))
-                Capsule().fill(color.opacity(0.82))
+                Capsule().fill(renderingMode == .fullColor ? color.opacity(0.82) : Color.primary.opacity(0.8))
                     .frame(width: max(fraction > 0 ? 2 : 0, proxy.size.width * min(max(fraction, 0), 1)))
             }
         }
@@ -167,13 +185,14 @@ struct EmptyUsageView: View {
 }
 
 struct TokenDistribution: View {
+    @Environment(\.widgetRenderingMode) private var renderingMode
     var usage: TokenUsage
     var height: CGFloat = 5
     var body: some View {
         GeometryReader { geometry in
             HStack(spacing: 1) {
                 ForEach(usage.categories.filter { usage.value(for: $0) > 0 }) { category in
-                    Rectangle().fill(category.color)
+                    Rectangle().fill(renderingMode == .fullColor ? category.color : Color.primary.opacity(1 - Double(TokenCategory.allCases.firstIndex(of: category) ?? 0) * 0.16))
                         .frame(width: segmentWidth(category, width: geometry.size.width))
                 }
             }
