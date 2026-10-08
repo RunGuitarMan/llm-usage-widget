@@ -11,6 +11,7 @@ Run from the repository root with macOS SDK 26+ selected (see [Development](deve
 | `bash Scripts/check-updates.sh` | Real signed Sparkle replacement/relaunch of disposable apps; manual, download-only quit, invalid signature and automatic modes |
 | `python3 -m unittest discover -s Scripts -p 'test_*.py' -v` | Installer rollback/concurrency, manual version increases, stale/tampered release artifacts and safe release publication |
 | `swift test` | Core XCTest suite; requires full Xcode |
+| `bash Scripts/check.sh --core-only` | Core scenarios and SwiftPM module boundary without opening windows |
 | `bash Scripts/check-ui.sh` | App and widget typechecking only |
 | `bash Scripts/check-windows.sh` | Normal startup smoke check and review self-check against the same executable |
 | `bash Scripts/build-local.sh` | One complete app/widget build, signatures, bundle structure and immutable artifact manifest |
@@ -104,3 +105,13 @@ For system acceptance, use the **same built artifact** on a logged-in macOS test
 The desktop check requires real configured widgets; hosted CI does not provision desktop placements through a supported WidgetKit API. CI covers the deterministic process-replacement regression and provider/storage contracts. A green CI or a successful log gate does not replace inspection of actual system rendering, and cannot promise detection of every future macOS defect.
 
 Update integration checks require a logged-in macOS GUI session. They use fresh test keys, isolated bundle IDs and synthetic services; they never install over LLM Usage or read agent logs. Portable runtime scenarios cover consent, exact-version and digest rejection, active-work quiescence, the verified loopback handoff and engine provenance. `verify-bundle.py` checks the final signed helper and Sparkle configuration.
+
+### Compact widget publication (1.6.3)
+
+`WidgetStabilityScenarios` covers concurrent publication ordering, automatic retry without a CLI refresh, no reload on write failure, burst coalescing, content deduplication with a freshness heartbeat, invalid-data rejection before replacement, exact subsecond date round-trips, signed-development storage isolation, and a 100,000-session projection. Invalid input preserves the previous good widget file; sessions are never silently dropped from accounting totals.
+
+The app publishes `widget-presentation-v1.json` last, by private temporary file and atomic rename. It contains aggregate totals/counts, at most seven ranked session rows per day, seven history totals and precomputed health transitions. Its versioned numeric dates use Foundation's reference epoch and retain `Date` precision. Full app caches keep the legacy ISO-8601 encoding for compatibility. The extension rereads the compact document on every timeline, with a 512 KiB read limit, and uses legacy files only when the new document is absent. An unreadable or unsupported new document yields a storage error, never unrelated cached data. Signed development builds use a bundle-specific subdirectory inside the shared group; local-file builds already use different release/development directories.
+
+Widget fallback reloads use 20 minutes (5 minutes for storage failures), independent of the app's fast mode. App reload requests follow successful publication, coalesce for 1.5 seconds with at least 15 seconds between requests, and skip unchanged content except a five-minute freshness heartbeat. WidgetKit still decides the actual update time.
+
+The focused common-app widget check exports 27 content images under `build/manual-review/check-report/widget-rendering`: three variants, three sizes and the `fullColor`, `accented`, `vibrant` environment modes. These cover our view branches and help inspect contrast. They do not reproduce the system compositor, tint selection or desktop placement; those remain part of the separate system-widget check above. Entry language is passed explicitly through the widget view environment, including interpolated numbers and diagnostics.

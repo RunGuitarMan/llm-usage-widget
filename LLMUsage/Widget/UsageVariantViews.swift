@@ -10,8 +10,10 @@ enum UsageWidgetVariant: String, CaseIterable, Identifiable {
 }
 
 struct UsageSessionsWidget: View {
+    @Environment(\.usageLanguage) private var interfaceLanguage
+    private var strings: UsageLocalizer { .init(language: interfaceLanguage) }
     var family: WidgetFamily
-    var snapshot: UsageSnapshot
+    var snapshot: WidgetSnapshot
     var date: Date
     var status: RefreshStatus?
     var problems: [UsageProblem]
@@ -22,7 +24,7 @@ struct UsageSessionsWidget: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
-                Text(L10n.text("Сессии")).font(.system(size: 11, weight: .medium))
+                Text(strings.text("Сессии")).font(.system(size: 11, weight: .medium))
                 Spacer(minLength: 2)
                 UsageDayCaption(day: snapshot.day, now: date)
             }
@@ -38,12 +40,12 @@ struct UsageSessionsWidget: View {
             Spacer(minLength: 7)
             HStack(spacing: 4) {
                 if problems.isEmpty || small {
-                    Text(small ? L10n.text("По стоимости") : L10n.text("Сессии: \(snapshot.sessions.count) · по стоимости"))
+                    Text(small ? strings.text("По стоимости") : strings.text("Сессии: \(snapshot.sessionCount) · по стоимости"))
                 }
                 Spacer(minLength: 2)
                 if !problems.isEmpty {
                     UsageProblemLink(problems: problems, compact: small)
-                } else { Text(UsageFormat.time(snapshot.generatedAt)) }
+                } else { Text(strings.time(snapshot.generatedAt)) }
             }.font(.system(size: 9)).foregroundStyle(.secondary).lineLimit(1).minimumScaleFactor(0.7)
         }
     }
@@ -51,7 +53,7 @@ struct UsageSessionsWidget: View {
         VStack(alignment: .leading, spacing: 3) {
             UsageAmount(usage: snapshot.totals, size: large ? 46 : 32)
             if !large {
-                Text("\(UsageFormat.tokens(snapshot.totals.total)) Tokens")
+                Text("\(strings.tokens(snapshot.totals.total)) Tokens")
                     .font(.system(size: 11)).foregroundStyle(.secondary)
             }
         }
@@ -59,46 +61,45 @@ struct UsageSessionsWidget: View {
     private var ranking: some View {
         VStack(alignment: .leading, spacing: large ? 9 : 10) {
             if rows.isEmpty {
-                Text(L10n.text("Пока нет сессий")).font(.system(size: 12)).foregroundStyle(.secondary)
+                Text(strings.text("Пока нет сессий")).font(.system(size: 12)).foregroundStyle(.secondary)
                     .padding(.top, 12)
             }
             ForEach(rows) { session in
                 Link(destination: UsageRoute.datedSession(session.id, snapshot.day).url) {
                     VStack(alignment: .leading, spacing: 5) {
                         HStack(spacing: 5) {
-                            Text(large ? (session.models.first ?? session.sourceLabel) : session.shortID)
+                            Text(large ? (session.models.first ?? UsageSource.label(session.sourceID, language: interfaceLanguage)) : session.shortID)
                                 .font(.system(size: large ? 12 : 10, weight: .medium))
                                 .truncationMode(.middle).frame(maxWidth: .infinity, alignment: .leading)
-                            Text(UsageFormat.cost(session.usage)).font(.system(size: large ? 12 : 10, weight: .medium))
+                            Text(strings.cost(session.usage)).font(.system(size: large ? 12 : 10, weight: .medium))
                                 .fixedSize(horizontal: true, vertical: true)
                         }.lineLimit(1)
                         if large {
-                            Text("\(session.sourceLabel) · \(session.shortID)")
+                            Text("\(UsageSource.label(session.sourceID, language: interfaceLanguage)) · \(session.shortID)")
                                 .font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1)
                         }
                         UsageBar(fraction: session.usage.cost / maximum, color: UsageSource.color(session.sourceID), height: 3)
                     }.foregroundStyle(.primary)
                 }.buttonStyle(.plain)
-                    .accessibilityLabel(L10n.text("\(session.sourceLabel), \(session.modelLabel), сессия \(session.shortID), \(UsageFormat.cost(session.usage)). Открыть сессию"))
+                    .accessibilityLabel(strings.text("\(UsageSource.label(session.sourceID, language: interfaceLanguage)), \((session.models.isEmpty ? strings.text("Модель неизвестна") : session.models.joined(separator: ", "))), сессия \(session.shortID), \(strings.cost(session.usage)). Открыть сессию"))
             }
         }
     }
 }
 
 struct UsageTrendWidget: View {
+    @Environment(\.usageLanguage) private var interfaceLanguage
+    private var strings: UsageLocalizer { .init(language: interfaceLanguage) }
     var family: WidgetFamily
-    var snapshot: UsageSnapshot?
+    var snapshot: WidgetSnapshot?
     var history: UsageHistory?
     var status: RefreshStatus?
     var date: Date
     var problems: [UsageProblem]
     private var today: UsageDay { .init(date: date, timezone: status?.dataContext?.timezone ?? history?.context.timezone ?? snapshot?.day.timezone ?? "UTC") }
     private var points: [UsageHistoryPoint] {
-        var data = history ?? UsageHistory(context: status?.dataContext ?? snapshot?.dataContext ?? .init(timezone: today.timezone, customPath: ""))
-        if var snapshot {
-            snapshot.dataContext = data.context
-            data.record(snapshot, today: today, now: date)
-        }
+        let data = history ?? UsageHistory(context: status?.dataContext ?? .init(timezone: today.timezone, customPath: ""))
+        // The app publishes today's aggregate with the history projection.
         return data.points(ending: today)
     }
     private var large: Bool { family == .systemLarge }
@@ -120,9 +121,9 @@ struct UsageTrendWidget: View {
             }
             if large {
                 HStack {
-                    Text(L10n.text("За 7 дней")).foregroundStyle(.secondary)
+                    Text(strings.text("За 7 дней")).foregroundStyle(.secondary)
                     Spacer()
-                    Text(UsageFormat.cost(points.knownUsage))
+                    Text(strings.cost(points.knownUsage))
                 }.font(.system(size: 11)).padding(.top, budget == nil ? 18 : 12)
                 if let budget { UsageBudgetMeter(budget: budget).padding(.top, 12) }
             }
@@ -148,7 +149,7 @@ struct UsageTrendWidget: View {
             } else {
                 Text("—").font(.system(size: large ? 46 : 34, weight: .semibold)).padding(.top, 3)
                 if family != .systemSmall {
-                    Text(L10n.text("Нет данных за сегодня")).font(.system(size: 10)).foregroundStyle(.secondary)
+                    Text(strings.text("Нет данных за сегодня")).font(.system(size: 10)).foregroundStyle(.secondary)
                 }
             }
         }
@@ -157,11 +158,11 @@ struct UsageTrendWidget: View {
         if let previous = points.dropLast().last?.total,
            !previous.isPartialDay, previous.usage.costIsIncomplete != true, current.usage.costIsIncomplete != true {
             let change = current.usage.cost - previous.usage.cost
-            Text(L10n.text("\(UsageFormat.cost(abs(change))) \(change >= 0 ? L10n.text("больше") : L10n.text("меньше")), чем вчера"))
+            Text(strings.text("\(strings.cost(abs(change))) \(change >= 0 ? strings.text("больше") : strings.text("меньше")), чем вчера"))
                 .font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(large ? 1 : 2)
                 .fixedSize(horizontal: false, vertical: true)
         } else {
-            Text(L10n.text("Расходы за 7 дней")).font(.system(size: 10)).foregroundStyle(.secondary)
+            Text(strings.text("Расходы за 7 дней")).font(.system(size: 10)).foregroundStyle(.secondary)
         }
     }
 }

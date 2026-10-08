@@ -63,7 +63,7 @@ def configs(name, settings):
 
 def build_file(target, path): return obj('build:'+target+path, 'PBXBuildFile', fileRef=files[path])
 shared_widget = ['Shared/BrandGeometry.swift','Shared/UsageModels.swift','Shared/Localization.swift','Shared/UsageFormatting.swift','Shared/UsageRoute.swift','Shared/UsageHealth.swift','Shared/UsageHealthViews.swift',
-                 'Shared/SnapshotStorage.swift','Shared/SampleData.swift','Shared/UsageStyle.swift',
+                 'Shared/SnapshotStorage.swift','Shared/WidgetPresentation.swift','Shared/SampleData.swift','Shared/UsageStyle.swift',
                  'Shared/UsageHistory.swift','Shared/UsageHistoryViews.swift','Widget/UsageVariantViews.swift',
                  'Widget/UsageWidgetViews.swift','Widget/UsageTimelineProvider.swift','Widget/LLMUsageWidget.swift']
 for target in ['LLMUsage','LLMUsageWidget','LLMUsageTests']:

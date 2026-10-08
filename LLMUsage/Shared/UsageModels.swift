@@ -236,7 +236,7 @@ struct ModelUsageComponent: Codable, Equatable, Sendable {
 }
 
 enum UsageSource {
-    static func label(_ id: String) -> String {
+    static func label(_ id: String, language: InterfaceLanguage? = nil) -> String {
         ["claude": "Claude Code", "codex": "Codex", "opencode": "OpenCode", "amp": "Amp",
          "droid": "Droid", "codebuff": "Codebuff", "hermes": "Hermes", "pi": "pi-agent",
          "goose": "Goose", "kilo": "Kilo", "copilot": "GitHub Copilot", "gemini": "Gemini CLI",
@@ -449,18 +449,19 @@ enum UsageError: Error, LocalizedError, Codable, Equatable, Sendable {
     case sharedContainer(String)
     case outputTooLarge
 
-    var errorDescription: String? {
+    var errorDescription: String? { localizedDescription(language: nil) }
+    func localizedDescription(language: InterfaceLanguage?) -> String {
         switch self {
-        case .runtimeConsentRequired: return L10n.text("Подключите встроенный ccusage")
-        case .runtimeUnavailable: return L10n.text("Встроенный ccusage повреждён или недоступен")
-        case .maintenanceInProgress: return L10n.text("Подготовка обновления приложения")
-        case .missingExecutable: return L10n.text("ccusage не найден")
-        case .invalidPath: return L10n.text("Проверьте путь к ccusage")
-        case .processFailed: return L10n.text("Не удалось получить статистику")
-        case .timedOut: return L10n.text("ccusage не ответил вовремя")
-        case .malformedJSON: return L10n.text("Не удалось прочитать ответ ccusage")
-        case .sharedContainer: return L10n.text("Общее хранилище виджета недоступно")
-        case .outputTooLarge: return L10n.text("Ответ ccusage слишком большой")
+        case .runtimeConsentRequired: return L10n.text("Подключите встроенный ccusage", language: language)
+        case .runtimeUnavailable: return L10n.text("Встроенный ccusage повреждён или недоступен", language: language)
+        case .maintenanceInProgress: return L10n.text("Подготовка обновления приложения", language: language)
+        case .missingExecutable: return L10n.text("ccusage не найден", language: language)
+        case .invalidPath: return L10n.text("Проверьте путь к ccusage", language: language)
+        case .processFailed: return L10n.text("Не удалось получить статистику", language: language)
+        case .timedOut: return L10n.text("ccusage не ответил вовремя", language: language)
+        case .malformedJSON: return L10n.text("Не удалось прочитать ответ ccusage", language: language)
+        case .sharedContainer: return L10n.text("Общее хранилище виджета недоступно", language: language)
+        case .outputTooLarge: return L10n.text("Ответ ccusage слишком большой", language: language)
         }
     }
     var recovery: String {

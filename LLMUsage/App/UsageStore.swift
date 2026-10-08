@@ -77,6 +77,9 @@ final class UsageStore: ObservableObject {
         refreshLoop?.cancel()
         historyTask?.cancel()
         startupTask?.cancel()
+        publicationRetry?.cancel(); publicationRetry = nil
+        widgetReloadTask?.cancel(); widgetReloadTask = nil
+        await publicationTask?.value
         await historyTask?.value
         await startupTask?.value
         let deadline = ContinuousClock.now.advanced(by: .seconds(120))
@@ -87,6 +90,7 @@ final class UsageStore: ObservableObject {
     }
     func resumeAfterAppUpdate() {
         maintenanceInProgress = false
+        preferencesChanged()
         if started { scheduleAutomaticRefresh() }
     }
 
@@ -121,16 +125,31 @@ final class UsageStore: ObservableObject {
     private var storageFailures: [String: UsageError] = [:]
     private var presentationRevision = UUID()
     private var restoredCostIssues: [UsageCostIssue] = []
+    private var publicationTask: Task<Void, Never>?
+    private var publicationDirty = false
+    private var publicationRetry: Task<Void, Never>?
+    private var publicationFailures = 0
+    private var widgetReloadTask: Task<Void, Never>?
+    private var pendingWidgetContent: Data?
+    private var lastWidgetContent: Data?
+    private var lastWidgetReload: Date?
+    private var awaitingConfigurationData = false
+    private let widgetReloadDelay: TimeInterval
+    private let publicationRetryDelay: TimeInterval
 
     init(service: any CCUsageServing = CCUsageService(), repository: any SnapshotPersisting = SnapshotRepository(),
          defaults: UserDefaults = .standard, demo: Bool = false,
          now: @escaping () -> Date = Date.init,
+         widgetReloadDelay: TimeInterval = 1.5,
+         publicationRetryDelay: TimeInterval = 5,
          reloadWidget: @escaping () -> Void = { WidgetCenter.shared.reloadAllTimelines() }) {
         self.service = service
         self.repository = repository
         self.defaults = defaults
         self.reloadWidget = reloadWidget
         self.now = now
+        self.widgetReloadDelay = widgetReloadDelay
+        self.publicationRetryDelay = publicationRetryDelay
         let intervals = RefreshIntervals.load(from: defaults)
         refreshIntervals = intervals
         schedule = RefreshSchedule(intervals: intervals)
@@ -160,7 +179,10 @@ final class UsageStore: ObservableObject {
         }
     }
 
-    deinit { refreshLoop?.cancel(); historyTask?.cancel(); healthClock?.cancel(); restoreTask?.cancel() }
+    deinit {
+        refreshLoop?.cancel(); historyTask?.cancel(); healthClock?.cancel(); restoreTask?.cancel()
+        publicationTask?.cancel(); publicationRetry?.cancel(); widgetReloadTask?.cancel()
+    }
 
     var presentationStatus: RefreshStatus { makePresentationStatus() }
 
@@ -176,7 +198,8 @@ final class UsageStore: ObservableObject {
         return RefreshStatus(attemptedAt: lastAttempt ?? now(), message: todayFailure?.errorDescription,
             refreshMinutes: refreshIntervals.slowMinutes, dailyBudget: dailyBudget, dataContext: dataContext,
             interfaceLanguage: interfaceLanguage, refreshIntervalSeconds: refreshInterval,
-            modelExclusionPolicy: modelExclusionPolicy, presentation: presentation)
+            modelExclusionPolicy: modelExclusionPolicy, presentation: presentation,
+            isRecalculating: awaitingConfigurationData, publishedAt: now())
     }
 
     func problems(at date: Date? = nil) -> [UsageProblem] {
@@ -408,6 +431,7 @@ final class UsageStore: ObservableObject {
     }
 
     private func configurationChanged() {
+        awaitingConfigurationData = true
         generation += 1
         schedule.reset(day: UsageDay(date: now(), timezone: timezone), at: now())
         refreshMode = schedule.mode
@@ -431,17 +455,86 @@ final class UsageStore: ObservableObject {
     }
 
     private func publishStatus() async {
+        publicationDirty = true
+        publicationRetry?.cancel()
+        publicationRetry = nil
+        if let publicationTask { await publicationTask.value; return }
+        let writer = Task<Void, Never> { [weak self] in
+            guard let self else { return }
+            await self.drainPublications()
+        }
+        publicationTask = writer
+        await writer.value
+    }
+
+    /// Only this loop sends writes to the repository. Reentrant callers mark
+    /// it dirty; after an await it builds a new envelope from current state.
+    private func drainPublications() async {
+        defer { publicationTask = nil }
+        while publicationDirty && !Task.isCancelled {
+            publicationDirty = false
+            await writeCurrentPresentation()
+        }
+    }
+
+    private func writeCurrentPresentation() async {
         if refreshFailures.count > 32 {
             let recent = refreshFailures.values.sorted { $0.attemptedAt > $1.attemptedAt }.prefix(32)
             refreshFailures = Dictionary(uniqueKeysWithValues: recent.map { ($0.day.cacheKey, $0) })
         }
         presentationRevision = UUID()
         scheduleHealthTransition()
+        let status = makePresentationStatus(publishing: true)
+        let wasFailed = storageFailures["status"] != nil
         do {
-            try await repository.writeStatus(makePresentationStatus(publishing: true))
+            try await repository.writeStatus(status)
             storageResult(nil, operation: "status")
-        } catch { storageResult(Self.presentable(error), operation: "status") }
-        reloadWidget()
+            publicationFailures = 0
+            await requestWidgetReload(status, force: wasFailed)
+        } catch {
+            storageResult(Self.presentable(error), operation: "status")
+            publicationFailures += 1
+            widgetReloadTask?.cancel(); widgetReloadTask = nil; pendingWidgetContent = nil
+            if !publicationDirty && !maintenanceInProgress {
+                let delay = min(300, publicationRetryDelay * pow(2, Double(min(publicationFailures - 1, 6))))
+                publicationRetry = Task { [weak self] in
+                    do { try await Task.sleep(for: .seconds(delay)) } catch { return }
+                    guard !Task.isCancelled, let self, !self.maintenanceInProgress else { return }
+                    self.publicationRetry = nil
+                    await self.publishStatus()
+                }
+            }
+        }
+    }
+
+    private func requestWidgetReload(_ status: RefreshStatus, force: Bool) async {
+        guard !maintenanceInProgress else { return }
+        let date = now()
+        let content = await Task.detached(priority: .utility) {
+            WidgetPresentation(status: status, now: date).contentIdentity()
+        }.value
+        guard !maintenanceInProgress else { return }
+        if widgetReloadTask != nil { pendingWidgetContent = content; return }
+        // Renew freshness before the 10-minute stale transition, even if no
+        // money changed. Never deduplicate by generatedAt or the random revision.
+        guard force || content != lastWidgetContent || lastWidgetReload.map({ date < $0 || date.timeIntervalSince($0) >= 300 }) != false else { return }
+        pendingWidgetContent = content
+        guard widgetReloadTask == nil else { return }
+        let interval = widgetReloadDelay == 0 ? 0 : max(widgetReloadDelay, 15 - max(0, lastWidgetReload.map { date.timeIntervalSince($0) } ?? 15))
+        widgetReloadTask = Task { [weak self] in
+            do { try await Task.sleep(for: .seconds(interval)) } catch { return }
+            guard !Task.isCancelled, let self, !self.maintenanceInProgress else { return }
+            self.lastWidgetContent = self.pendingWidgetContent
+            self.lastWidgetReload = self.now()
+            self.pendingWidgetContent = nil
+            self.widgetReloadTask = nil
+            self.reloadWidget()
+        }
+    }
+
+    func waitForWidgetPublication() async {
+        await publicationTask?.value
+        await widgetReloadTask?.value
     }
 
     func canMoveSelectedDay(by offset: Int) -> Bool {
@@ -520,6 +613,7 @@ final class UsageStore: ObservableObject {
             data = data.applyingExclusions(modelExclusionPolicy)
             data.dataContext = context
             todaySnapshot = data
+            awaitingConfigurationData = false
             cacheSnapshot(data)
             if selectedDay == today { snapshot = data }
             recordHistory(data)
@@ -749,6 +843,10 @@ extension UsageStore {
     /// Reset between scenarios; all loading/error transitions still go through refresh and restore.
     func resetForManualReview() {
         precondition(isManualReview)
+        publicationRetry?.cancel(); publicationRetry = nil
+        widgetReloadTask?.cancel(); widgetReloadTask = nil
+        lastWidgetContent = nil; pendingWidgetContent = nil; lastWidgetReload = nil
+        publicationFailures = 0
         startupTask?.cancel()
         restoreTask?.cancel()
         restoreTask = nil

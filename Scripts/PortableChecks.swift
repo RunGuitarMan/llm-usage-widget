@@ -357,6 +357,7 @@ struct PortableChecks {
         await TranscriptTimingScenarios.run(check: check)
         await TranscriptServiceScenarios.run(check: check)
         await UsageHealthScenarios.run(check: check)
+        await WidgetStabilityScenarios.run(check: check)
         await RegressionScenarios.run(check: check)
         await PricingScenarios.run(check: check)
         await RuntimeScenarios.run(check: check)
@@ -368,7 +369,7 @@ struct PortableChecks {
             let service = RefreshFixtureService(today: UsageDay())
             let repository = MemoryRepository()
             var reloads = 0
-            let store = UsageStore(service: service, repository: repository, defaults: defaults, reloadWidget: { reloads += 1 })
+            let store = UsageStore(service: service, repository: repository, defaults: defaults, widgetReloadDelay: 0, reloadWidget: { reloads += 1 })
             try expect(store.interfaceLanguage == .system, "Language default must be system")
             await store.refresh()
             await store.waitForHistoryBackfill()

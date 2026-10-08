@@ -6,7 +6,7 @@ source Scripts/toolchain.sh
 mkdir -p build/ModuleCache
 CORE=(LLMUsage/Data/*.swift LLMUsage/Services/*.swift LLMUsage/Shared/UsageModels.swift LLMUsage/Shared/UsageHealth.swift
       LLMUsage/Shared/Localization.swift LLMUsage/Shared/UsageFormatting.swift LLMUsage/Shared/UsageHistory.swift LLMUsage/Shared/UsageRoute.swift
-      LLMUsage/Shared/SnapshotStorage.swift LLMUsage/Shared/SampleData.swift LLMUsage/App/RefreshSchedule.swift LLMUsage/App/UsageStore.swift
+      LLMUsage/Shared/SnapshotStorage.swift LLMUsage/Shared/WidgetPresentation.swift LLMUsage/Shared/SampleData.swift LLMUsage/App/RefreshSchedule.swift LLMUsage/App/UsageStore.swift
       LLMUsage/App/WidgetExtensionLifecycle.swift Scripts/ManualReview/WidgetProcessFixture.swift)
 "$LLM_SWIFTC" -parse-as-library -D PORTABLE_CHECKS -module-name LLMUsageChecks -sdk "$SDK_PATH" \
   -target "$(uname -m)-apple-macosx14.0" -module-cache-path "$PWD/build/ModuleCache" \

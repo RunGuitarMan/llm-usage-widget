@@ -31,20 +31,23 @@ enum InterfaceLanguage: String, CaseIterable, Codable, Identifiable, Sendable {
 struct LocalizedPhrase: ExpressibleByStringLiteral, ExpressibleByStringInterpolation, Sendable {
     var key: String
     var arguments: [String] = []
+    var numericArguments: [Int: Int64] = [:]
     init(stringLiteral value: String) { key = value }
     init(stringInterpolation: StringInterpolation) {
         key = stringInterpolation.key
         arguments = stringInterpolation.arguments
+        numericArguments = stringInterpolation.numericArguments
     }
     struct StringInterpolation: StringInterpolationProtocol {
         var key = ""
         var arguments: [String] = []
+        var numericArguments: [Int: Int64] = [:]
         init(literalCapacity: Int, interpolationCount: Int) { arguments.reserveCapacity(interpolationCount) }
         mutating func appendLiteral(_ literal: String) { key += literal }
         mutating func appendInterpolation<T>(_ value: T) {
             key += "{\(arguments.count)}"
-            if let value = value as? Int { arguments.append(UsageFormat.exact(Int64(value))) }
-            else if let value = value as? Int64 { arguments.append(UsageFormat.exact(value)) }
+            if let value = value as? Int { numericArguments[arguments.count] = Int64(value); arguments.append(String(value)) }
+            else if let value = value as? Int64 { numericArguments[arguments.count] = value; arguments.append(String(value)) }
             else { arguments.append(String(describing: value)) }
         }
     }
@@ -71,7 +74,7 @@ enum L10n {
             guard let range = Range(match.range, in: rendered),
                   let indexRange = Range(match.range(at: 1), in: template),
                   let index = Int(template[indexRange]), phrase.arguments.indices.contains(index) else { continue }
-            rendered.replaceSubrange(range, with: phrase.arguments[index])
+            rendered.replaceSubrange(range, with: phrase.numericArguments[index].map { UsageFormat.exact($0, language: language) } ?? phrase.arguments[index])
         }
         return rendered
     }
@@ -122,6 +125,8 @@ enum L10n {
         "Данные виджета недоступны": ("Данные виджета недоступны", "Widget data is unavailable"),
         "Данные требуют пересчёта": ("Данные требуют пересчёта", "Data needs recalculation"),
         "История неполная": ("История неполная", "History is incomplete"),
+        "Пересчёт данных…": ("Пересчёт данных…", "Recalculating…"),
+        "Настройки изменились. Ожидаем новые данные.": ("Настройки изменились. Ожидаем новые данные.", "Settings changed. Waiting for updated data."),
         "Общие данные": ("Общие данные", "Shared data"),
         "Приложению или виджету не удалось прочитать или сохранить общие данные. Виджет может показывать предыдущий результат.": ("Приложению или виджету не удалось прочитать или сохранить общие данные. Виджет может показывать предыдущий результат.", "The app or widget could not read or save shared data. The widget may show an earlier result."),
         "Последняя попытка обновления завершилась ошибкой. Повторите обновление; сохранённые данные останутся доступны.": ("Последняя попытка обновления завершилась ошибкой. Повторите обновление; сохранённые данные останутся доступны.", "The last refresh failed. Try again; your saved data will remain available."),
@@ -667,4 +672,18 @@ enum L10n {
         "Save": ("Сохранить", "Save"),
         "Cancel": ("Отменить", "Cancel"),
     ]
+}
+
+/// Explicit localization for widget subviews, without changing process globals.
+struct UsageLocalizer {
+    var language: InterfaceLanguage?
+    func text(_ phrase: LocalizedPhrase) -> String { L10n.text(phrase, language: language) }
+    func key(_ value: String) -> String { L10n.key(value, language: language) }
+    func tokens(_ value: Int64) -> String { UsageFormat.tokens(value, language: language) }
+    func exact(_ value: Int64) -> String { UsageFormat.exact(value, language: language) }
+    func cost(_ value: Double) -> String { UsageFormat.cost(value, language: language) }
+    func cost(_ value: TokenUsage) -> String { UsageFormat.cost(value, language: language) }
+    func percent(_ value: Double) -> String { UsageFormat.percent(value, language: language) }
+    func time(_ value: Date) -> String { UsageFormat.time(value, language: language) }
+    func date(_ value: Date, timezone: String) -> String { UsageFormat.date(value, timezone: timezone, language: language) }
 }

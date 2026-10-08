@@ -3,14 +3,15 @@ import Foundation
 enum UsageProblemKind: String, Codable, CaseIterable, Sendable {
     case storage, refresh, context, stale, cost, history
 
-    var title: String {
+    var title: String { localizedTitle(language: nil) }
+    func localizedTitle(language: InterfaceLanguage?) -> String {
         switch self {
-        case .storage: return L10n.text("Данные виджета недоступны")
-        case .refresh: return L10n.text("Не удалось обновить данные")
-        case .context: return L10n.text("Данные требуют пересчёта")
-        case .stale: return L10n.text("Данные устарели")
-        case .cost: return L10n.text("Стоимость неполная")
-        case .history: return L10n.text("История неполная")
+        case .storage: return L10n.text("Данные виджета недоступны", language: language)
+        case .refresh: return L10n.text("Не удалось обновить данные", language: language)
+        case .context: return L10n.text("Данные требуют пересчёта", language: language)
+        case .stale: return L10n.text("Данные устарели", language: language)
+        case .cost: return L10n.text("Стоимость неполная", language: language)
+        case .history: return L10n.text("История неполная", language: language)
         }
     }
 }
@@ -61,7 +62,7 @@ struct UsagePresentation: Codable, Equatable, Sendable {
     var lastAttempt: Date? = nil
 }
 
-struct UsageProblem: Equatable, Identifiable, Sendable {
+struct UsageProblem: Codable, Equatable, Identifiable, Sendable {
     var reference: UsageProblemReference
     var lastSuccess: Date? = nil
     var attemptedAt: Date? = nil
@@ -70,7 +71,10 @@ struct UsageProblem: Equatable, Identifiable, Sendable {
     var models: [String] = []
     var missingDays: [UsageDay] = []
     var id: String { reference.id }
-    var title: String { reference.kind == .refresh ? error?.errorDescription ?? reference.kind.title : reference.kind.title }
+    var title: String { localizedTitle(language: nil) }
+    func localizedTitle(language: InterfaceLanguage?) -> String {
+        reference.kind == .refresh ? error?.localizedDescription(language: language) ?? reference.kind.localizedTitle(language: language) : reference.kind.localizedTitle(language: language)
+    }
     var scope: String { reference.day.map { UsageFormat.date($0.date, timezone: $0.timezone) + " · " + $0.timezone } ?? L10n.text("Общие данные") }
     var explanation: String {
         switch reference.kind {
@@ -96,7 +100,7 @@ enum UsageHealth {
         let zone = status?.dataContext?.timezone ?? snapshot?.day.timezone ?? history?.context.timezone ?? "UTC"
         let today = UsageDay(date: now, timezone: zone)
         let capturedAt = snapshot?.generatedAt ?? history?.days.first(where: { $0.day == today })?.capturedAt
-        return ([today.end] + (capturedAt.map { [staleDate(generatedAt: $0, interval: status?.refreshInterval ?? 180)] } ?? []))
+        return Array(Set([today.end] + (capturedAt.map { [staleDate(generatedAt: $0, interval: status?.refreshInterval ?? 180)] } ?? [])))
             .filter { $0 > now }.sorted()
     }
 
@@ -152,8 +156,9 @@ enum UsageHealth {
         }
     }
 
-    static func summary(_ problems: [UsageProblem]) -> String {
-        guard let first = problems.first else { return L10n.text("Проблем не обнаружено") }
-        return problems.count == 1 ? first.title : L10n.text("\(first.title) · ещё \(problems.count - 1)")
+    static func summary(_ problems: [UsageProblem], language: InterfaceLanguage? = nil) -> String {
+        guard let first = problems.first else { return L10n.text("Проблем не обнаружено", language: language) }
+        let title = first.localizedTitle(language: language)
+        return problems.count == 1 ? title : L10n.text("\(title) · ещё \(problems.count - 1)", language: language)
     }
 }

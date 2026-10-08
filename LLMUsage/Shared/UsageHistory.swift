@@ -160,11 +160,13 @@ struct DailyBudget: Equatable {
     var fraction: Double { min(max(usage.cost / limit, 0), 1) }
     var isOver: Bool { usage.cost > limit }
     var difference: Double { abs(limit - usage.cost) }
-    var caption: String {
+    var caption: String { localizedCaption(language: nil) }
+    func localizedCaption(language: InterfaceLanguage?) -> String {
+        let strings = UsageLocalizer(language: language)
         let partial = usage.costIsIncomplete == true
-        if isOver { return L10n.text("Превышение \(UsageFormat.cost(difference))") }
-        if partial { return L10n.text("Учтена часть стоимости") }
-        return L10n.text("Осталось \(UsageFormat.cost(difference))")
+        if isOver { return strings.text("Превышение \(strings.cost(difference))") }
+        if partial { return strings.text("Учтена часть стоимости") }
+        return strings.text("Осталось \(strings.cost(difference))")
     }
 }
 

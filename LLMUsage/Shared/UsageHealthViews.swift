@@ -3,18 +3,20 @@ import SwiftUI
 /// All compact surfaces use the same summary and destination. The full list is
 /// available in the app even when only one line fits in a widget or popover.
 struct UsageProblemLabel: View {
+    @Environment(\.usageLanguage) private var interfaceLanguage
+    private var strings: UsageLocalizer { .init(language: interfaceLanguage) }
     var problems: [UsageProblem]
     var compact = false
 
     var body: some View {
         HStack(spacing: 4) {
             Image(systemName: "exclamationmark.triangle").foregroundStyle(.orange)
-            if !compact { Text(UsageHealth.summary(problems)).lineLimit(1).truncationMode(.tail) }
+            if !compact { Text(UsageHealth.summary(problems, language: interfaceLanguage)).lineLimit(1).truncationMode(.tail) }
             else if problems.count > 1 { Text(String(problems.count)).monospacedDigit() }
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(UsageHealth.summary(problems))
-        .help(UsageHealth.summary(problems) + ". " + L10n.text("Подробнее"))
+        .accessibilityLabel(UsageHealth.summary(problems, language: interfaceLanguage))
+        .help(UsageHealth.summary(problems, language: interfaceLanguage) + ". " + strings.text("Подробнее"))
         #if MANUAL_REVIEW
         .background(ReviewHealthProbe(problems: problems))
         #endif
@@ -22,6 +24,8 @@ struct UsageProblemLabel: View {
 }
 
 struct UsageProblemLink: View {
+    @Environment(\.usageLanguage) private var interfaceLanguage
+    private var strings: UsageLocalizer { .init(language: interfaceLanguage) }
     var problems: [UsageProblem]
     var compact = false
     var body: some View {

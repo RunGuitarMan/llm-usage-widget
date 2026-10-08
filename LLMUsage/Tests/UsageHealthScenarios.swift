@@ -123,7 +123,9 @@ enum UsageHealthScenarios {
             catch is UsageError { }
             var corrupt = status(fresh)
             corrupt.presentation?.snapshot?.sessions.append(fresh.sessions[0])
-            try await repository.writeStatus(corrupt)
+            do { try await repository.writeStatus(corrupt); throw HealthCheckFailure(description: "Invalid publication accepted") }
+            catch is UsageError { }
+            try SnapshotFiles.write(corrupt, name: "refresh-status.json", directory: directory)
             do { _ = try SnapshotFiles.presentation(directory: directory); throw HealthCheckFailure(description: "Corrupt envelope accepted") }
             catch is UsageError { }
             try await repository.writeStatus(.init(attemptedAt: now, message: "legacy failure", refreshMinutes: 3, dataContext: context))

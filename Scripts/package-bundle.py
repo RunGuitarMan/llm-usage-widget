@@ -73,11 +73,11 @@ if not is_widget:
 entitlements = expand(plistlib.loads((resources / f"{stem}.entitlements").read_bytes()))
 if storage_mode == "local-files":
     # Ad-hoc signatures cannot read TCC-protected App Groups on recent macOS.
-    # The extension gets read-only access to four derived data files, not CLI logs.
+    # The extension gets read-only access to derived data files, not CLI logs.
     entitlements.pop("com.apple.security.application-groups", None)
     if is_widget:
         entitlements["com.apple.security.temporary-exception.files.home-relative-path.read-only"] = [
             f"/{info['UsageLocalWidgetDataPath']}/{name}" for name in
-            ("latest-usage-v2.json", "previous-day-usage-v2.json", "refresh-status.json", "daily-history-v1.json")
+            ("latest-usage-v2.json", "previous-day-usage-v2.json", "refresh-status.json", "daily-history-v1.json", "widget-presentation-v1.json")
         ]
 (root / "build" / f"{kind}-build.entitlements").write_bytes(plistlib.dumps(entitlements))

@@ -7,7 +7,7 @@ mkdir -p build/ModuleCache
 CORE=(LLMUsage/Data/*.swift LLMUsage/Services/*.swift
       LLMUsage/Shared/UsageModels.swift LLMUsage/Shared/Localization.swift
       LLMUsage/Shared/UsageFormatting.swift LLMUsage/Shared/UsageHistory.swift
-      LLMUsage/Shared/UsageHealth.swift LLMUsage/Shared/UsageRoute.swift LLMUsage/Shared/SnapshotStorage.swift
+      LLMUsage/Shared/UsageHealth.swift LLMUsage/Shared/UsageRoute.swift LLMUsage/Shared/SnapshotStorage.swift LLMUsage/Shared/WidgetPresentation.swift
       LLMUsage/Shared/SampleData.swift LLMUsage/App/RefreshSchedule.swift
       LLMUsage/App/UsageStore.swift LLMUsage/App/AppUpdateCoordinator.swift)
 "$LLM_SWIFTC" -parse-as-library -D UPDATE_TESTING -sdk "$SDK_PATH" \

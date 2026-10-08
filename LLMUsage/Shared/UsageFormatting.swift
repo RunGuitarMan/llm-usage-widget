@@ -3,24 +3,24 @@ import Foundation
 enum UsageFormat {
     private static let posix = Locale(identifier: "en_US_POSIX")
 
-    static func tokens(_ value: Int64) -> String {
+    static func tokens(_ value: Int64, language: InterfaceLanguage? = nil) -> String {
         let number = Double(value)
-        if value >= 999_950 { return trimmed(number / 1_000_000, digits: 2) + "M" }
-        if value >= 1_000 { return trimmed(number / 1_000, digits: 1) + "K" }
+        if value >= 999_950 { return trimmed(number / 1_000_000, digits: 2, language: language) + "M" }
+        if value >= 1_000 { return trimmed(number / 1_000, digits: 1, language: language) + "K" }
         return String(value)
     }
-    private static func trimmed(_ value: Double, digits: Int) -> String {
+    private static func trimmed(_ value: Double, digits: Int, language: InterfaceLanguage? = nil) -> String {
         let formatter = NumberFormatter()
-        formatter.locale = L10n.locale
+        formatter.locale = (language?.locale ?? L10n.locale)
         formatter.numberStyle = .decimal
         formatter.usesGroupingSeparator = false
         formatter.maximumFractionDigits = digits
         return formatter.string(from: NSNumber(value: value)) ?? "0"
     }
     static func decimal(_ value: Double) -> String { trimmed(value, digits: 6) }
-    static func exact(_ value: Int64) -> String {
+    static func exact(_ value: Int64, language: InterfaceLanguage? = nil) -> String {
         let formatter = NumberFormatter()
-        formatter.locale = L10n.locale
+        formatter.locale = (language?.locale ?? L10n.locale)
         formatter.numberStyle = .decimal
         formatter.usesGroupingSeparator = true
         // Grouping follows the selected interface locale.
@@ -28,11 +28,11 @@ enum UsageFormat {
         formatter.maximumFractionDigits = 0
         return formatter.string(from: NSNumber(value: value)) ?? String(value)
     }
-    static func cost(_ value: Double) -> String {
-        String(format: "$%.2f", locale: L10n.locale, value == 0 ? 0 : value)
+    static func cost(_ value: Double, language: InterfaceLanguage? = nil) -> String {
+        String(format: "$%.2f", locale: (language?.locale ?? L10n.locale), value == 0 ? 0 : value)
     }
-    static func cost(_ usage: TokenUsage) -> String {
-        cost(usage.cost)
+    static func cost(_ usage: TokenUsage, language: InterfaceLanguage? = nil) -> String {
+        cost(usage.cost, language: language)
     }
     /// At most six characters; the menu keeps the full cents-precision amount.
     static func menuBarCost(_ usage: TokenUsage?) -> String {
@@ -49,9 +49,9 @@ enum UsageFormat {
         }
         return prefix + "1T+"
     }
-    static func percent(_ fraction: Double) -> String {
-        if fraction > 0 && fraction < 0.0001 { return "<" + trimmed(0.01, digits: 2) + "%" }
-        return String(format: "%.2f%%", locale: L10n.locale, fraction * 100)
+    static func percent(_ fraction: Double, language: InterfaceLanguage? = nil) -> String {
+        if fraction > 0 && fraction < 0.0001 { return "<" + trimmed(0.01, digits: 2, language: language) + "%" }
+        return String(format: "%.2f%%", locale: (language?.locale ?? L10n.locale), fraction * 100)
     }
     static func menuBarPercent(count: Int64, total: Int64) -> String {
         guard total > 0, count > 0 else { return "0%" }
@@ -67,17 +67,17 @@ enum UsageFormat {
         formatter.dateFormat = "yyyyMMdd"
         return formatter.string(from: date)
     }
-    static func date(_ date: Date, timezone: String = TimeZone.current.identifier, includeTime: Bool = false) -> String {
+    static func date(_ date: Date, timezone: String = TimeZone.current.identifier, includeTime: Bool = false, language: InterfaceLanguage? = nil) -> String {
         let formatter = DateFormatter()
-        formatter.locale = L10n.locale
+        formatter.locale = (language?.locale ?? L10n.locale)
         formatter.timeZone = TimeZone(identifier: timezone)
         formatter.dateStyle = .medium
         formatter.timeStyle = includeTime ? .short : .none
         return formatter.string(from: date)
     }
-    static func time(_ date: Date) -> String {
+    static func time(_ date: Date, language: InterfaceLanguage? = nil) -> String {
         let formatter = DateFormatter()
-        formatter.locale = L10n.locale
+        formatter.locale = (language?.locale ?? L10n.locale)
         formatter.timeStyle = .short
         return formatter.string(from: date)
     }
