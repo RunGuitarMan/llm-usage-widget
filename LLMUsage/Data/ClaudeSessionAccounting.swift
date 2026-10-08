@@ -65,6 +65,9 @@ enum ClaudeSessionAccounting {
                 result.usageUncertain = true; continue
             }
             result.claudeSnapshotValidated = true
+            result.claudeAccountingCoverage = used.sorted().map {
+                .init(model: $0, through: TranscriptJSON.date(row["timestamp"]))
+            }
             accepted = proposal // A snapshot replaces the previous cumulative one.
         }
         result.requests += accepted.keys.sorted().compactMap { accepted[$0] }

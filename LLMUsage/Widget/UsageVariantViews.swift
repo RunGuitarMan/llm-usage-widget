@@ -14,6 +14,7 @@ struct UsageSessionsWidget: View {
     var snapshot: UsageSnapshot
     var date: Date
     var status: RefreshStatus?
+    var problems: [UsageProblem]
     private var small: Bool { family == .systemSmall }
     private var large: Bool { family == .systemLarge }
     private var rows: [UsageSession] { Array(SessionSort.cost.sorted(snapshot.sessions).prefix(large ? 4 : small ? 2 : 3)) }
@@ -36,16 +37,15 @@ struct UsageSessionsWidget: View {
             }
             Spacer(minLength: 7)
             HStack(spacing: 4) {
-                Text(small ? L10n.text("По стоимости") : L10n.text("Сессии: \(snapshot.sessions.count) · по стоимости"))
+                if problems.isEmpty || small {
+                    Text(small ? L10n.text("По стоимости") : L10n.text("Сессии: \(snapshot.sessions.count) · по стоимости"))
+                }
                 Spacer(minLength: 2)
-                if snapshot.totals.costIsIncomplete == true || status?.message != nil
-                    || (status?.dataContext != nil && snapshot.dataContext != status?.dataContext)
-                    || snapshot.isStale(now: date, interval: status?.refreshInterval ?? 180) {
-                    Image(systemName: "exclamationmark.triangle").foregroundStyle(.orange)
-                        .accessibilityLabel(L10n.text("Данные неполные или устарели"))
+                if !problems.isEmpty {
+                    UsageProblemLink(problems: problems, compact: small)
                 } else { Text(UsageFormat.time(snapshot.generatedAt)) }
             }.font(.system(size: 9)).foregroundStyle(.secondary).lineLimit(1).minimumScaleFactor(0.7)
-        }.widgetURL(UsageRoute.datedSessions(snapshot.day).url)
+        }
     }
     private var amount: some View {
         VStack(alignment: .leading, spacing: 3) {
@@ -91,6 +91,7 @@ struct UsageTrendWidget: View {
     var history: UsageHistory?
     var status: RefreshStatus?
     var date: Date
+    var problems: [UsageProblem]
     private var today: UsageDay { .init(date: date, timezone: status?.dataContext?.timezone ?? history?.context.timezone ?? snapshot?.day.timezone ?? "UTC") }
     private var points: [UsageHistoryPoint] {
         var data = history ?? UsageHistory(context: status?.dataContext ?? snapshot?.dataContext ?? .init(timezone: today.timezone, customPath: ""))
@@ -101,10 +102,6 @@ struct UsageTrendWidget: View {
         return data.points(ending: today)
     }
     private var large: Bool { family == .systemLarge }
-    private var stale: Bool {
-        guard let capturedAt = points.last?.total?.capturedAt else { return false }
-        return date.timeIntervalSince(capturedAt) > max((status?.refreshInterval ?? 180) * 2, 600)
-    }
     private var budget: DailyBudget? {
         guard let snapshot, snapshot.day == today else { return nil }
         return DailyBudget(limit: status?.dailyBudget, usage: snapshot.totals)
@@ -132,14 +129,12 @@ struct UsageTrendWidget: View {
             Spacer(minLength: large ? 8 : 5)
             HStack(spacing: 4) {
                 HistoryCoverageCaption(points: points, compact: !large)
-                if status?.message != nil || stale {
-                    Image(systemName: "exclamationmark.triangle").font(.system(size: 9)).foregroundStyle(.orange)
-                        .accessibilityLabel(status?.message != nil ? L10n.text("Не удалось обновить") : L10n.text("Данные устарели"))
-                        .help(status?.message != nil ? L10n.text("Не удалось обновить") : L10n.text("Данные устарели"))
+                if !problems.isEmpty {
+                    UsageProblemLink(problems: problems, compact: !large).font(.system(size: 9))
                 }
                 if large { Spacer(); Text(today.timezone).font(.system(size: 9)).foregroundStyle(.tertiary) }
             }
-        }.widgetURL(UsageRoute.overview.url)
+        }
     }
     private var heading: some View {
         VStack(alignment: .leading, spacing: 0) {

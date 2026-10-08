@@ -127,7 +127,7 @@ struct SessionChatView: View {
         .onAppear {
             guard let kind = ManualReviewController.active?.chatKind else { return }
             view = kind == "expensive" ? .expensive : kind == "analytics" ? .tools : .chat
-            filter = kind == "errors" ? .errors : kind == "tools" ? .tools : .all
+            filter = ["errors", "service-errors"].contains(kind) ? .errors : kind == "tools" ? .tools : .all
             expandedTools = kind == "tools" ? ["3", "4", "7"] : []
             search = kind == "search" ? "поиск" : ""
             showInfo = kind == "info"
@@ -292,13 +292,18 @@ struct SessionChatView: View {
                                 contextGroup(row.events)
                             } else if let event = row.events.first {
                                 Group {
-                                    if event.kind == .tool { toolRow(event) }
+                                    if let service = event.service {
+                                        TranscriptServiceRow(event: event, service: service, timestamp: event.timestamp.map(time),
+                                                             query: search, copy: copy) { title, text, monospaced in
+                                            reading = .init(title: title, text: text, monospaced: monospaced)
+                                        }
+                                    } else if event.kind == .tool { toolRow(event) }
                                     else { messageRow(event) }
                                 }.id(event.id)
                             }
                         }
                         if search.isEmpty, filter == .all, let transcript = reader.transcript, !showContext {
-                            let count = transcript.events.filter { $0.kind == .context }.count
+                            let count = transcript.events.filter(\.isHiddenContext).count
                             if count > 0 {
                                 Button { showContext = true } label: {
                                     Label(L10n.text("Показать служебные события (\(count))"), systemImage: "text.alignleft")
@@ -480,8 +485,12 @@ struct SessionChatView: View {
     private var footer: some View {
         HStack(spacing: 8) {
             let visible = rows.flatMap(\.events)
+            let messages = visible.filter { $0.isMessage && !$0.isUsageOnly }.count
+            let actions = visible.filter { $0.kind == .tool && !$0.isToolResultOnly }.count
+            let services = visible.filter { $0.service != nil }.count
             Text(search.isEmpty
-                 ? "\(L10n.count(visible.filter { $0.isMessage && !$0.isUsageOnly }.count, .messages)) · \(L10n.count(visible.filter { $0.kind == .tool && !$0.isToolResultOnly }.count, .actions))"
+                 ? (messages == 0 && actions == 0 && services > 0 ? L10n.text("Событий: \(services)")
+                    : "\(L10n.count(messages, .messages)) · \(L10n.count(actions, .actions))")
                  : L10n.text("Найдено: \(results.value.eventCount)"))
                 .font(.system(size: 10))
             Spacer()

@@ -45,6 +45,7 @@ struct RefreshStatus: Codable, Equatable, Sendable {
     var interfaceLanguage: InterfaceLanguage? = nil
     var refreshIntervalSeconds: TimeInterval? = nil
     var modelExclusionPolicy: ModelExclusionPolicy? = nil
+    var presentation: UsagePresentation? = nil
     // Optional presentation preferences can be added here without changing the snapshot schema.
 
     var refreshInterval: TimeInterval {
@@ -93,6 +94,10 @@ actor SnapshotRepository: SnapshotPersisting {
 enum SnapshotFiles {
     static func read(_ slot: SnapshotSlot, directory: URL?) throws -> UsageSnapshot? {
         let snapshot: UsageSnapshot? = try readValue(name: slot.rawValue, directory: directory)
+        try validate(snapshot)
+        return snapshot
+    }
+    private static func validate(_ snapshot: UsageSnapshot?) throws {
         guard snapshot == nil || snapshot?.schemaVersion == 2 else {
             throw UsageError.sharedContainer("Unsupported snapshot schema version")
         }
@@ -108,13 +113,53 @@ enum SnapshotFiles {
                           && (0...1_000_000_000_000).contains(session.reasoningOutputTokens ?? 0)
                   }) else { throw UsageError.sharedContainer("Invalid values in saved snapshot") }
         }
-        return snapshot
     }
     static func status(directory: URL?) throws -> RefreshStatus? {
-        try readValue(name: "refresh-status.json", directory: directory)
+        let status: RefreshStatus? = try readValue(name: "refresh-status.json", directory: directory)
+        if let presentation = status?.presentation {
+            guard presentation.schemaVersion == 1,
+                  presentation.failures.count <= 64, presentation.costIssues.count <= 64,
+                  presentation.failures.allSatisfy({ validDay($0.day) }),
+                  presentation.costIssues.allSatisfy({ validDay($0.day) }) else {
+                throw UsageError.sharedContainer("Invalid saved presentation")
+            }
+            try validate(presentation.snapshot)
+            try validate(presentation.previous)
+            try validate(presentation.history)
+        }
+        return status
+    }
+
+    static func presentation(directory: URL?) throws -> SharedUsageData {
+        let status = try status(directory: directory)
+        let snapshot: UsageSnapshot?, previous: UsageSnapshot?, history: UsageHistory?
+        var storageUnavailable = false
+        if let presentation = status?.presentation {
+            snapshot = presentation.snapshot
+            previous = presentation.previous
+            history = presentation.history
+        } else {
+            snapshot = try read(.today, directory: directory)
+            do { previous = try read(.yesterday, directory: directory) }
+            catch { previous = nil; storageUnavailable = true }
+            do { history = try self.history(directory: directory) }
+            catch { history = nil; storageUnavailable = true }
+        }
+        let policy = status?.modelExclusionPolicy ?? ModelExclusionPolicy()
+        func visible(_ data: UsageSnapshot?) -> UsageSnapshot? {
+            guard status?.dataContext == nil || status?.dataContext.map({ data?.dataContext?.canDisplay(alongside: $0) == true }) == true else { return nil }
+            return data?.applyingExclusions(policy)
+        }
+        let visibleHistory = status?.dataContext.map { history?.context.canDisplay(alongside: $0) == true } == true ? history?.applyingExclusions(policy) : nil
+        return .init(snapshot: visible(snapshot), previous: visible(previous), history: visibleHistory,
+                     status: status, storageUnavailable: storageUnavailable)
     }
     static func history(directory: URL?) throws -> UsageHistory? {
         let history: UsageHistory? = try readValue(name: "daily-history-v1.json", directory: directory)
+        try validate(history)
+        return history
+    }
+    private static func validate(_ history: UsageHistory?) throws {
         if let history {
             guard history.schemaVersion == 1, TimeZone(identifier: history.context.timezone) != nil,
                   history.days.count <= 7, Set(history.days.map(\.id)).count == history.days.count,
@@ -126,7 +171,6 @@ enum SnapshotFiles {
                           && validComponents(item.usageComponents)
                   }) else { throw UsageError.sharedContainer("Invalid saved daily history") }
         }
-        return history
     }
 
     // CLI limits permit at most 100,000 sessions of 5e12 tokens per day.
@@ -184,4 +228,12 @@ enum SnapshotFiles {
             try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: destination.path)
         } catch { throw UsageError.sharedContainer(String(describing: error)) }
     }
+}
+
+struct SharedUsageData {
+    var snapshot: UsageSnapshot?
+    var previous: UsageSnapshot?
+    var history: UsageHistory?
+    var status: RefreshStatus?
+    var storageUnavailable = false
 }

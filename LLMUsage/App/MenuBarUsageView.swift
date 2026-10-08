@@ -11,7 +11,8 @@ struct MenuBarUsageView: View {
                          dailyBudget: store.dailyBudget, timezone: store.timezone,
                          isRefreshing: store.isRefreshing, isDemo: store.isDemo,
                          error: store.error?.errorDescription,
-                         refreshInterval: store.refreshInterval,
+                         refreshInterval: store.refreshInterval, status: store.presentationStatus,
+                         openProblem: { openRoute(.problem($0)) },
                          openDashboard: { openRoute(.overview) }, openSettings: { openRoute(.settings) },
                          refresh: { Task { await store.refresh() } })
             .environment(\.locale, store.interfaceLanguage.locale)
@@ -32,12 +33,20 @@ struct MenuBarUsageCard: View {
     var isDemo = false
     var error: String?
     var refreshInterval: TimeInterval = 180
+    var status: RefreshStatus? = nil
+    var openProblem: (UsageProblemReference) -> Void = { _ in }
     var openDashboard: () -> Void = {}
     var openSettings: () -> Void = {}
     var refresh: () -> Void = {}
     private let ink = Color.primary
     private let secondaryInk = Color.secondary
     private let rule = Color.primary.opacity(0.09)
+
+    private var problems: [UsageProblem] {
+        UsageHealth.problems(snapshot: snapshot, history: history,
+            status: status ?? RefreshStatus(attemptedAt: Date(), message: error, refreshMinutes: 3,
+                refreshIntervalSeconds: refreshInterval), now: Date())
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -47,13 +56,24 @@ struct MenuBarUsageCard: View {
                 VStack(alignment: .leading, spacing: 10) {
                     Text("—").font(.system(size: 48, weight: .semibold))
                     HStack(spacing: 8) {
-                        if error == nil { ProgressView().controlSize(.small) }
-                        Text(error ?? L10n.text("Загружаем статистику…"))
+                        if problems.isEmpty { ProgressView().controlSize(.small) }
+                        Text(problems.first?.title ?? L10n.text("Загружаем статистику…"))
                             .font(.system(size: 13)).fixedSize(horizontal: false, vertical: true)
                     }.foregroundStyle(secondaryInk)
                 }.padding(.top, 17).padding(.bottom, 22)
             }
 
+            if let first = problems.first {
+                Button { openProblem(first.reference) } label: {
+                    HStack {
+                        UsageProblemLabel(problems: problems)
+                        Spacer(minLength: 4)
+                        Image(systemName: "chevron.right").font(.system(size: 9))
+                    }.font(.system(size: 11)).contentShape(Rectangle())
+                }
+                .buttonStyle(MenuBarActionStyle()).padding(.bottom, 16)
+                .accessibilityIdentifier("usage-problem-menu")
+            }
             Rectangle().fill(rule).frame(height: 1)
             VStack(spacing: 0) {
                 action(L10n.text("Открыть обзор"), symbol: "arrow.up.forward.square", shortcut: "O", action: openDashboard)
@@ -98,10 +118,6 @@ struct MenuBarUsageCard: View {
             Text(L10n.text("\(UsageFormat.tokens(usage.total)) Tokens  ·  Сессии: \(snapshot.sessions.count)"))
                 .font(.system(size: 12)).foregroundStyle(secondaryInk)
                 .lineLimit(1).minimumScaleFactor(0.8).padding(.top, 5)
-            if usage.costIsIncomplete == true {
-                Label(L10n.text("Стоимость неполная"), systemImage: "exclamationmark.triangle")
-                    .font(.system(size: 11)).foregroundStyle(secondaryInk).padding(.top, 8)
-            }
             if snapshot.day.isToday(), let budget = DailyBudget(limit: dailyBudget, usage: usage) {
                 UsageBudgetMeter(budget: budget).padding(.top, 18)
             }
@@ -126,14 +142,6 @@ struct MenuBarUsageCard: View {
                     }.accessibilityElement(children: .combine)
                 }
             }.font(.system(size: 12)).padding(.top, 17)
-            }
-            if let error {
-                Label(error, systemImage: "exclamationmark.triangle")
-                    .font(.system(size: 11)).foregroundStyle(secondaryInk)
-                    .fixedSize(horizontal: false, vertical: true).padding(.top, 14)
-            } else if snapshot.isStale(interval: refreshInterval) {
-                Text(L10n.text("Обновлено \(UsageFormat.time(snapshot.generatedAt)) · данные устарели"))
-                    .font(.system(size: 11)).foregroundStyle(secondaryInk).padding(.top, 14)
             }
         }.padding(.bottom, 22)
     }

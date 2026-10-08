@@ -90,9 +90,10 @@ struct TranscriptCostService: Sendable {
     var archive = TranscriptPricingArchive()
     var resolver = CCUsageExecutableResolver()
     var runner = ProcessRunner(timeout: 90)
+    var telemetryStore: ClaudeTelemetryStore?
 
     func price(_ original: SessionTranscript, source: String, customPath: String, pricingKey: String?) async throws -> SessionTranscript {
-        guard original.usageSupported, !original.requests.isEmpty else { return original }
+        guard original.usageSupported, !original.requests.isEmpty || (source == "claude" && original.claudeSessionID != nil) else { return original }
         if let runtime {
             return try await runtime.withExecutable { executable in
                 try await price(original, source: source, pricingKey: pricingKey, executable: executable)
@@ -102,6 +103,15 @@ struct TranscriptCostService: Sendable {
     }
     private func price(_ original: SessionTranscript, source: String, pricingKey: String?, executable: URL) async throws -> SessionTranscript {
         var transcript = original
+        if source == "claude", !transcript.imported, let sid = transcript.claudeSessionID,
+           let store = telemetryStore ?? (runtime == nil ? nil : .shared) {
+            do {
+                let events = try await store.events(sessionID: sid)
+                transcript = ClaudeTelemetryAccounting.recover(transcript, sessionID: sid, events: events)
+            } catch is CancellationError { throw CancellationError() }
+            catch { transcript.usageUncertain = true }
+        }
+        guard !transcript.requests.isEmpty else { return transcript }
         let configuration: Data
         if let pricingKey, let saved = try? archive.configuration(key: pricingKey, source: source, expectedEngineID: runtime == nil ? nil : CCUsageManifest.bundled?.engineID) {
             configuration = saved

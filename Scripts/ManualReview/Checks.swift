@@ -26,12 +26,22 @@ import AppKit
         try await WidgetChecks.run()
         try require(!review.store.isDemo, "Review disabled product controls using demo mode")
         try require(Set(ReviewScenario.all.map(\.id)).count == ReviewScenario.all.count, "Duplicate scenario IDs")
+        #if MANUAL_REVIEW
+        try await WidgetActivationChecks.run(review)
+        if CommandLine.arguments.contains("--review-widget-checks") { return }
+        #endif
         try await WindowChromeChecks.run(review)
+        #if MANUAL_REVIEW
+        try await HealthChecks.run(review)
+        #endif
         try await DateNavigationChecks.run(review)
         try await WindowChecks.run(review)
         try await SessionNavigationChecks.run(review)
         try await ProviderChecks.run(review)
         try await TelemetryReview.run(review)
+        #if MANUAL_REVIEW
+        try await TranscriptServiceChecks.run(review)
+        #endif
         for scenario in ReviewScenario.all {
             try await select(scenario.id)
             try require(review.dashboard === window, "Scenario replaced the production window")

@@ -50,15 +50,10 @@ struct UsageTimelineProvider: TimelineProvider {
         let interval = entry.status?.refreshInterval ?? 180
         let next = min(entry.date.addingTimeInterval(interval), entry.snapshot?.day.end ?? entry.date.addingTimeInterval(interval))
         var entries = [entry]
-        if let snapshot = entry.snapshot {
-            // Pre-scheduled entries update labels even when the app is closed or macOS
-            // delays a new timeline request. Yesterday's cost is never relabeled today.
-            let transitions = [snapshot.generatedAt.addingTimeInterval(max(interval * 2, 600) + 1), snapshot.day.end]
-            for date in Set(transitions).sorted() where date > entry.date {
-                var transition = entry
-                transition.date = date
-                entries.append(transition)
-            }
+        for date in UsageHealth.transitionDates(snapshot: entry.snapshot, history: entry.history, status: entry.status, now: entry.date) {
+            var transition = entry
+            transition.date = date
+            entries.append(transition)
         }
         return Timeline(entries: entries, policy: .after(max(next, entry.date.addingTimeInterval(60))))
     }
@@ -73,19 +68,11 @@ struct UsageTimelineProvider: TimelineProvider {
 
     func readEntry() -> UsageWidgetEntry {
         do {
-            let status = try SnapshotFiles.status(directory: directory)
-            let policy = status?.modelExclusionPolicy ?? ModelExclusionPolicy()
-            L10n.preference = status?.interfaceLanguage ?? .system
-            let stored = try SnapshotFiles.read(.today, directory: directory)
-            let snapshot = status?.dataContext == nil || status?.dataContext.map { stored?.dataContext?.canDisplay(alongside: $0) == true } == true ? stored : nil
-            let savedPrevious = try? SnapshotFiles.read(.yesterday, directory: directory)
-            let previous = status?.dataContext == nil || status?.dataContext.map { savedPrevious?.dataContext?.canDisplay(alongside: $0) == true } == true ? savedPrevious : nil
-            let savedHistory = try? SnapshotFiles.history(directory: directory)
-            let history = status?.dataContext.map { savedHistory?.context.canDisplay(alongside: $0) == true } == true ? savedHistory : nil
-            Self.logger.notice("Snapshot read: present=\(snapshot != nil), sessions=\(snapshot?.sessions.count ?? 0), generatedAt=\(snapshot?.generatedAt.timeIntervalSince1970 ?? 0), localFiles=\(SharedConfiguration.usesLocalWidgetStorage), historyDays=\(history?.days.count ?? 0), language=\(L10n.preference.rawValue, privacy: .public), resolvedLanguage=\(L10n.language.rawValue, privacy: .public)")
-            return .init(date: now(), snapshot: snapshot?.applyingExclusions(policy),
-                         previous: previous?.applyingExclusions(policy),
-                         status: status, history: history?.applyingExclusions(policy))
+            let data = try SnapshotFiles.presentation(directory: directory)
+            L10n.preference = data.status?.interfaceLanguage ?? .system
+            Self.logger.notice("Widget snapshot version=\(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?", privacy: .public), build=\(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?", privacy: .public), generation=\(data.snapshot?.generatedAt.timeIntervalSince1970 ?? 0), storageUnavailable=\(data.storageUnavailable)")
+            return .init(date: now(), snapshot: data.snapshot, previous: data.previous,
+                         status: data.status, history: data.history, storageUnavailable: data.storageUnavailable)
         } catch {
             Self.logger.error("Widget snapshot read failed: \(String(describing: error))")
             return .init(date: now(), snapshot: nil, previous: nil, status: presentationStatus(), storageUnavailable: true)

@@ -57,6 +57,7 @@ enum ReviewSize: String, CaseIterable, Identifiable {
     private(set) var selectionTask: Task<Void, Never>?
     weak var panel: NSWindow?
     private(set) weak var dashboard: NSWindow?
+    weak var appDelegate: UsageAppDelegate?
     private var openWindow: ((String) -> Void)?
     private var presentDashboard: (() -> Void)?
     private var showMenu: (() -> Void)?
@@ -360,6 +361,7 @@ enum ReviewSize: String, CaseIterable, Identifiable {
             try await Task.sleep(for: .milliseconds(120))
             if kind == "missing" { throw UsageError.processFailed(1, "Тестовый журнал не найден") }
             if kind == "empty" { return .init(events: []) }
+            if kind == "service-events" || kind == "service-errors" { return ReviewServiceTranscript.sample }
             var transcript = kind == "telemetry" ? TelemetryReview.transcript() : TranscriptPreview.sample
             if kind == "partial" {
                 transcript.usageUncertain = true
@@ -429,14 +431,18 @@ struct ReviewWidgetsView: View {
                         VStack(alignment: .leading, spacing: 12) {
                             Text(family == .systemSmall ? "Small" : family == .systemMedium ? "Medium" : "Large").font(.headline)
                             WidgetPreviewCard(family: family, variant: variant, history: store.history,
-                                              snapshot: store.snapshot, status: .init(attemptedAt: Date(), message: fixture.error?.errorDescription,
-                                                                                     refreshMinutes: 15),
+                                              snapshot: store.todaySnapshot, status: store.presentationStatus,
                                               storageUnavailable: fixture == .storage)
-                                .allowsHitTesting(false)
+                                .environment(\.openURL, OpenURLAction { url in
+                                    guard let route = UsageRoute(url: url) else { return .discarded }
+                                    store.navigate(route)
+                                    review.showDashboard()
+                                    return .handled
+                                })
                         }
                     }
                 }
-                Text("Ссылки отключены только в этой галерее, чтобы не открывать рабочую копию приложения.")
+                Text("Ссылки открывают подробности в этом же приложении проверки.")
                     .font(.caption).foregroundStyle(.secondary)
             }.padding(28)
         }.background(Color(nsColor: .underPageBackgroundColor))

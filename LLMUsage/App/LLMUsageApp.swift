@@ -4,6 +4,7 @@ import AppKit
 @MainActor
 final class UsageAppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     let dashboard = DashboardWindowCoordinator()
+    let activation = UsageActivation()
     private var menuBarController: MenuBarController?
     private let menuLocalization = AppMenuLocalization()
     private weak var telemetry: ClaudeTelemetryCoordinator?
@@ -33,6 +34,10 @@ final class UsageAppDelegate: NSObject, NSApplicationDelegate, ObservableObject 
         return .terminateLater
     }
 
+    func application(_ application: NSApplication, open urls: [URL]) {
+        for url in urls { activation.open(url) }
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
         telemetry?.stopImmediately()
         menuBarController?.tearDown()
@@ -43,7 +48,7 @@ final class UsageAppDelegate: NSObject, NSApplicationDelegate, ObservableObject 
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        if !flag { NotificationCenter.default.post(name: .openUsageDashboard, object: nil) }
+        if !flag { activation.present() }
         return true
     }
 }
@@ -117,14 +122,40 @@ struct AppRootView: View {
     var appDelegate: UsageAppDelegate
     @Environment(\.openWindow) private var openWindow
 
+    private enum RootSheet: Identifiable {
+        case problem(UsageProblemReference), maintenance
+        var id: String {
+            switch self { case .problem(let reference): return reference.id; case .maintenance: return "maintenance" }
+        }
+    }
+    private var rootSheet: Binding<RootSheet?> {
+        Binding(get: {
+            if let reference = store.presentedProblem { return .problem(reference) }
+            return updates.presentsSetup ? .maintenance : nil
+        }, set: { value in
+            guard value == nil else { return }
+            if store.presentedProblem != nil { store.presentedProblem = nil }
+            else { updates.presentsSetup = false }
+        })
+    }
+
     var body: some View {
         DashboardView(store: store, dashboardWindow: appDelegate.dashboard)
-            .modifier(ClaudeTelemetryPresentation(store: store, maintenancePresented: updates.presentsSetup))
-            .sheet(isPresented: $updates.presentsSetup) { AppMaintenanceSetup(updates: updates) }
+            .modifier(ClaudeTelemetryPresentation(store: store, maintenancePresented: rootSheet.wrappedValue != nil))
+            .sheet(item: rootSheet) { sheet in
+                switch sheet {
+                case .problem(let reference): UsageProblemsView(store: store, requested: reference)
+                case .maintenance: AppMaintenanceSetup(updates: updates)
+                }
+            }
             .environment(\.locale, store.interfaceLanguage.locale)
             .id(store.interfaceLanguage)
             .background { DashboardWindowConnection(coordinator: appDelegate.dashboard) }
             .task {
+                appDelegate.activation.install { [store, openWindow] route in
+                    if let route { store.navigate(route) }
+                    appDelegate.dashboard.show { openWindow(id: "dashboard") }
+                }
                 appDelegate.installMenuBar(store: store) { [store, openWindow] route in
                     store.navigate(route)
                     appDelegate.dashboard.show { openWindow(id: "dashboard") }
@@ -138,6 +169,7 @@ struct AppRootView: View {
                     }
                 }
                 if let review = ManualReviewController.active {
+                    review.appDelegate = appDelegate
                     print("REVIEW Production root appeared; windows: \(NSApp.windows.map { $0.identifier?.rawValue ?? $0.title })")
                     if let window = NSApp.windows.first(where: { $0.identifier?.rawValue == "dashboard" }) {
                         review.connect(window: window, openWindow: { openWindow(id: $0) },
@@ -161,14 +193,8 @@ struct AppRootView: View {
                 DispatchQueue.main.async { AppMenuLocalization.update() }
             }
             .onAppear { DispatchQueue.main.async { AppMenuLocalization.update() } }
-            .onOpenURL { url in
-                guard let route = UsageRoute(url: url) else { return }
-                store.navigate(route)
-                appDelegate.dashboard.show { openWindow(id: "dashboard") }
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .openUsageDashboard)) { _ in
-                appDelegate.dashboard.show { openWindow(id: "dashboard") }
-            }
+            // URLs are handled by the application delegate even while this
+            // menu-bar app's only window is hidden or has not appeared yet.
     }
 }
 

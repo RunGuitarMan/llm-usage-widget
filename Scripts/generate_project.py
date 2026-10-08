@@ -62,7 +62,7 @@ def configs(name, settings):
     return obj('configlist:'+name, 'XCConfigurationList', buildConfigurations=ids, defaultConfigurationIsVisible='0', defaultConfigurationName='Release')
 
 def build_file(target, path): return obj('build:'+target+path, 'PBXBuildFile', fileRef=files[path])
-shared_widget = ['Shared/BrandGeometry.swift','Shared/UsageModels.swift','Shared/Localization.swift','Shared/UsageFormatting.swift','Shared/UsageRoute.swift',
+shared_widget = ['Shared/BrandGeometry.swift','Shared/UsageModels.swift','Shared/Localization.swift','Shared/UsageFormatting.swift','Shared/UsageRoute.swift','Shared/UsageHealth.swift','Shared/UsageHealthViews.swift',
                  'Shared/SnapshotStorage.swift','Shared/SampleData.swift','Shared/UsageStyle.swift',
                  'Shared/UsageHistory.swift','Shared/UsageHistoryViews.swift','Widget/UsageVariantViews.swift',
                  'Widget/UsageWidgetViews.swift','Widget/UsageTimelineProvider.swift','Widget/LLMUsageWidget.swift']

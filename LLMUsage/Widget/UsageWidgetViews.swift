@@ -11,25 +11,24 @@ struct UsageWidgetContent: View {
     var date = Date()
     var storageUnavailable = false
 
-    private var stale: Bool {
-        (status?.dataContext != nil && snapshot?.dataContext != status?.dataContext)
-            || (snapshot?.isStale(now: date, interval: status?.refreshInterval ?? 180) ?? false)
+    var problems: [UsageProblem] {
+        UsageHealth.problems(snapshot: snapshot, history: history, status: status,
+                             storageUnavailable: storageUnavailable, now: date)
     }
-    private var incompleteCost: Bool { snapshot?.totals.costIsIncomplete == true }
-    private var notice: String? {
-        if incompleteCost { return L10n.text("Стоимость неполная") }
-        if status?.message != nil { return L10n.text("Не удалось обновить") }
-        if stale { return L10n.text("Данные устарели") }
-        return nil
+
+    var destination: URL {
+        if (family == .systemSmall || snapshot == nil), let first = problems.first { return UsageRoute.problem(first.reference).url }
+        if snapshot == nil && history == nil { return UsageRoute.settings.url }
+        return variant == .sessions ? snapshot.map { UsageRoute.datedSessions($0.day).url } ?? UsageRoute.sessions.url : UsageRoute.overview.url
     }
 
     var body: some View {
         GeometryReader { geometry in
             Group {
             if variant == .trend, snapshot != nil || history != nil {
-                UsageTrendWidget(family: family, snapshot: snapshot, history: history, status: status, date: date)
+                UsageTrendWidget(family: family, snapshot: snapshot, history: history, status: status, date: date, problems: problems)
             } else if variant == .sessions, let snapshot {
-                UsageSessionsWidget(family: family, snapshot: snapshot, date: date, status: status)
+                UsageSessionsWidget(family: family, snapshot: snapshot, date: date, status: status, problems: problems)
             } else if let snapshot {
                 switch family {
                 case .systemSmall: small(snapshot, tight: geometry.size.height < 135)
@@ -40,9 +39,7 @@ struct UsageWidgetContent: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
-        .widgetURL(snapshot == nil && history == nil ? UsageRoute.settings.url
-            : variant == .sessions ? snapshot.map { UsageRoute.datedSessions($0.day).url } ?? UsageRoute.sessions.url
-            : UsageRoute.overview.url)
+        .widgetURL(destination)
     }
 
     private func small(_ snapshot: UsageSnapshot, tight: Bool) -> some View {
@@ -59,9 +56,8 @@ struct UsageWidgetContent: View {
             HStack {
                 Text(L10n.text("Сессии: \(snapshot.sessions.count)"))
                 Spacer(minLength: 0)
-                if let notice {
-                    Image(systemName: "exclamationmark.triangle")
-                        .foregroundStyle(.orange).accessibilityLabel(notice)
+                if !problems.isEmpty {
+                    UsageProblemLink(problems: problems, compact: true)
                 } else {
                     Text(UsageFormat.time(snapshot.generatedAt)).monospacedDigit()
                 }
@@ -176,9 +172,8 @@ struct UsageWidgetContent: View {
 
     private func footer(_ snapshot: UsageSnapshot) -> some View {
         HStack(spacing: 4) {
-            if let notice {
-                Image(systemName: "exclamationmark.triangle").foregroundStyle(.orange)
-                Text(notice)
+            if !problems.isEmpty {
+                UsageProblemLink(problems: problems)
             } else if family == .systemLarge, let previous,
                       previous.day == snapshot.day.adding(days: -1), previous.totals.costIsIncomplete != true {
                 let change = snapshot.totals.cost - previous.totals.cost
@@ -190,18 +185,17 @@ struct UsageWidgetContent: View {
             Spacer(minLength: 4)
             Text(UsageFormat.time(snapshot.generatedAt)).monospacedDigit()
         }.font(.system(size: 9)).foregroundStyle(.secondary).lineLimit(1).minimumScaleFactor(0.8)
-            .accessibilityElement(children: .combine)
     }
 
     private var empty: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("LLM Usage").font(.system(size: 11, weight: .medium)).foregroundStyle(.secondary)
             Spacer(minLength: 0)
-            Image(systemName: storageUnavailable ? "exclamationmark.triangle" : status?.message != nil ? "arrow.clockwise" : "chart.bar.xaxis")
+            Image(systemName: problems.isEmpty ? "chart.bar.xaxis" : "exclamationmark.triangle")
                 .font(.system(size: 20, weight: .light)).foregroundStyle(.secondary)
-            Text(storageUnavailable ? L10n.text("Данные\nнедоступны") : family == .systemSmall ? L10n.text("Откройте\nLLM Usage") : L10n.text("Откройте LLM Usage"))
+            Text(problems.first?.title ?? (family == .systemSmall ? L10n.text("Откройте\nLLM Usage") : L10n.text("Откройте LLM Usage")))
                 .font(.system(size: 14, weight: .semibold)).fixedSize(horizontal: false, vertical: true)
-            Text(storageUnavailable ? L10n.text("Проверьте хранилище в настройках приложения.") : status?.message != nil ? L10n.text("Обновите данные в приложении.") : L10n.text("Настройте ccusage, чтобы видеть расходы здесь."))
+            Text(problems.isEmpty ? L10n.text("Настройте ccusage, чтобы видеть расходы здесь.") : L10n.text("Нажмите, чтобы узнать причину и что делать."))
                 .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
         }

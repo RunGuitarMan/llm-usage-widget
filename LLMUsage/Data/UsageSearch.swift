@@ -51,7 +51,7 @@ final class SearchResults<Input: Sendable, Output: Sendable>: ObservableObject {
 struct TranscriptRow: Identifiable, Sendable {
     var events: [TranscriptEvent]
     var id: String { events[0].id }
-    var isContext: Bool { events[0].kind == .context }
+    var isContext: Bool { events[0].isHiddenContext }
 }
 
 enum TranscriptEventFilter: String, CaseIterable, Identifiable, Sendable {
@@ -114,10 +114,10 @@ struct TranscriptSearchResult: Sendable {
                       start < day.end, end > day.date, end > start else { continue }
             }
             guard request.filter.includes(event) else { continue }
-            guard request.showContext || event.kind != .context || !request.query.isEmpty
+            guard request.showContext || !event.isHiddenContext || !request.query.isEmpty
                 || (request.filter == .errors && event.isError) else { continue }
             if !request.query.isEmpty {
-                var matches = [event.title, event.text, event.input, event.output]
+                var matches = ([event.title, event.text, event.input, event.output] + (event.service?.facts ?? []))
                     .contains { $0.localizedCaseInsensitiveContains(request.query) }
                 if !matches {
                     for record in event.records {
@@ -134,7 +134,7 @@ struct TranscriptSearchResult: Sendable {
                 guard matches else { continue }
             }
             result.eventCount += 1
-            if event.kind == .context, result.rows.last?.isContext == true {
+            if event.isHiddenContext, result.rows.last?.isContext == true {
                 result.rows[result.rows.count - 1].events.append(event)
             } else { result.rows.append(TranscriptRow(events: [event])) }
         }

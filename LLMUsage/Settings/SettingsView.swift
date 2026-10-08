@@ -17,6 +17,7 @@ struct UsageSettingsView: View {
     }
 
     var body: some View {
+        ScrollViewReader { proxy in
         Form {
             Section(L10n.text("Основные")) {
                 Picker(L10n.text("Язык интерфейса"), selection: $store.interfaceLanguage) {
@@ -140,6 +141,7 @@ struct UsageSettingsView: View {
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }
+            .id("usage-storage")
             if let error = store.diagnosticError ?? store.error ?? store.storageError {
                 Section {
                     DisclosureGroup(L10n.text("Технические подробности")) {
@@ -161,10 +163,18 @@ struct UsageSettingsView: View {
         .onAppear {
             updateLoginStatus()
             budgetText = UsageFormat.decimal(store.budgetAmount)
-            showStorage = store.storageError != nil
+            showStorage = store.showStorageSettings || store.storageError != nil
         }
+        .onChange(of: store.showStorageSettings) { _, show in if show { showStorage = true } }
         .onChange(of: store.storageError?.errorDescription) { _, error in if error != nil { showStorage = true } }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in updateLoginStatus() }
+        .task(id: store.showStorageSettings) {
+            if store.showStorageSettings {
+                await Task.yield()
+                proxy.scrollTo("usage-storage", anchor: .top)
+            }
+        }
+        }
     }
 
     private func applyBudget() {

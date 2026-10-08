@@ -2,7 +2,7 @@ import SwiftUI
 import WidgetKit
 
 enum ReviewFixture: String, CaseIterable {
-    case normal, many, navigation, dailyCosts, providers, empty, loading, missing, failure, refreshing, stale, partial, huge, zero, gaps, storage
+    case normal, many, navigation, dailyCosts, providers, empty, loading, missing, failure, refreshing, stale, partial, huge, zero, gaps, storage, multiple
     var title: String {
         switch self {
         case .normal: return "Обычные данные"
@@ -21,6 +21,7 @@ enum ReviewFixture: String, CaseIterable {
         case .zero: return "Нулевые токены"
         case .gaps: return "Пропуски истории"
         case .storage: return "Ошибка хранилища"
+        case .multiple: return "Несколько проблем"
         }
     }
     func snapshot(day: UsageDay) -> UsageSnapshot? {
@@ -124,7 +125,7 @@ struct ReviewScenario: Identifiable {
         }
         dashboard("overview", "Статистика · обычный день", "Раскрой состав токенов и список сессий. Проверь сортировку, выбор источника и подсказки при наведении.")
         dashboard("window-chrome", "Окно · скругления и повторное открытие", "Сузь окно до минимума и выбери сессию: окно расширится, скругление левого меню должно остаться согласованным с краем окна. Закрой подробности, снова сузь окно и повтори. Закрой дашборд красной кнопкой или ⌘W и открой через строку меню: края и шапка не должны скачком менять форму.")
-        for fixture in [ReviewFixture.many, .empty, .loading, .missing, .failure, .refreshing, .partial, .huge, .zero] {
+        for fixture in [ReviewFixture.many, .empty, .loading, .missing, .failure, .refreshing, .stale, .storage, .multiple, .partial, .huge, .zero] {
             dashboard("overview-" + fixture.rawValue, fixture.title,
                       "Проверь заголовки, числа и сообщения. Измени размер окна. Состояние сохраняется до следующего шага; Кнопка обновления использует обычную загрузку. «Успешный ответ источника» снимает ошибку или завершает удерживаемую загрузку.", fixture: fixture,
                       option: fixture == .many ? "expanded" : "")
@@ -154,6 +155,8 @@ struct ReviewScenario: Identifiable {
         }
         let chats: [(String, String, String)] = [
             ("telemetry", "Чат · телеметрия Claude", "Раскрой Телеметрию: сопоставленные запросы, служебный вызов, ошибка, время API и экспорт выбранной сессии."),
+            ("service-events", "Чат · важные служебные события", "Проверь сжатие контекста, повтор API и блокировку хука. Раскрой инструкции и диагностику, открой полный текст и JSON. Проверь поиск и узкое окно в RU/EN и обеих темах."),
+            ("service-errors", "Чат · ошибки API и хуков", "Ошибки API и блокировка хука должны быть видны без включения служебных событий. Вернись ко всем событиям через фильтр."),
             ("normal", "Чат и всплывающие подробности", "Нажимай стоимость и время сообщений. Раскрывай инструменты, исходные записи и полный текст. Проверь копирование и экспорт тестовой истории."),
             ("tools", "Чат · раскрытые инструменты", "Проверь вкладки входа/выхода/исходной записи, копирование и открытие полного текста."),
             ("errors", "Чат · только ошибки", "Проверь подсветку неуспешного инструмента и возврат ко всем сообщениям."),
@@ -170,14 +173,14 @@ struct ReviewScenario: Identifiable {
         for (id, title, instructions) in chats {
             rows.append(.init(id: "chat-" + id, group: "История чата", title: title, instructions: instructions, target: .chat(id)))
         }
-        for fixture in [ReviewFixture.normal, .empty, .loading, .missing, .failure, .refreshing, .stale, .partial, .huge, .zero, .gaps] {
+        for fixture in [ReviewFixture.normal, .empty, .loading, .missing, .failure, .refreshing, .stale, .partial, .multiple, .storage, .huge, .zero, .gaps] {
             rows.append(.init(id: "menu-" + fixture.rawValue, group: "Строка меню", title: fixture.title,
                               instructions: "Открыт настоящий popover основного приложения в строке меню. Проверь размеры, кнопки, Escape, правый клик по значку и повторное открытие. «Показать окно» открывает его снова.",
                               target: .menu(fixture, fixture == .gaps ? .trend : .summary, false)))
         }
         rows.append(.init(id: "menu-budget", group: "Строка меню", title: "Динамика и бюджет", instructions: "Проверь график за неделю, лимит и кнопки перехода.", target: .menu(.normal, .trend, true)))
         for variant in UsageWidgetVariant.allCases {
-            for fixture in [ReviewFixture.normal, .empty, .loading, .failure, .stale, .partial, .huge, .gaps, .storage] {
+            for fixture in [ReviewFixture.normal, .empty, .loading, .failure, .stale, .partial, .multiple, .huge, .gaps, .storage] {
                 rows.append(.init(id: "widget-\(variant.rawValue)-\(fixture.rawValue)", group: "Виджеты", title: "\(variant.title) · \(fixture.title)",
                                   instructions: "Проверь все три размера. Это живое SwiftUI-содержимое; системную подложку, размещение и переходы WidgetKit нужно дополнительно проверить на рабочем столе в обычном приложении.",
                                   target: .widgets(variant, fixture)))
