@@ -103,6 +103,15 @@ enum ClaudeTelemetryReconciler {
             hasTranscript: transcript != nil, reasons: reasons)
     }
     static let rateKeys: Set<String> = ["inputCostPerToken", "outputCostPerToken", "cacheCreationInputTokenCost", "cacheReadInputTokenCost", "cacheCreationInputTokenCostAbove1hr", "inputCostPerTokenAbove200kTokens", "outputCostPerTokenAbove200kTokens", "cacheCreationInputTokenCostAbove200kTokens", "cacheReadInputTokenCostAbove200kTokens", "fastMultiplier", "maxInputTokens"]
+    /// The report's tariff for a model: its exact key, otherwise every alias of
+    /// the same Claude model, which must agree. Batch keys never match.
+    static func rate(for model: String, in rates: [String: [String: Double]]) -> [String: Double]? {
+        if let exact = rates[model] { return exact }
+        let candidates = rates.filter { modelsAgree($0.key, model) }.map(\.value)
+        guard let first = candidates.first else { return nil }
+        let keys = ["inputCostPerToken", "outputCostPerToken", "cacheReadInputTokenCost", "cacheCreationInputTokenCost", "cacheCreationInputTokenCostAbove1hr"]
+        return candidates.allSatisfy { candidate in keys.allSatisfy { candidate[$0] == first[$0] } && ClaudeCacheTTL.isTiered(candidate) == ClaudeCacheTTL.isTiered(first) } ? first : nil
+    }
     /// Numeric pricing projection only. Unknown keys and strings never survive.
     static func rates(_ data: Data) -> [String: [String: Double]] {
         guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return [:] }

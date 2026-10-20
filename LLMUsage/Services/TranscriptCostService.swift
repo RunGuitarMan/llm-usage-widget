@@ -103,15 +103,17 @@ struct TranscriptCostService: Sendable {
     }
     private func price(_ original: SessionTranscript, source: String, pricingKey: String?, executable: URL) async throws -> SessionTranscript {
         var transcript = original
+        var telemetry: (sid: String, events: [ClaudeTelemetryEvent])?
         if source == "claude", !transcript.imported, let sid = transcript.claudeSessionID,
            let store = telemetryStore ?? (runtime == nil ? nil : .shared) {
             do {
                 let events = try await store.events(sessionID: sid)
-                transcript = ClaudeTelemetryAccounting.recover(transcript, sessionID: sid, events: events)
-            } catch is CancellationError { throw CancellationError() }
+                telemetry = (sid, events)
+            }
+            catch is CancellationError { throw CancellationError() }
             catch { transcript.usageUncertain = true }
         }
-        guard !transcript.requests.isEmpty else { return transcript }
+        guard !transcript.requests.isEmpty || telemetry?.events.isEmpty == false else { return transcript }
         let configuration: Data
         if let pricingKey, let saved = try? archive.configuration(key: pricingKey, source: source, expectedEngineID: runtime == nil ? nil : CCUsageManifest.bundled?.engineID) {
             configuration = saved
@@ -130,9 +132,25 @@ struct TranscriptCostService: Sendable {
             transcript.telemetryPricingSpeed = speed
         }
         transcript.telemetryRates = ClaudeTelemetryReconciler.rates(configuration)
+        if source == "claude" {
+            // Both recoveries solve cache-write TTLs from Claude's own costs at the report's tariffs.
+            ClaudeSessionAccounting.resolveCacheTTL(&transcript, rates: transcript.telemetryRates)
+            if let telemetry {
+                transcript = ClaudeTelemetryAccounting.recover(transcript, sessionID: telemetry.sid, events: telemetry.events, rates: transcript.telemetryRates)
+            }
+        }
+        guard !transcript.requests.isEmpty else { return transcript }
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("llmusage-chat-\(UUID().uuidString)", isDirectory: true)
         defer { try? FileManager.default.removeItem(at: root) }
-        let requests = transcript.requests.filter { !$0.isReplay && !$0.model.isEmpty }
+        // A request without tokens costs nothing, and the helper omits empty
+        // sessions. A placeholder still unexplained stays visibly unpriced.
+        for index in transcript.requests.indices where !transcript.requests[index].isReplay && transcript.requests[index].usage.total == 0 {
+            let request = transcript.requests[index]
+            guard !request.countersUnknown || request.snapshotCovered else { continue }
+            transcript.requests[index].usage = .init(costIsIncomplete: false)
+            transcript.requests[index].priced = true
+        }
+        let requests = transcript.requests.filter { !$0.isReplay && !$0.model.isEmpty && $0.usage.total > 0 }
         guard requests.count <= TranscriptUsageParser.maximumRequests else { throw UsageError.outputTooLarge }
         let preparation = Task.detached(priority: .userInitiated) {
             try Self.prepare(requests, source: source, root: root, configuration: configuration)

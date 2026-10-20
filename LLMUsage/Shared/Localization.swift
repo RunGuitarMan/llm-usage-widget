@@ -274,6 +274,8 @@ enum L10n {
         "Сумма совпадает": ("Сумма совпадает", "Totals match"),
         "Итог по журналу": ("Итог по журналу", "Log total"),
         "Сверка неполная": ("Сверка неполная", "Not reconciled"),
+        "Claude Code не записал итоговые счётчики части запросов субагентов. Их стоимость появится после выхода из сессии, когда Claude Code сохранит её итог, или при включённой телеметрии Claude.": ("Claude Code не записал итоговые счётчики части запросов субагентов. Их стоимость появится после выхода из сессии, когда Claude Code сохранит её итог, или при включённой телеметрии Claude.", "Claude Code did not record final counters for some subagent requests. Their cost appears once the session ends and Claude Code saves its total, or with Claude telemetry enabled."),
+        "Счётчики части запросов субагентов неизвестны.": ("Счётчики части запросов субагентов неизвестны.", "Counters of some subagent requests are unknown."),
         "Для записи кэша без разбивки TTL применена ставка 5 минут.": ("Для записи кэша без разбивки TTL применена ставка 5 минут.", "Cache writes without a TTL breakdown use the 5-minute rate."),
         "Часть API-расходов нельзя однозначно восстановить из телеметрии. Итог может быть неполным.": ("Часть API-расходов нельзя однозначно восстановить из телеметрии. Итог может быть неполным.", "Some API usage cannot be unambiguously recovered from telemetry. The total may be incomplete."),
         "Недостающие API-расходы восстановлены по локальной телеметрии и рассчитаны по тарифам отчёта.": ("Недостающие API-расходы восстановлены по локальной телеметрии и рассчитаны по тарифам отчёта.", "Missing API usage was recovered from local telemetry and priced using the report's rates."),

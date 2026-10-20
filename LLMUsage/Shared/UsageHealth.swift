@@ -2,7 +2,7 @@ import Foundation
 
 enum UsageCostReason: String, Codable, CaseIterable, Sendable {
     case missingPrice, sourceUnavailable, sourceTooLarge, ambiguousSource, sourceMismatch
-    case sourceIncomplete, telemetryUnavailable, telemetryAmbiguous, dayBoundary, calculationFailed
+    case sourceIncomplete, telemetryUnavailable, telemetryAmbiguous, dayBoundary, calculationFailed, countersMissing
 
     var explanation: String {
         switch self {
@@ -16,6 +16,7 @@ enum UsageCostReason: String, Codable, CaseIterable, Sendable {
         case .telemetryAmbiguous: return L10n.text("Некоторые API-вызовы нельзя однозначно сопоставить с журналом или оценить по тарифам. Без дополнительных исходных данных точную сумму восстановить нельзя.")
         case .dayBoundary: return L10n.text("Общие расходы сессии пересекают границу дней. В журнале нет данных для точного распределения этой части по датам.")
         case .calculationFailed: return L10n.text("Дополнительный расчёт расходов завершился ошибкой. Сохранён предыдущий результат расчётчика; повторите пересчёт.")
+        case .countersMissing: return L10n.text("Claude Code не записал итоговые счётчики части запросов субагентов. Их стоимость появится после выхода из сессии, когда Claude Code сохранит её итог, или при включённой телеметрии Claude.")
         }
     }
 }
