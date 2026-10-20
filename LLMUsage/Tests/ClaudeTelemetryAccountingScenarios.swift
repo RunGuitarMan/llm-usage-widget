@@ -62,7 +62,91 @@ enum ClaudeTelemetryAccountingScenarios {
         }
     }
 
+    /// Four LLM Usage 1.6.3 diagnostic archives: transcript counters as parsed
+    /// then (placeholders included) and every Claude API event of the session.
+    static func capturedSessions() throws -> [[String: Any]] {
+        let file = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("Fixtures/claude-telemetry-sessions.json")
+        return (try JSONSerialization.jsonObject(with: Data(contentsOf: file)) as! [String: Any])["sessions"] as! [[String: Any]]
+    }
+    static func captured(_ session: [String: Any]) throws -> (SessionTranscript, [ClaudeTelemetryEvent], [String: Double]) {
+        let model = session["model"] as! String
+        let rows: [[String: Any]] = (session["transcript"] as! [[String: Any]]).map { request in
+            let tokens = request["tokens"] as! [Int]
+            var usage: [String: Any] = Dictionary(uniqueKeysWithValues: zip(fields, tokens.map { $0 as Any }))
+            var message: [String: Any] = ["id": request["id"]!, "role": "assistant", "model": model, "content": [["type": "text", "text": "Synthetic fixture"]]]
+            if request["placeholder"] as? Bool != true {
+                usage["speed"] = "standard"; usage["service_tier"] = "standard"; message["stop_reason"] = "end_turn"
+                if let split = request["split"] as? [Int] { usage["cache_creation"] = ["ephemeral_5m_input_tokens": split[0], "ephemeral_1h_input_tokens": split[1]] }
+            }
+            message["usage"] = usage
+            return ["type": "assistant", "sessionId": sid, "requestId": request["id"]!, "timestamp": request["at"]!, "message": message]
+        }
+        let events: [ClaudeTelemetryEvent] = (session["events"] as! [[String: Any]]).map { row in
+            let at = TelemetryJSON.date(row["at"] as! String)!
+            var value = event(row["id"] as! String, tokens: (row["tokens"] as? [Int])?.map(Int64.init) ?? [0, 0, 0, 0], at: at)
+            value.model = model
+            value.costUSD = row["cost"] as? String
+            value.source = .init(rawValue: row["source"] as! String)
+            if row["error"] as? Bool == true { value.kind = .apiError; value.input = nil; value.output = nil; value.cacheRead = nil; value.cacheWrite = nil; value.costUSD = nil }
+            return value
+        }
+        return (try decode(rows), events, session["rates"] as! [String: Double])
+    }
+
+    static func runCaptured(check: (String, () async throws -> Void) async -> Void) async {
+        await check("Telemetry accounting: four captured sessions reach /usage with cache-write TTL solved from Claude's cost") {
+            for session in try capturedSessions() {
+                let name = session["name"] as! String
+                let (baseline, events, rates) = try captured(session)
+                let recovered = ClaudeTelemetryAccounting.recover(baseline, sessionID: sid, events: events, rates: [session["model"] as! String: rates])
+                let expected = (session["expectedTokens"] as! [Int]).map(Int64.init)
+                try require(tokens(total(recovered)) == expected, "\(name): tokens \(tokens(total(recovered))) differ from \(expected)")
+                let cost = ClaudeAccountingScenarios.claudeCost(recovered, rates: rates)
+                try require(cost.map { abs($0 - (session["expectedCost"] as! Double)) < 1e-6 } == true, "\(name): cost \(String(describing: cost)) differs")
+                let unknown = recovered.requests.filter { $0.countersUnknown }.count
+                try require(unknown == session["unknownPlaceholders"] as! Int, "\(name): \(unknown) placeholders left unknown")
+                try require(!recovered.usageUncertain && recovered.hasUnknownCounters(on: nil) == (unknown > 0), "\(name): completeness misreported")
+                // Without tariffs the TTL stays unknown: the earlier conservative result.
+                let conservative = ClaudeTelemetryAccounting.recover(baseline, sessionID: sid, events: events)
+                try require(conservative.usageUncertain && total(conservative).cacheCreate < total(recovered).cacheCreate, "\(name): TTL invented without tariffs")
+            }
+        }
+        await check("Telemetry accounting: a positive cache write recovers only when Claude's cost fixes its TTL") {
+            let original = try decode([row("call", tokens: nil)])
+            let rates = ["inputCostPerToken": 4e-6, "outputCostPerToken": 2e-5, "cacheReadInputTokenCost": 2e-7, "cacheCreationInputTokenCost": 5e-6]
+            var cached = event("call", tokens: [100, 20, 300, 1000])
+            cached.costUSD = "0.00706" // 100*4e-6 + 20*2e-5 + 300*2e-7 + 600*5e-6 + 400*8e-6
+            let recovered = ClaudeTelemetryAccounting.recover(original, sessionID: sid, events: [cached], rates: [model: rates])
+            try require(!recovered.usageUncertain && recovered.requests[0].billing.cacheCreation == ["ephemeral_5m_input_tokens": 600, "ephemeral_1h_input_tokens": 400],
+                        "Mixed TTL not recovered from cost")
+            cached.costUSD = "0.0055"
+            let contradictory = ClaudeTelemetryAccounting.recover(original, sessionID: sid, events: [cached], rates: [model: rates])
+            try require(contradictory.usageUncertain && total(contradictory).total == 0, "Unsolvable cost produced a tariff")
+            var fast = cached; fast.speed = .fast; fast.costUSD = "0.00706"
+            try require(ClaudeTelemetryAccounting.recover(original, sessionID: sid, events: [fast], rates: [model: rates]).usageUncertain, "Fast TTL guessed")
+        }
+        await check("Telemetry accounting: a session total owns earlier calls and placeholders; later calls stay billable") {
+            let sidRows: [[String: Any]] = [
+                row("main", tokens: [1, 10, 0, 0]),
+                ["type": "assistant", "sessionId": sid, "requestId": "agent", "timestamp": date.addingTimeInterval(5).ISO8601Format(), "isSidechain": true,
+                 "message": ["id": "agent", "role": "assistant", "model": model, "content": [["type": "text", "text": "Synthetic fixture"]],
+                             "usage": ["input_tokens": 0, "output_tokens": 0, "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0]]],
+                ["type": "cost-state", "sessionId": sid, "modelUsage": [model: ["inputTokens": 21, "outputTokens": 30, "cacheReadInputTokens": 0,
+                    "cacheCreationInputTokens": 0, "costUSD": 0.000684, "webSearchRequests": 0]]],
+                ["type": "user", "sessionId": sid, "timestamp": date.addingTimeInterval(600).ISO8601Format(), "message": ["role": "user", "content": "Synthetic"]],
+                row("later", tokens: nil, at: date.addingTimeInterval(601))]
+            let original = try decode(sidRows)
+            try require(original.claudeSnapshotValidated && !original.hasUnknownCounters(on: nil), "Session total did not cover the placeholder")
+            let recovered = ClaudeTelemetryAccounting.recover(original, sessionID: sid, events: [
+                event("agent", tokens: [20, 20, 0, 0], at: date.addingTimeInterval(5)), event("title", tokens: [5, 1, 0, 0], at: date.addingTimeInterval(1)),
+                event("later", tokens: [7, 3, 0, 0], at: date.addingTimeInterval(601)), event("between", tokens: [9, 9, 0, 0], at: date.addingTimeInterval(300))])
+            try require(tokens(total(recovered)) == [28, 33, 0, 0], "Covered calls double billed or later call lost: \(tokens(total(recovered)))")
+            try require(recovered.usageUncertain, "A call between the total and the next row was silently assigned")
+        }
+    }
+
     static func run(check: (String, () async throws -> Void) async -> Void) async {
+        await runCaptured(check: check)
         await check("Telemetry accounting: captured 114 incomplete and 84 absent requests plus service call") {
             let fixture = try fixture()
             let baseline = try decode(fixture.baseline.map { row($0.id, tokens: $0.known ? $0.tokens : nil) })

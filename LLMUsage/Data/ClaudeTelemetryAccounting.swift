@@ -1,11 +1,29 @@
 import Foundation
 
-/// A validated cumulative total already owns every call up to its timestamp.
-/// Without an explicit timestamp, its boundary is unknown: do not add telemetry
-/// on top of it and guess which side of the snapshot a call belongs to.
+/// One segment of a cumulative session total: calls after `start` and at or
+/// before `through`. A validated segment already owns its calls. Without a
+/// boundary nothing is guessed. Between `through` and the next transcript row
+/// (`until`) the side of a call is unknown; with no later row the total was
+/// written when the session ended and owns everything before it.
 struct ClaudeAccountingCoverage: Sendable {
+    enum State { case covered, billable, unknown }
     var model: String
     var through: Date?
+    var until: Date? = nil
+    var start: Date? = nil
+    var covered = true
+
+    static func state(_ entries: [ClaudeAccountingCoverage], model: String, date: Date) -> State {
+        let relevant = entries.filter { ClaudeTelemetryReconciler.modelsAgree($0.model, model) }
+        guard let last = relevant.last else { return .billable }
+        for entry in relevant {
+            guard let through = entry.through else { return .unknown }
+            if entry.start.map({ date > $0 }) ?? true, date <= through { return entry.covered ? .covered : .billable }
+        }
+        guard let through = last.through, date > through else { return .unknown }
+        guard let until = last.until else { return last.covered ? .covered : .billable }
+        return date >= until ? .billable : .unknown
+    }
 }
 
 /// Complete transcript accounting from identified, successful API calls. Prices
@@ -14,7 +32,8 @@ struct ClaudeAccountingCoverage: Sendable {
 enum ClaudeTelemetryAccounting {
     static let fields = ["input_tokens", "output_tokens", "cache_read_input_tokens", "cache_creation_input_tokens"]
 
-    static func recover(_ original: SessionTranscript, sessionID: String, events: [ClaudeTelemetryEvent], day: UsageDay? = nil) -> SessionTranscript {
+    static func recover(_ original: SessionTranscript, sessionID: String, events: [ClaudeTelemetryEvent], day: UsageDay? = nil,
+                        rates: [String: [String: Double]] = [:]) -> SessionTranscript {
         guard let sid = ClaudeTelemetrySanitizer.session(sessionID), !original.imported else { return original }
         var result = original
         let allEvents = events.filter { $0.sessionID == sid && $0.kind == .apiRequest }
@@ -77,17 +96,28 @@ enum ClaudeTelemetryAccounting {
                     return old == 0 || old == tokens[field] || (field == "output_tokens" && old <= tokens[field]!)
                 }) else { uncertain = true; continue }
             }
-            if let coverage = result.claudeAccountingCoverage.first(where: { ClaudeTelemetryReconciler.modelsAgree($0.model, model) }),
-               coverage.through == nil || date <= coverage.through! {
-                // Existing snapshot overhead already includes these calls.
-                // Unknown boundaries stay conservative and visibly incomplete.
-                if coverage.through == nil { uncertain = true }
-                continue
+            // A validated session total already includes its calls. Unknown
+            // boundaries stay conservative and visibly incomplete.
+            if let existing {
+                if existing.snapshotCovered { continue }
+            } else {
+                switch ClaudeAccountingCoverage.state(result.claudeAccountingCoverage, model: model, date: date) {
+                case .covered: continue
+                case .unknown: uncertain = true; continue
+                case .billable: break
+                }
             }
             // Telemetry does not carry the cache-write TTL. Retain a proven
-            // transcript split; never invent a 5m/1h tariff for a recovered call.
-            let cache = existing?.billing.cacheCreation ?? [:]
-            guard write == 0 || (!cache.isEmpty && cache.values.reduce(0, +) == write) else { uncertain = true; continue }
+            // transcript split or solve it from Claude's own cost of this call;
+            // never invent a 5m/1h tariff.
+            var cache = existing?.billing.cacheCreation ?? [:]
+            if write > 0, cache.isEmpty || cache.values.reduce(0, +) != write {
+                guard billingSpeed == "standard", let cost = event.costUSD.flatMap({ Double($0) }),
+                      let rate = ClaudeTelemetryReconciler.rate(for: model, in: rates),
+                      let split = ClaudeCacheTTL.split(cost: cost, input: input, output: output, read: read, write: write, rates: rate)
+                else { uncertain = true; continue }
+                cache = split
+            }
             if let index = candidates.first {
                 if result.requests[index].telemetryOriginalTokens == nil {
                     result.requests[index].telemetryOriginalTokens = result.requests[index].billing.tokens.filter { fields.contains($0.key) }
@@ -95,6 +125,7 @@ enum ClaudeTelemetryAccounting {
                 result.requests[index].billing = .init(tokens: tokens, speed: billingSpeed, cacheCreation: cache)
                 result.requests[index].usage = .init(input: input, output: output, cacheCreate: write, cacheRead: read, costIsIncomplete: true)
                 result.requests[index].priced = false
+                result.requests[index].countersUnknown = false
                 result.requests[index].telemetryRecovery = "completed"
                 result.requests[index].accountingModel = billingSpeed == "fast" ? result.requests[index].model + "-fast" : nil
                 // Keep the original timestamp/day and visible message ownership.

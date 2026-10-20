@@ -276,6 +276,7 @@ struct TranscriptMetricsView: View {
                 if transcript.imported { Text(L10n.text("Выбран отдельный файл; соответствие сессии не подтверждено.")) }
                 if summary.unknownDates > 0 { Text(L10n.text("Без времени: \(summary.unknownDates) обращений")) }
                 if transcript.usageUncertain { Text(L10n.text("Часть исходных данных не подтверждена.")) }
+                if transcript.hasUnknownCounters(on: nil) { Text(L10n.text("Счётчики части запросов субагентов неизвестны.")) }
             }.font(.system(size: 12)).padding(18).frame(width: 360, alignment: .leading)
         }
     }

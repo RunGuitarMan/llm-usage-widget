@@ -42,6 +42,10 @@ struct ClaudeAccountingService: Sendable {
             result.sessions.append(.init(id: UsageSource.sessionID(agent: "claude", rawID: sid), models: [], usage: .zero,
                 lastActivity: telemetryEvents[sid]?.compactMap(\.timestamp).max(), agent: "claude", originalID: sid))
         }
+        // The report's own tariffs, also used to solve cache-write TTLs from Claude's costs.
+        let tariffs = try? TranscriptPricingArchive.configurations(configuration: configuration)
+        let rates = (try? JSONSerialization.data(withJSONObject: tariffs?["claude"] ?? [String: Any](), options: [.sortedKeys]))
+            .map(ClaudeTelemetryReconciler.rates) ?? [:]
         var requests: [TranscriptRequest] = []
         var owners: [String: Int] = [:]
         var replacements = Set<Int>()
@@ -62,7 +66,8 @@ struct ClaudeAccountingService: Sendable {
             let events = telemetryEvents[session.rawID.lowercased()] ?? []
             do {
                 if events.isEmpty {
-                    parsed = try await Self.background { try Self.read(paths[0], sessionID: session.rawID) }
+                    let main = paths[0]
+                    parsed = try await Self.background { try Self.read(main, subagents: Self.subagentFiles(of: main), sessionID: session.rawID) }
                 } else {
                     // Include subagent files, just as the CLI and chat reader do.
                     parsed = try await reader.load(session: session)
@@ -86,11 +91,13 @@ struct ClaudeAccountingService: Sendable {
                 guard let other = reported[name] else { return false }
                 return TokenCategory.allCases.allSatisfy { value.value(for: $0) == other.value(for: $0) }
             }) else { mark(index, .sourceMismatch); continue }
+            ClaudeSessionAccounting.resolveCacheTTL(&transcript, rates: rates)
             if !events.isEmpty {
-                transcript = ClaudeTelemetryAccounting.recover(transcript, sessionID: session.rawID, events: events, day: original.day)
+                transcript = ClaudeTelemetryAccounting.recover(transcript, sessionID: session.rawID, events: events, day: original.day, rates: rates)
                 replacements.insert(index)
             }
             if !sourceUncertain, transcript.usageIsUncertain(on: original.day) { mark(index, .telemetryAmbiguous) }
+            if transcript.hasUnknownCounters(on: original.day) { mark(index, .countersMissing) }
             for var request in transcript.requests where !request.isReplay && (replacements.contains(index) || request.isSupplemental) {
                 if !request.belongs(to: original.day) {
                     if (request.accountingIntervalStart ?? .distantFuture) < original.day.end,
@@ -102,6 +109,8 @@ struct ClaudeAccountingService: Sendable {
                 guard request.billing.tokens["input_tokens"] != nil, request.billing.tokens["output_tokens"] != nil else {
                     mark(index, .sourceIncomplete); continue
                 }
+                // Empty requests add nothing and the helper omits them.
+                guard request.usage.total > 0 else { continue }
                 request.id = "request-" + UUID().uuidString
                 owners[request.id] = index
                 requests.append(request)
@@ -163,16 +172,23 @@ struct ClaudeAccountingService: Sendable {
         return try await withTaskCancellationHandler(operation: { try await task.value }, onCancel: { task.cancel() })
     }
 
+    /// Subagent transcripts of one Claude session, as the CLI and chat reader include them.
+    static func subagentFiles(of main: URL) -> [URL] {
+        let directory = main.deletingPathExtension().appendingPathComponent("subagents")
+        guard let enumerator = FileManager.default.enumerator(at: directory, includingPropertiesForKeys: [.isRegularFileKey]) else { return [] }
+        var files: [URL] = []
+        for case let url as URL in enumerator where url.pathExtension == "jsonl" && files.count < 1_000 { files.append(url) }
+        return files.sorted { $0.path < $1.path }
+    }
+
     /// Read bounded chunks and retain accounting fields only. Large message/tool
     /// bodies must not impose the old 32 MiB whole-file limit on daily accounting.
-    static func read(_ file: URL, sessionID: String) throws -> SessionTranscript? {
+    static func read(_ file: URL, subagents: [URL] = [], sessionID: String) throws -> SessionTranscript? {
         let maximumBytes = TranscriptService.maximumBytes
-        guard let size = try file.resourceValues(forKeys: [.fileSizeKey]).fileSize, size <= maximumBytes else { throw UsageError.outputTooLarge }
-        let handle = try FileHandle(forReadingFrom: file)
-        defer { try? handle.close() }
-        var pending = Data(), readBytes = 0, retainedBytes = 0
+        var readBytes = 0, retainedBytes = 0
         var events: [TranscriptEvent] = []
-        var hasSnapshot = false
+        var hasSnapshot = false, hasPlaceholder = false
+        var origin = file.path
         func consume(_ line: Data) throws {
             try Task.checkCancellation()
             guard !line.allSatisfy({ $0 == 32 || $0 == 9 || $0 == 13 }) else { return }
@@ -185,7 +201,8 @@ struct ClaudeAccountingService: Sendable {
             var row = root.filter { keys.contains($0.key) }
             if let attachment = root["attachment"] as? [String: Any] { row["attachment"] = attachment.filter { $0.key == "type" } }
             if let message = root["message"] as? [String: Any] {
-                var safe = message.filter { ["id", "role", "model", "usage"].contains($0.key) }
+                var safe = message.filter { ["id", "role", "model", "usage", "stop_reason"].contains($0.key) }
+                if let usage = message["usage"] as? [String: Any], TranscriptUsageParser.isPlaceholder(usage, message: message) { hasPlaceholder = true }
                 if let blocks = message["content"] as? [[String: Any]] {
                     safe["content"] = blocks.map { $0.filter { ["type", "id", "tool_use_id"].contains($0.key) } }
                 }
@@ -194,27 +211,35 @@ struct ClaudeAccountingService: Sendable {
             let bytes = try JSONSerialization.data(withJSONObject: row, options: [.sortedKeys])
             retainedBytes += bytes.count
             guard retainedBytes <= 32 * 1024 * 1024, events.count < 200_000 else { throw UsageError.outputTooLarge }
-            let record = TranscriptRecord(text: String(decoding: bytes, as: UTF8.self), sequence: events.count, origin: file.path)
+            let record = TranscriptRecord(text: String(decoding: bytes, as: UTF8.self), sequence: events.count, origin: origin)
             var event = TranscriptEvent(id: "accounting-\(events.count)", kind: .context, title: "")
             event.attach(record)
             events.append(event)
         }
-        while let chunk = try handle.read(upToCount: 64 * 1024), !chunk.isEmpty {
-            try Task.checkCancellation()
-            readBytes += chunk.count
-            guard readBytes <= maximumBytes else { throw UsageError.outputTooLarge }
-            pending.append(chunk)
-            var start = pending.startIndex
-            while let newline = pending[start...].firstIndex(of: 10) {
-                guard newline - start <= 16 * 1024 * 1024 else { throw UsageError.outputTooLarge }
-                try consume(Data(pending[start..<newline]))
-                start = newline + 1
+        for url in [file] + subagents {
+            guard let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize, readBytes + size <= maximumBytes else { throw UsageError.outputTooLarge }
+            let handle = try FileHandle(forReadingFrom: url)
+            defer { try? handle.close() }
+            origin = url.path
+            var pending = Data()
+            while let chunk = try handle.read(upToCount: 64 * 1024), !chunk.isEmpty {
+                try Task.checkCancellation()
+                readBytes += chunk.count
+                guard readBytes <= maximumBytes else { throw UsageError.outputTooLarge }
+                pending.append(chunk)
+                var start = pending.startIndex
+                while let newline = pending[start...].firstIndex(of: 10) {
+                    guard newline - start <= 16 * 1024 * 1024 else { throw UsageError.outputTooLarge }
+                    try consume(Data(pending[start..<newline]))
+                    start = newline + 1
+                }
+                pending = Data(pending[start...])
+                guard pending.count <= 16 * 1024 * 1024 else { throw UsageError.outputTooLarge }
             }
-            pending = Data(pending[start...])
-            guard pending.count <= 16 * 1024 * 1024 else { throw UsageError.outputTooLarge }
+            if !pending.isEmpty { try consume(pending) }
         }
-        if !pending.isEmpty { try consume(pending) }
-        guard hasSnapshot else { return nil }
+        // Without a total or a placeholder the CLI baseline is already complete.
+        guard hasSnapshot || hasPlaceholder else { return nil }
         return try TranscriptUsageParser.annotate(.init(events: events), source: "claude")
     }
 }

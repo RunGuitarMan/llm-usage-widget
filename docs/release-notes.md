@@ -9,6 +9,12 @@ See [installation instructions](https://github.com/RunGuitarMan/llm-usage-widget
 
 On first launch, approve the bundled calculation component and choose automatic updates, download-and-ask, or manual updates. The default is automatic, with a visible countdown before restarting. Updates verify signed metadata and archives. Ad-hoc signing and the first-install Gatekeeper instructions still apply.
 
+## Changes in 1.6.4
+
+- Claude totals now match `/usage`. Session totals that Claude Code 2.1 saves in the log (`cost-state`) are used per segment, including subagent calls, background calls and resumed sessions; each day keeps its own part.
+- Subagent log rows without final counters are treated as unknown instead of free and are flagged until a session total or telemetry accounts for them.
+- Telemetry recovers calls with cache writes: the 5-minute/1-hour split is solved from Claude's own cost at the report's tariffs.
+
 ## Changes in 1.6.1
 
 - Correct Claude cache-write and normal/Batch pricing, and include validated background usage from saved session totals while preserving custom tariffs.

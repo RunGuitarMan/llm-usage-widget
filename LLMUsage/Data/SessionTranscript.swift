@@ -122,6 +122,15 @@ struct SessionTranscript: Sendable {
             || usageUncertaintyDates.contains { $0 >= day.date && $0 < day.end })
     }
 
+    /// Placeholder counters that neither a session total nor telemetry resolved.
+    /// Checked after recovery, so a later completion clears the warning.
+    func hasUnknownCounters(on day: UsageDay?) -> Bool {
+        requests.contains { request in
+            request.countersUnknown && !request.isReplay && !request.snapshotCovered
+                && (day == nil || request.timestamp.map { $0 >= day!.date && $0 < day!.end } ?? true)
+        }
+    }
+
     var messageCount: Int { events.filter { $0.isMessage && !$0.isUsageOnly }.count }
     var toolCount: Int { events.filter { $0.kind == .tool }.count }
     var exportText: String {

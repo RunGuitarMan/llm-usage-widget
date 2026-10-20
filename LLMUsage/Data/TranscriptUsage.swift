@@ -22,6 +22,16 @@ struct TranscriptRequest: Identifiable, Sendable {
     var telemetryIdentity: TranscriptTelemetryIdentity?
     var telemetryRecovery: String?
     var telemetryOriginalTokens: [String: Int64]?
+    /// Claude Code 2.1.x writes subagent fragments with a four-field all-zero
+    /// placeholder and often never appends the final counters. Such a request
+    /// is unknown, not free, until a session total or telemetry accounts for it.
+    var countersUnknown = false
+    /// A validated cumulative session total already includes this request.
+    var snapshotCovered = false
+    /// Supplemental remainder of one snapshot segment: Claude's cost delta and
+    /// the requests it shares with the transcript. Used to recover the TTL split.
+    var snapshotCost: Double?
+    var snapshotCoveredIDs: [String] = []
     var isSupplemental: Bool { accountingIntervalStart != nil }
     func belongs(to day: UsageDay) -> Bool {
         guard let date = timestamp, date >= day.date && date < day.end else { return false }
@@ -227,7 +237,7 @@ enum TranscriptUsageParser {
         var serial = 0
         var sequence = 0
         func append(model: String, date: Date?, events: [String], billing: TranscriptBilling,
-                    usage: TokenUsage, reasoning: Int64 = 0, key: String?, sidechain: Bool = false, replayKey: String? = nil, preferLatest: Bool = false, telemetryIdentity: TranscriptTelemetryIdentity? = nil) {
+                    usage: TokenUsage, reasoning: Int64 = 0, key: String?, sidechain: Bool = false, replayKey: String? = nil, preferLatest: Bool = false, telemetryIdentity: TranscriptTelemetryIdentity? = nil, unknown: Bool = false) {
             var seen = Set<String>()
             let ids = events.filter { seen.insert($0).inserted }
             let replayIndex = replayKey.flatMap { sidechainIndexes[$0] }.flatMap { index in
@@ -237,10 +247,18 @@ enum TranscriptUsageParser {
                 let old = transcript.requests[index]
                 var seen = Set<String>()
                 let allIDs = (old.eventIDs + ids).filter { seen.insert($0).inserted }
-                if source == "gemini" || (old.isSidechain && !sidechain) || (old.isSidechain == sidechain &&
-                    (usage.total > old.usage.total || (usage.total == old.usage.total && (preferLatest || (old.billing.speed == nil && billing.speed != nil))))) {
+                // A placeholder never replaces known counters; known counters,
+                // including a real zero, always replace a placeholder.
+                let replaces: Bool
+                if unknown != old.countersUnknown { replaces = !unknown }
+                else {
+                    replaces = source == "gemini" || (old.isSidechain && !sidechain) || (old.isSidechain == sidechain &&
+                        (usage.total > old.usage.total || (usage.total == old.usage.total && (preferLatest || (old.billing.speed == nil && billing.speed != nil)))))
+                }
+                if replaces {
                     transcript.requests[index] = .init(id: old.id, model: model, timestamp: date, eventIDs: allIDs,
-                        billing: billing, usage: usage, reasoning: reasoning, isSidechain: sidechain, sequence: old.sequence, telemetryIdentity: telemetryIdentity)
+                        billing: billing, usage: usage, reasoning: reasoning, isSidechain: sidechain, sequence: old.sequence, telemetryIdentity: telemetryIdentity,
+                        countersUnknown: unknown)
                 } else { transcript.requests[index].eventIDs = allIDs }
                 if let key { indexes[key] = index }
                 return
@@ -249,7 +267,8 @@ enum TranscriptUsageParser {
             if let key { indexes[key] = transcript.requests.count }
             if let replayKey { sidechainIndexes[replayKey] = transcript.requests.count }
             transcript.requests.append(.init(id: "request-\(serial)", model: model, timestamp: date,
-                eventIDs: ids, billing: billing, usage: usage, reasoning: reasoning, isSidechain: sidechain, sequence: sequence, telemetryIdentity: telemetryIdentity))
+                eventIDs: ids, billing: billing, usage: usage, reasoning: reasoning, isSidechain: sidechain, sequence: sequence, telemetryIdentity: telemetryIdentity,
+                countersUnknown: unknown))
         }
         for record in sourceRecords {
             try Task.checkCancellation()
@@ -286,7 +305,8 @@ enum TranscriptUsageParser {
                        billing: .init(tokens: tokens, speed: raw["speed"] as? String, cacheCreation: cache), usage: usage,
                        key: key, sidechain: root["isSidechain"] as? Bool == true,
                        replayKey: messageID.map { $0 + "|" + (requestID == nil ? "requestless" : String(describing: root["timestamp"] ?? "")) },
-                       preferLatest: requestID == nil, telemetryIdentity: .init(sessionID: ClaudeTelemetrySanitizer.session(root["sessionId"]), requestID: ClaudeTelemetrySanitizer.identifier(requestID), clientRequestID: ClaudeTelemetrySanitizer.identifier(root["clientRequestId"] ?? root["client_request_id"])))
+                       preferLatest: requestID == nil, telemetryIdentity: .init(sessionID: ClaudeTelemetrySanitizer.session(root["sessionId"]), requestID: ClaudeTelemetrySanitizer.identifier(requestID), clientRequestID: ClaudeTelemetrySanitizer.identifier(root["clientRequestId"] ?? root["client_request_id"])),
+                       unknown: isPlaceholder(raw, message: message))
                 // Advisor iterations are separate billable model calls, not replacements for the main answer.
                 for (index, iteration) in (raw["iterations"] as? [[String: Any]] ?? []).enumerated()
                     where iteration["type"] as? String == "advisor_message" {
@@ -475,6 +495,14 @@ enum TranscriptUsageParser {
               number.doubleValue.isFinite, number.doubleValue >= 0, number.doubleValue <= 1_000_000_000_000,
               number.doubleValue.rounded(.down) == number.doubleValue else { return nil }
         return number.int64Value
+    }
+    static let placeholderUsageKeys: Set<String> = ["input_tokens", "output_tokens", "cache_creation_input_tokens", "cache_read_input_tokens"]
+    /// A streamed fragment written before the API returned usage: only the four
+    /// base counters, every one zero, and no stop reason. Real responses carry
+    /// service tier, speed or a cache breakdown even when a counter is zero.
+    static func isPlaceholder(_ raw: [String: Any], message: [String: Any]) -> Bool {
+        guard !raw.isEmpty, Set(raw.keys).isSubset(of: placeholderUsageKeys), !(message["stop_reason"] is String) else { return false }
+        return raw.values.allSatisfy { number($0) == 0 }
     }
     static func numbers(_ raw: [String: Any], keys: [String]) -> [String: Int64]? {
         var result: [String: Int64] = [:]
